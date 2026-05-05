@@ -1,0 +1,29 @@
+{
+  "description": "API 오류 코드 스냅샷 (SSOT: docs/requirements/feature-diet-management-api-contract-v1.md §2·§7)",
+  "errorBody": {
+    "type": "object",
+    "required": ["code", "message", "details", "traceId"],
+    "properties": {
+      "code": { "type": "string" },
+      "message": { "type": "string" },
+      "details": { "type": "object", "additionalProperties": true },
+      "traceId": { "type": "string" }
+    }
+  },
+  "codes": [
+    { "code": "AUTH_UNAUTHORIZED", "http": 401 },
+    { "code": "AUTH_TOKEN_EXPIRED", "http": 401 },
+    { "code": "AUTH_FORBIDDEN", "http": 403 },
+    { "code": "VALIDATION_FAILED", "http": 422 },
+    { "code": "RESOURCE_CONFLICT", "http": 409 },
+    { "code": "OCR_RATE_LIMIT", "http": 429 },
+    { "code": "OCR_PROVIDER_UNAVAILABLE", "http": 503 },
+    { "code": "OCR_PARSE_FAILED", "http": 422 },
+    { "code": "OCR_FREE_QUOTA_EXCEEDED", "http": 402 },
+    { "code": "PAYMENT_REQUIRED", "http": 402 },
+    { "code": "BILLING_NOT_AVAILABLE", "http": 503 },
+    { "code": "STATS_STALE_DATA", "http": 200 },
+    { "code": "INTERNAL_SERVER_ERROR", "http": 500 },
+    { "code": "DEPENDENCY_UNAVAILABLE", "http": 503 }
+  ]
+}

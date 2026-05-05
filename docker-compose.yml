@@ -1,0 +1,10 @@
+# 선택: PostgreSQL 사용 시 prisma schema의 provider/url을 postgres로 바꾼 뒤 사용.
+services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: diet
+      POSTGRES_PASSWORD: diet
+      POSTGRES_DB: diet

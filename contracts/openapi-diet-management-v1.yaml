@@ -1,0 +1,510 @@
+openapi: 3.1.0
+info:
+  title: Diet Management API
+  version: v1-fixed
+  description: >
+    스냅샷 계약 (SSOT 본문: docs/requirements/feature-diet-management-api-contract-v1.md).
+    구현체는 본 파일과 문서를 함께 유지한다.
+
+servers:
+  - url: http://localhost:3000
+    description: 로컬 스텁 (apps/server)
+
+tags:
+  - name: Auth
+  - name: Me
+  - name: Meals
+  - name: OCR
+  - name: Stats
+  - name: Billing
+  - name: Ads
+  - name: Admin
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message, details, traceId]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+        traceId: { type: string }
+
+    PageParams:
+      type: object
+      properties:
+        page: { type: integer, minimum: 1, default: 1 }
+        size: { type: integer, minimum: 1, default: 15 }
+
+    MealInput:
+      type: object
+      additionalProperties: true
+
+    Meal:
+      type: object
+      additionalProperties: true
+
+    OcrResult:
+      type: object
+      properties:
+        calories: { type: number }
+        carbohydrate: { type: number }
+        protein: { type: number }
+        fat: { type: number }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        missingFields:
+          type: array
+          items: { type: string }
+        remainingFreeQuota: { type: integer }
+
+    StatsResponse:
+      type: object
+      required: [aggregatedAt, isStale, staleHours, timezone, summary]
+      properties:
+        aggregatedAt: { type: string, format: date-time }
+        isStale: { type: boolean }
+        staleHours: { type: number }
+        timezone: { type: string }
+        summary:
+          type: object
+          properties:
+            calories: { type: number }
+            carbohydrate: { type: number }
+            protein: { type: number }
+            fat: { type: number }
+
+    Entitlements:
+      type: object
+      properties:
+        ocrQuotaLimit: { type: integer }
+        ocrQuotaUsed: { type: integer }
+        ocrPaidEnabled: { type: boolean }
+        adFreeEnabled: { type: boolean }
+        nextPaywallTrigger:
+          type: string
+          enum: [none, ocr_remaining_1, ocr_exhausted]
+
+    AdsStatus:
+      type: object
+      properties:
+        showBottomBanner: { type: boolean }
+        reason:
+          type: string
+          enum: [default_free, ad_free_purchased]
+
+    Dashboard:
+      type: object
+      properties:
+        newUsers: { type: integer }
+        activeUsers: { type: integer }
+        mealRecordCount: { type: integer }
+        inquiryCount: { type: integer }
+
+paths:
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: 회원가입
+      responses:
+        '201': { description: Created }
+        '422': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 로그인
+      responses:
+        '200': { description: OK }
+        '401': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: 토큰 갱신
+      responses:
+        '200': { description: OK }
+
+  /me/profile:
+    get:
+      tags: [Me]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    put:
+      tags: [Me]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+        '422': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /me/recommendation/recalculate:
+    post:
+      tags: [Me]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+
+  /meals:
+    post:
+      tags: [Meals]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MealInput' }
+      responses:
+        '201': { description: Created }
+        '422': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    get:
+      tags: [Meals]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer, default: 15 }
+      responses:
+        '200': { description: OK }
+
+  /meals/{mealId}:
+    put:
+      tags: [Meals]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: mealId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /meals/{mealId}/deactivate:
+    patch:
+      tags: [Meals]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: mealId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /nutrition/ocr:
+    post:
+      tags: [OCR]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OcrResult' }
+        '402': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '429': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '503': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /stats:
+    get:
+      tags: [Stats]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: range
+          required: true
+          schema:
+            type: string
+            enum: [meal, day, week, month]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatsResponse' }
+
+  /me/billing/entitlements:
+    get:
+      tags: [Billing]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Entitlements' }
+
+  /me/billing/checkout:
+    post:
+      tags: [Billing]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productType]
+              properties:
+                productType:
+                  type: string
+                  enum: [premium_monthly]
+      responses:
+        '200': { description: OK }
+        '402': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /me/billing/restore:
+    post:
+      tags: [Billing]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+
+  /me/ads/status:
+    get:
+      tags: [Ads]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdsStatus' }
+
+  /admin/users:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: query
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: includeInactive
+          schema: { type: boolean }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer, default: 15 }
+      responses:
+        '200': { description: OK }
+        '403': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /admin/users/{id}/deactivate:
+    patch:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /admin/foods:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: query
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: includeInactive
+          schema: { type: boolean }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer, default: 15 }
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '201': { description: Created }
+
+  /admin/foods/{id}:
+    put:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /admin/foods/{id}/deactivate:
+    patch:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /admin/inquiries:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: query
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: includeInactive
+          schema: { type: boolean }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer, default: 15 }
+      responses:
+        '200': { description: OK }
+
+  /admin/inquiries/{id}/status:
+    patch:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /admin/inquiries/{id}/deactivate:
+    patch:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /admin/notices:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: query
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: includeInactive
+          schema: { type: boolean }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer, default: 15 }
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '201': { description: Created }
+
+  /admin/notices/{id}:
+    put:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /admin/notices/{id}/deactivate:
+    patch:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /admin/dashboard:
+    get:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+
+  /admin/stats/reaggregate:
+    post:
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '202': { description: Accepted }

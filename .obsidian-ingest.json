@@ -1,0 +1,9 @@
+﻿{
+    "slug":  "dietManagement",
+    "lockSlug":  false,
+    "vaultRoot":  "D:\\Obsidian\\projects",
+    "docsPaths":  [
+                      "docs"
+                  ],
+    "syncMode":  "safe"
+}

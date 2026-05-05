@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 기본 DB: PostgreSQL
+// 예) postgresql://diet:diet@localhost:5432/diet?schema=public
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  role          UserRole  @default(USER)
+  active        Boolean   @default(true)
+  deactivatedAt DateTime?
+  createdAt     DateTime  @default(now())
+  freeOcrUsed   Int       @default(0)
+
+  profile Profile?
+  meals   Meal[]
+  billing Billing?
+}
+
+model Profile {
+  userId          String @id
+  gender          String @default("unspecified")
+  age             Int    @default(30)
+  heightCm        Int    @default(170)
+  weightKg        Float  @default(70)
+  proteinGoalG    Int?
+  calorieGoalKcal Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Meal {
+  id           String   @id @default(cuid())
+  userId       String
+  note         String?
+  consumedAt   DateTime
+  name         String
+  grams        Float    @default(100)
+  calories     Float
+  carbohydrate Float
+  protein      Float
+  fat          Float
+  imageUrl     String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt])
+}
+
+model FoodTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  memo      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Inquiry {
+  id        String   @id @default(cuid())
+  userId    String?
+  subject   String
+  body      String
+  status    String   @default("pending")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Notice {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Billing {
+  userId         String  @id
+  ocrPaidEnabled Boolean @default(false)
+  adFreeEnabled  Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model StatsBatch {
+  id        String   @id @default("singleton")
+  lastRunAt DateTime @default(now())
+}

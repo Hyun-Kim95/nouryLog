@@ -1,0 +1,2 @@
+-- Legacy SQLite migration placeholder removed during provider switch.
+-- Kept to satisfy Prisma migration folder integrity before new PostgreSQL baseline.

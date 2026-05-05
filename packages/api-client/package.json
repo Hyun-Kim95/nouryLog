@@ -1,0 +1,25 @@
+{
+  "name": "@diet-management/api-client",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../../contracts/openapi-diet-management-v1.yaml -o src/generated/schema.ts",
+    "build": "npm run generate && tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.14.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.10.1",
+    "typescript": "~5.6.3"
+  }
+}

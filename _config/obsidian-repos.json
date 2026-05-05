@@ -1,0 +1,9 @@
+{
+  "repositories": [
+    {
+      "slug": "dietManagement",
+      "path": "d:\\cursor\\dietManagement",
+      "docsPaths": ["docs"]
+    }
+  ]
+}

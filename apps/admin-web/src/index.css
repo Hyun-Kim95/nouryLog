@@ -1,0 +1,225 @@
+/**
+ * 전역 토큰 — Stitch 정합은 docs/design 및 mock-internal 톤과 맞춤.
+ * 다크모드: html[data-theme="dark"]
+ */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7fb;
+  --fg: #111827;
+  --muted: #6b7280;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --primary: #2563eb;
+  --primary-fg: #ffffff;
+  --danger-bg: #fef2f2;
+  --danger-fg: #b91c1c;
+  --warn-bg: #fffbeb;
+  --warn-fg: #b45309;
+}
+
+html[data-theme='dark'] {
+  --bg: #0f1117;
+  --fg: #e5e7eb;
+  --muted: #9ca3af;
+  --card: #161b22;
+  --border: #30363d;
+  --primary: #3b82f6;
+  --primary-fg: #ffffff;
+  --danger-bg: #3f1d1d;
+  --danger-fg: #fecaca;
+  --warn-bg: #3b2f0f;
+  --warn-fg: #fcd34d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+a {
+  color: var(--primary);
+}
+
+.layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.nav {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.nav a {
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.nav a.active {
+  font-weight: 700;
+}
+
+main {
+  flex: 1;
+  padding: 1.25rem;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-fg);
+  border-color: transparent;
+}
+
+.btn-ghost {
+  border: none;
+  background: transparent;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.filter-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.filter-bar input,
+.filter-bar select {
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+th {
+  background: var(--bg);
+  font-weight: 600;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 1rem;
+}
+
+.pagination .current {
+  min-width: 2.25rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--primary-fg);
+  font-weight: 700;
+}
+
+.banner {
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.banner-danger {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+}
+
+.banner-warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.stat-card .label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.stat-card .value {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
