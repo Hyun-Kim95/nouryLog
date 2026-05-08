@@ -36,6 +36,22 @@ tags: [api, contract, backend, frontend]
 - `POST /auth/signup`
 - `POST /auth/login`
 - `POST /auth/refresh`
+- `POST /auth/social/{provider}/start` (`provider`: `naver|google|kakao`)
+- `GET /auth/social/{provider}/callback`
+- `POST /auth/social/conflict/resolve`
+
+소셜 로그인 계약:
+- `POST /auth/social/{provider}/start`
+  - 요청: `{ "redirectUri": "myapp://oauth" }`
+  - 응답: `{ "authorizationUrl": "https://..." }`
+- `GET /auth/social/{provider}/callback`
+  - 서버가 provider 인증 완료 후 앱 딥링크로 리다이렉트한다.
+  - 성공: `...?result=success&accessToken=...&refreshToken=...`
+  - 충돌: `...?result=conflict&conflictToken=...`
+  - 실패: `...?result=error&message=...`
+- `POST /auth/social/conflict/resolve`
+  - 요청: `{ "conflictToken": "...", "action": "link" | "separate" }`
+  - 응답: `{ "accessToken": "...", "refreshToken": "..." }`
 
 ### Profile / Recommendation
 - `GET /me/profile`
@@ -156,6 +172,7 @@ MVP 상품 정책:
 ## 7) 표준 에러 코드 카탈로그
 - 인증/권한: `AUTH_UNAUTHORIZED`, `AUTH_FORBIDDEN`, `AUTH_TOKEN_EXPIRED`
 - 검증/충돌: `VALIDATION_FAILED`, `RESOURCE_CONFLICT`
+- SNS 인증: `OAUTH_PROVIDER_ERROR`, `OAUTH_CANCELLED`, `ACCOUNT_CONFLICT`, `SOCIAL_STATE_INVALID`
 - OCR: `OCR_RATE_LIMIT`, `OCR_PROVIDER_UNAVAILABLE`, `OCR_PARSE_FAILED`
 - 과금: `PAYMENT_REQUIRED`, `OCR_FREE_QUOTA_EXCEEDED`, `BILLING_NOT_AVAILABLE`
 - 통계: `STATS_STALE_DATA`

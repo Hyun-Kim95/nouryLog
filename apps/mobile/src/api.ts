@@ -33,3 +33,22 @@ export async function loginRequest(
   if (!data.accessToken || !data.refreshToken) throw new Error('토큰 응답 없음');
   return { accessToken: data.accessToken, refreshToken: data.refreshToken };
 }
+
+export type SocialProvider = 'naver' | 'google' | 'kakao';
+
+export async function socialStartRequest(provider: SocialProvider, redirectUri: string): Promise<{ authorizationUrl: string }> {
+  return apiFetch<{ authorizationUrl: string }>(`/auth/social/${provider}/start`, {
+    method: 'POST',
+    body: JSON.stringify({ redirectUri }),
+  });
+}
+
+export async function socialResolveConflictRequest(
+  conflictToken: string,
+  action: 'link' | 'separate',
+): Promise<{ accessToken: string; refreshToken: string }> {
+  return apiFetch<{ accessToken: string; refreshToken: string }>('/auth/social/conflict/resolve', {
+    method: 'POST',
+    body: JSON.stringify({ conflictToken, action }),
+  });
+}

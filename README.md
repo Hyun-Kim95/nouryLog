@@ -28,3 +28,21 @@ npm run dev:mobile
 
 모바일 에뮬레이터 테스트 시 `apps/mobile/.env`의 `EXPO_PUBLIC_API_URL`을 환경에 맞게 사용합니다.
 
+## SNS 로그인 설정 (모바일)
+
+`apps/server` 실행 환경에 아래 값을 설정하면 모바일에서 네이버/구글/카카오 로그인을 사용할 수 있습니다.
+
+- `OAUTH_SERVER_BASE_URL` (예: `http://localhost:3000`)
+- `OAUTH_STATE_SECRET` (충돌 토큰/상태 검증용 시크릿)
+- `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET`
+
+Provider 콘솔 리다이렉트 URI는 아래 규칙으로 등록합니다.
+
+- 네이버: `{OAUTH_SERVER_BASE_URL}/auth/social/naver/callback`
+- 구글: `{OAUTH_SERVER_BASE_URL}/auth/social/google/callback`
+- 카카오: `{OAUTH_SERVER_BASE_URL}/auth/social/kakao/callback`
+
+모바일 앱 스킴은 `dietmobile://oauth`를 사용합니다.
+

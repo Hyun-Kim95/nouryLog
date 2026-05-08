@@ -27,6 +27,27 @@ model User {
   profile Profile?
   meals   Meal[]
   billing Billing?
+  socialAccounts SocialAccount[]
+}
+
+enum SocialProvider {
+  NAVER
+  GOOGLE
+  KAKAO
+}
+
+model SocialAccount {
+  id             String         @id @default(cuid())
+  provider       SocialProvider
+  providerUserId String
+  email          String?
+  userId         String
+  linkedAt       DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
 }
 
 model Profile {
