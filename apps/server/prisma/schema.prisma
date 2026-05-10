@@ -23,6 +23,10 @@ model User {
   deactivatedAt DateTime?
   /// 마지막 로그인 시각. 이메일/리프레시/소셜 로그인 성공 시 갱신.
   lastLoginAt   DateTime?
+  /// 비활성화 사유 코드. 'spam' | 'inactive_long' | 'terms_violation' | 'etc'.
+  deactivationReasonCode String?
+  /// 비활성화 사유 자유 입력(최대 500자). `etc` 코드일 때 필수, 그 외엔 선택.
+  deactivationReason     String?
   createdAt     DateTime  @default(now())
   freeOcrUsed   Int       @default(0)
 
@@ -119,6 +123,12 @@ model Notice {
   title     String
   body      String
   active    Boolean  @default(true)
+  /// 상단 고정 여부. true면 목록 정렬 우선.
+  pinned    Boolean  @default(false)
+  /// 게시 시작 시각(선택). 둘 다 있을 때만 start <= end 검증.
+  publishStart DateTime?
+  /// 게시 종료 시각(선택). null이면 무기한.
+  publishEnd   DateTime?
   createdAt DateTime @default(now())
 }
 

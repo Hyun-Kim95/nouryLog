@@ -10,6 +10,14 @@ adminRouter.use(requireAdmin);
 const INQUIRY_STATUSES = ['pending', 'in_progress', 'done'] as const;
 type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
 
+const DEACTIVATION_REASON_CODES = ['spam', 'inactive_long', 'terms_violation', 'etc'] as const;
+type DeactivationReasonCode = (typeof DEACTIVATION_REASON_CODES)[number];
+const DEACTIVATION_REASON_TEXT_MAX = 500;
+
+function isDeactivationReasonCode(v: unknown): v is DeactivationReasonCode {
+  return typeof v === 'string' && (DEACTIVATION_REASON_CODES as readonly string[]).includes(v);
+}
+
 const CATEGORY_MAX_LEN = 50;
 const ANSWER_MAX_LEN = 4000;
 const DEFAULT_PERIOD_DAYS = 7;
@@ -255,6 +263,8 @@ adminRouter.get('/admin/users', async (req, res) => {
         email: true,
         active: true,
         deactivatedAt: true,
+        deactivationReasonCode: true,
+        deactivationReason: true,
         lastLoginAt: true,
         createdAt: true,
       },
@@ -272,12 +282,48 @@ adminRouter.get('/admin/users', async (req, res) => {
       createdAt: u.createdAt.toISOString(),
       lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
       deactivatedAt: u.deactivatedAt?.toISOString() ?? null,
+      deactivationReason: u.deactivationReasonCode
+        ? { code: u.deactivationReasonCode, text: u.deactivationReason ?? null }
+        : null,
     })),
   });
 });
 
 adminRouter.patch('/admin/users/:id/deactivate', async (req, res) => {
   const id = req.params.id;
+  const b = (req.body ?? {}) as { reasonCode?: unknown; reasonText?: unknown };
+  const reasonCode = b.reasonCode;
+  if (!isDeactivationReasonCode(reasonCode)) {
+    sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_FAILED,
+      `reasonCode는 ${DEACTIVATION_REASON_CODES.join(' | ')} 중 하나여야 합니다.`,
+      { allowed: [...DEACTIVATION_REASON_CODES] },
+    );
+    return;
+  }
+  const reasonTextRaw = typeof b.reasonText === 'string' ? b.reasonText : '';
+  const reasonText = reasonTextRaw.trim();
+  if (reasonCode === 'etc' && !reasonText) {
+    sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_FAILED,
+      "reasonCode가 'etc'일 때는 reasonText가 필요합니다.",
+    );
+    return;
+  }
+  if (reasonText.length > DEACTIVATION_REASON_TEXT_MAX) {
+    sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_FAILED,
+      `reasonText는 ${DEACTIVATION_REASON_TEXT_MAX}자 이하여야 합니다.`,
+      { maxLength: DEACTIVATION_REASON_TEXT_MAX },
+    );
+    return;
+  }
   const user = await prisma.user.findFirst({ where: { id, role: 'USER' } });
   if (!user) {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '회원을 찾을 수 없습니다.');
@@ -285,7 +331,12 @@ adminRouter.patch('/admin/users/:id/deactivate', async (req, res) => {
   }
   await prisma.user.update({
     where: { id },
-    data: { active: false, deactivatedAt: new Date() },
+    data: {
+      active: false,
+      deactivatedAt: new Date(),
+      deactivationReasonCode: reasonCode,
+      deactivationReason: reasonText || null,
+    },
   });
   res.json({ ok: true });
 });
@@ -299,7 +350,12 @@ adminRouter.patch('/admin/users/:id/activate', async (req, res) => {
   }
   await prisma.user.update({
     where: { id },
-    data: { active: true, deactivatedAt: null },
+    data: {
+      active: true,
+      deactivatedAt: null,
+      deactivationReasonCode: null,
+      deactivationReason: null,
+    },
   });
   res.json({ ok: true });
 });
@@ -614,35 +670,93 @@ adminRouter.patch('/admin/inquiries/:id/deactivate', async (req, res) => {
   res.json({ ok: true });
 });
 
-function serializeNoticeSummary(n: {
+type NoticeRow = {
   id: string;
   title: string;
   body: string;
   active: boolean;
+  pinned: boolean;
+  publishStart: Date | null;
+  publishEnd: Date | null;
   createdAt: Date;
-}) {
+};
+
+function serializeNoticeSummary(n: NoticeRow) {
   return {
     id: n.id,
     title: n.title,
     active: n.active,
+    pinned: n.pinned,
+    publishStart: n.publishStart?.toISOString() ?? null,
+    publishEnd: n.publishEnd?.toISOString() ?? null,
     createdAt: n.createdAt.toISOString(),
   };
 }
 
-function serializeNoticeDetail(n: {
-  id: string;
-  title: string;
-  body: string;
-  active: boolean;
-  createdAt: Date;
-}) {
+function serializeNoticeDetail(n: NoticeRow) {
   return {
     id: n.id,
     title: n.title,
     body: n.body,
     active: n.active,
+    pinned: n.pinned,
+    publishStart: n.publishStart?.toISOString() ?? null,
+    publishEnd: n.publishEnd?.toISOString() ?? null,
     createdAt: n.createdAt.toISOString(),
   };
+}
+
+type NoticeWindowInput = {
+  pinned?: unknown;
+  publishStart?: unknown;
+  publishEnd?: unknown;
+};
+
+type NoticeWindowResult = {
+  ok: true;
+  pinned?: boolean;
+  publishStart?: Date | null;
+  publishEnd?: Date | null;
+} | {
+  ok: false;
+  message: string;
+};
+
+/**
+ * 공지의 pinned/publishStart/publishEnd 입력을 정규화한다.
+ * - 빈 문자열/null은 명시적 null 의도(필드 클리어).
+ * - undefined는 변경 없음(키 미포함).
+ * - 둘 다 채워졌을 때만 start <= end 검증.
+ */
+function parseNoticeWindow(b: NoticeWindowInput): NoticeWindowResult {
+  const out: { pinned?: boolean; publishStart?: Date | null; publishEnd?: Date | null } = {};
+
+  if (b.pinned !== undefined) {
+    out.pinned = b.pinned === true || b.pinned === 'true';
+  }
+
+  function parseField(raw: unknown, label: string): { skip: true } | { skip: false; value: Date | null } | { error: string } {
+    if (raw === undefined) return { skip: true };
+    if (raw === null || raw === '') return { skip: false, value: null };
+    if (typeof raw !== 'string') return { error: `${label}은 ISO 8601 문자열 또는 null이어야 합니다.` };
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return { error: `${label}은 ISO 8601 형식이어야 합니다.` };
+    return { skip: false, value: d };
+  }
+
+  const startParsed = parseField(b.publishStart, 'publishStart');
+  if ('error' in startParsed) return { ok: false, message: startParsed.error };
+  if (!startParsed.skip) out.publishStart = startParsed.value;
+
+  const endParsed = parseField(b.publishEnd, 'publishEnd');
+  if ('error' in endParsed) return { ok: false, message: endParsed.error };
+  if (!endParsed.skip) out.publishEnd = endParsed.value;
+
+  if (out.publishStart && out.publishEnd && out.publishStart.getTime() > out.publishEnd.getTime()) {
+    return { ok: false, message: 'publishStart는 publishEnd보다 이후일 수 없습니다.' };
+  }
+
+  return { ok: true, ...out };
 }
 
 adminRouter.get('/admin/notices', async (req, res) => {
@@ -673,7 +787,7 @@ adminRouter.get('/admin/notices', async (req, res) => {
     prisma.notice.count({ where }),
     prisma.notice.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
       skip,
       take: size,
     }),
@@ -698,24 +812,59 @@ adminRouter.get('/admin/notices/:id', async (req, res) => {
 });
 
 adminRouter.post('/admin/notices', async (req, res) => {
-  const b = req.body as { title?: string; body?: string };
+  const b = (req.body ?? {}) as {
+    title?: string;
+    body?: string;
+    pinned?: unknown;
+    publishStart?: unknown;
+    publishEnd?: unknown;
+  };
   const title = String(b.title ?? '').trim();
   if (!title) {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '제목이 필요합니다.');
     return;
   }
+  const window = parseNoticeWindow(b);
+  if (!window.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, window.message);
+    return;
+  }
   const n = await prisma.notice.create({
-    data: { title, body: String(b.body ?? '') },
+    data: {
+      title,
+      body: String(b.body ?? ''),
+      pinned: window.pinned ?? false,
+      publishStart: window.publishStart ?? null,
+      publishEnd: window.publishEnd ?? null,
+    },
   });
   res.status(201).json({ id: n.id });
 });
 
 adminRouter.put('/admin/notices/:id', async (req, res) => {
   const id = req.params.id;
-  const b = req.body as { title?: string; body?: string };
+  const b = (req.body ?? {}) as {
+    title?: string;
+    body?: string;
+    pinned?: unknown;
+    publishStart?: unknown;
+    publishEnd?: unknown;
+  };
   const existing = await prisma.notice.findUnique({ where: { id } });
   if (!existing) {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '공지를 찾을 수 없습니다.');
+    return;
+  }
+  const window = parseNoticeWindow(b);
+  if (!window.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, window.message);
+    return;
+  }
+  // 부분 업데이트: 시작·종료 한쪽만 들어와도 다른 쪽은 기존값과 비교해 정합성 재확인.
+  const nextStart = window.publishStart !== undefined ? window.publishStart : existing.publishStart;
+  const nextEnd = window.publishEnd !== undefined ? window.publishEnd : existing.publishEnd;
+  if (nextStart && nextEnd && nextStart.getTime() > nextEnd.getTime()) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'publishStart는 publishEnd보다 이후일 수 없습니다.');
     return;
   }
   await prisma.notice.update({
@@ -723,6 +872,9 @@ adminRouter.put('/admin/notices/:id', async (req, res) => {
     data: {
       ...(b.title !== undefined ? { title: String(b.title).trim() } : {}),
       ...(b.body !== undefined ? { body: String(b.body) } : {}),
+      ...(window.pinned !== undefined ? { pinned: window.pinned } : {}),
+      ...(window.publishStart !== undefined ? { publishStart: window.publishStart } : {}),
+      ...(window.publishEnd !== undefined ? { publishEnd: window.publishEnd } : {}),
     },
   });
   res.json({ ok: true });
