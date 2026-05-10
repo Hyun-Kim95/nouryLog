@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
 import { OCR_FREE_LIMIT, STATS_STALE_HOURS } from '../lib/config.js';
 import { detectNutrition } from '../services/ocrService.js';
+import { calculateRecommendationFull } from '../lib/recommendation.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
@@ -41,15 +42,121 @@ meRouter.get('/me/profile', async (req, res) => {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '프로필이 없습니다.');
     return;
   }
+  const full = calculateRecommendationFull({
+    gender: p.gender,
+    age: p.age,
+    heightCm: p.heightCm,
+    weightKg: p.weightKg,
+    activityLevel: p.activityLevel,
+    goal: p.goal,
+  });
   res.json({
     gender: p.gender,
     age: p.age,
     heightCm: p.heightCm,
     weightKg: p.weightKg,
+    activityLevel: p.activityLevel ?? null,
+    goal: p.goal ?? null,
     proteinGoalG: p.proteinGoalG ?? undefined,
     calorieGoalKcal: p.calorieGoalKcal ?? undefined,
+    recommendationVersion: full.recommendationVersion,
+    policy: full.policy,
+    warnings: full.warnings,
   });
 });
+
+const ALLOWED_GENDERS = ['male', 'female', 'unspecified'] as const;
+const ALLOWED_ACTIVITY_LEVELS = ['sedentary', 'light', 'moderate', 'active'] as const;
+const ALLOWED_GOALS = ['lose', 'maintain', 'gain'] as const;
+const AGE_MIN = 13;
+const AGE_MAX = 99;
+const HEIGHT_MIN = 100;
+const HEIGHT_MAX = 250;
+const WEIGHT_MIN = 20;
+const WEIGHT_MAX = 300;
+const GOAL_MIN = 0;
+const GOAL_MAX = 10000;
+
+type ProfileFieldError = {
+  field:
+    | 'gender'
+    | 'age'
+    | 'heightCm'
+    | 'weightKg'
+    | 'activityLevel'
+    | 'goal'
+    | 'proteinGoalG'
+    | 'calorieGoalKcal';
+  message: string;
+  details: Record<string, unknown>;
+};
+
+function validateEnum<T extends string>(
+  field: ProfileFieldError['field'],
+  input: unknown,
+  allowed: readonly T[],
+  label: string,
+  options?: { nullable?: boolean },
+): { value?: T | null; error?: ProfileFieldError } {
+  if (input === undefined) return {};
+  if (input === null) {
+    if (options?.nullable) return { value: null };
+    return {
+      error: {
+        field,
+        message: `${label}은(는) ${allowed.join(', ')} 중 하나여야 합니다.`,
+        details: { field, allowed: [...allowed] },
+      },
+    };
+  }
+  if (typeof input !== 'string' || !(allowed as readonly string[]).includes(input)) {
+    return {
+      error: {
+        field,
+        message: `${label}은(는) ${allowed.join(', ')} 중 하나여야 합니다.`,
+        details: { field, allowed: [...allowed] },
+      },
+    };
+  }
+  return { value: input as T };
+}
+
+function validateGender(input: unknown): { value?: string; error?: ProfileFieldError } {
+  const r = validateEnum('gender', input, ALLOWED_GENDERS, 'gender');
+  if (r.error) return { error: r.error };
+  if (r.value == null) return {};
+  return { value: r.value };
+}
+
+function validateIntegerRange(
+  field: 'age' | 'heightCm' | 'weightKg' | 'proteinGoalG' | 'calorieGoalKcal',
+  input: unknown,
+  min: number,
+  max: number,
+  label: string,
+): { value?: number; error?: ProfileFieldError } {
+  if (input === undefined || input === null || input === '') return {};
+  const n = typeof input === 'number' ? input : Number(input);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) {
+    return {
+      error: {
+        field,
+        message: `${label}은(는) 정수만 입력할 수 있습니다.`,
+        details: { field, allowedMin: min, allowedMax: max },
+      },
+    };
+  }
+  if (n < min || n > max) {
+    return {
+      error: {
+        field,
+        message: `${label}은(는) ${min}~${max} 범위로 입력해 주세요.`,
+        details: { field, allowedMin: min, allowedMax: max },
+      },
+    };
+  }
+  return { value: n };
+}
 
 meRouter.put('/me/profile', async (req, res) => {
   const userId = req.auth!.userId;
@@ -57,32 +164,86 @@ meRouter.put('/me/profile', async (req, res) => {
     sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 수정할 수 있습니다.');
     return;
   }
-  const b = req.body as Partial<{
+  const b = (req.body ?? {}) as Partial<{
     gender: string;
     age: number;
     heightCm: number;
     weightKg: number;
+    activityLevel: string;
+    goal: string;
     proteinGoalG: number;
     calorieGoalKcal: number;
   }>;
+
+  const gender = validateGender(b.gender);
+  if (gender.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, gender.error.message, gender.error.details);
+    return;
+  }
+  const activity = validateEnum(
+    'activityLevel',
+    b.activityLevel,
+    ALLOWED_ACTIVITY_LEVELS,
+    'activityLevel',
+    { nullable: true },
+  );
+  if (activity.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, activity.error.message, activity.error.details);
+    return;
+  }
+  const goal = validateEnum('goal', b.goal, ALLOWED_GOALS, 'goal', { nullable: true });
+  if (goal.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, goal.error.message, goal.error.details);
+    return;
+  }
+  const age = validateIntegerRange('age', b.age, AGE_MIN, AGE_MAX, '나이');
+  if (age.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, age.error.message, age.error.details);
+    return;
+  }
+  const height = validateIntegerRange('heightCm', b.heightCm, HEIGHT_MIN, HEIGHT_MAX, '신장');
+  if (height.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, height.error.message, height.error.details);
+    return;
+  }
+  const weight = validateIntegerRange('weightKg', b.weightKg, WEIGHT_MIN, WEIGHT_MAX, '체중');
+  if (weight.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, weight.error.message, weight.error.details);
+    return;
+  }
+  const protein = validateIntegerRange('proteinGoalG', b.proteinGoalG, GOAL_MIN, GOAL_MAX, '단백질 목표');
+  if (protein.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, protein.error.message, protein.error.details);
+    return;
+  }
+  const calorie = validateIntegerRange('calorieGoalKcal', b.calorieGoalKcal, GOAL_MIN, GOAL_MAX, '칼로리 목표');
+  if (calorie.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, calorie.error.message, calorie.error.details);
+    return;
+  }
+
   await prisma.profile.upsert({
     where: { userId },
     create: {
       userId,
-      gender: String(b.gender ?? 'unspecified'),
-      age: Number(b.age ?? 30),
-      heightCm: Number(b.heightCm ?? 170),
-      weightKg: Number(b.weightKg ?? 70),
-      proteinGoalG: b.proteinGoalG,
-      calorieGoalKcal: b.calorieGoalKcal,
+      gender: gender.value ?? 'unspecified',
+      age: age.value ?? 30,
+      heightCm: height.value ?? 170,
+      weightKg: weight.value ?? 70,
+      activityLevel: activity.value ?? null,
+      goal: goal.value ?? null,
+      proteinGoalG: protein.value,
+      calorieGoalKcal: calorie.value,
     },
     update: {
-      ...(b.gender !== undefined ? { gender: String(b.gender) } : {}),
-      ...(b.age !== undefined ? { age: Number(b.age) } : {}),
-      ...(b.heightCm !== undefined ? { heightCm: Number(b.heightCm) } : {}),
-      ...(b.weightKg !== undefined ? { weightKg: Number(b.weightKg) } : {}),
-      ...(b.proteinGoalG !== undefined ? { proteinGoalG: Number(b.proteinGoalG) } : {}),
-      ...(b.calorieGoalKcal !== undefined ? { calorieGoalKcal: Number(b.calorieGoalKcal) } : {}),
+      ...(gender.value !== undefined ? { gender: gender.value } : {}),
+      ...(age.value !== undefined ? { age: age.value } : {}),
+      ...(height.value !== undefined ? { heightCm: height.value } : {}),
+      ...(weight.value !== undefined ? { weightKg: weight.value } : {}),
+      ...(activity.value !== undefined ? { activityLevel: activity.value } : {}),
+      ...(goal.value !== undefined ? { goal: goal.value } : {}),
+      ...(protein.value !== undefined ? { proteinGoalG: protein.value } : {}),
+      ...(calorie.value !== undefined ? { calorieGoalKcal: calorie.value } : {}),
     },
   });
   res.json({ ok: true });
@@ -95,14 +256,29 @@ meRouter.post('/me/recommendation/recalculate', async (req, res) => {
     return;
   }
   const p = await prisma.profile.findUnique({ where: { userId } });
-  const w = p?.weightKg ?? 70;
-  const proteinGoalG = Math.round(w * 1.6);
-  const calorieGoalKcal = Math.round(w * 30);
+  if (!p) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '프로필이 없습니다.');
+    return;
+  }
+  const full = calculateRecommendationFull({
+    gender: p.gender,
+    age: p.age,
+    heightCm: p.heightCm,
+    weightKg: p.weightKg,
+    activityLevel: p.activityLevel,
+    goal: p.goal,
+  });
   await prisma.profile.update({
     where: { userId },
-    data: { proteinGoalG, calorieGoalKcal },
+    data: { proteinGoalG: full.proteinGoalG, calorieGoalKcal: full.calorieGoalKcal },
   });
-  res.json({ proteinGoalG, calorieGoalKcal });
+  res.json({
+    proteinGoalG: full.proteinGoalG,
+    calorieGoalKcal: full.calorieGoalKcal,
+    recommendationVersion: full.recommendationVersion,
+    policy: full.policy,
+    warnings: full.warnings,
+  });
 });
 
 meRouter.post('/meals', async (req, res) => {

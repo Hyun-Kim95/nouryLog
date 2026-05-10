@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Button, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { apiFetch } from '../api';
 import { getAccessToken } from '../authStorage';
+import { useTheme } from '../theme';
 
 export function SubscriptionScreen() {
+  const t = useTheme();
   const [msg, setMsg] = useState<string | null>(null);
 
   const checkout = async () => {
@@ -35,17 +37,47 @@ export function SubscriptionScreen() {
   };
 
   return (
-    <View style={styles.box}>
-      <Text style={styles.title}>구독 · 복구</Text>
-      {msg ? <Text style={styles.msg}>{msg}</Text> : null}
-      <Button title="premium_monthly Checkout (스텁)" onPress={() => void checkout()} />
-      <Button title="Restore" onPress={() => void restore()} />
+    <View style={[styles.box, { backgroundColor: t.colors.bg, gap: t.spacing.md, padding: t.spacing.lg }]}>
+      <Text style={{ color: t.colors.fg, fontSize: t.fontSize.title, fontWeight: '700' }}>구독 · 복구</Text>
+      {msg ? <Text style={{ color: t.colors.info, fontSize: t.fontSize.body }}>{msg}</Text> : null}
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => void checkout()}
+        style={({ pressed }) => ({
+          backgroundColor: t.colors.surface2,
+          borderColor: t.colors.border,
+          borderWidth: 1,
+          borderRadius: t.radius.md,
+          paddingVertical: t.spacing.md,
+          alignItems: 'center',
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
+          premium_monthly Checkout (스텁)
+        </Text>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => void restore()}
+        style={({ pressed }) => ({
+          backgroundColor: t.colors.surface2,
+          borderColor: t.colors.border,
+          borderWidth: 1,
+          borderRadius: t.radius.md,
+          paddingVertical: t.spacing.md,
+          alignItems: 'center',
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>Restore</Text>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  box: { flex: 1, padding: 16, gap: 12 },
-  title: { fontSize: 20, fontWeight: '700' },
-  msg: { fontSize: 14, color: '#2563eb' },
+  box: { flex: 1 },
 });

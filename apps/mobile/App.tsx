@@ -1,24 +1,46 @@
 import { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { RootNavigator } from './src/navigation';
-import { getAccessToken } from './src/authStorage';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { RootNavigator, type InitialRoute } from './src/navigation';
+import { getAccessToken, getOnboardingDone } from './src/authStorage';
+import { ThemeProvider } from './src/theme';
+import { DevTogglesProvider } from './src/dev/devToggles';
+import { DevPanel } from './src/dev/DevPanel';
+import { ToastProvider } from './src/toast/ToastProvider';
+import { setupNotifications } from './src/notifications';
 
 export default function App() {
   const [ready, setReady] = useState(false);
-  const [initialLoggedIn, setInitialLoggedIn] = useState(false);
+  const [initialRoute, setInitialRoute] = useState<InitialRoute>('Login');
 
   useEffect(() => {
-    void getAccessToken().then((t) => {
-      setInitialLoggedIn(!!t);
+    void (async () => {
+      await setupNotifications();
+      const token = await getAccessToken();
+      if (!token) {
+        setInitialRoute('Login');
+      } else {
+        const done = await getOnboardingDone();
+        setInitialRoute(done ? 'Main' : 'Onboarding');
+      }
       setReady(true);
-    });
+    })();
   }, []);
 
   if (!ready) return null;
 
   return (
-    <NavigationContainer>
-      <RootNavigator initialLoggedIn={initialLoggedIn} />
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <DevTogglesProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <NavigationContainer>
+              <RootNavigator initialRoute={initialRoute} />
+              <DevPanel />
+            </NavigationContainer>
+          </ToastProvider>
+        </ThemeProvider>
+      </DevTogglesProvider>
+    </SafeAreaProvider>
   );
 }
