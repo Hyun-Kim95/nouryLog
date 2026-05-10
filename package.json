@@ -21,7 +21,8 @@
     "smoke:dev": "node scripts/dev-smoke/all.mjs",
     "smoke:dev:n": "node scripts/dev-smoke/phase-n.mjs",
     "smoke:dev:p": "node scripts/dev-smoke/phase-p.mjs",
-    "smoke:dev:t": "node scripts/dev-smoke/phase-t.mjs"
+    "smoke:dev:t": "node scripts/dev-smoke/phase-t.mjs",
+    "smoke:dev:q": "node scripts/dev-smoke/phase-q-admin.mjs"
   },
   "devDependencies": {
     "@google/stitch-sdk": "^0.2.0",

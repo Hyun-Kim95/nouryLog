@@ -122,15 +122,19 @@ export function FoodsPage() {
         }
         rowActions={(row) => (
           <>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => openEdit(row)}>
+            <button type="button" className="btn btn-row btn-sm" onClick={() => openEdit(row)}>
               수정
             </button>
             {row.status === 'inactive' ? (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void setActive(row, true)}>
+              <button type="button" className="btn btn-row btn-sm" onClick={() => void setActive(row, true)}>
                 활성 재전환
               </button>
             ) : (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void setActive(row, false)}>
+              <button
+                type="button"
+                className="btn btn-row btn-sm btn-danger-ghost"
+                onClick={() => void setActive(row, false)}
+              >
                 비활성
               </button>
             )}

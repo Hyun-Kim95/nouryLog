@@ -5,10 +5,11 @@ import { ToastProvider } from './toast/ToastProvider';
 import { Layout } from './Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
-import { EntityListPage } from './pages/EntityListPage';
 import { FoodsPage } from './pages/FoodsPage';
 import { InquiriesPage } from './pages/InquiriesPage';
+import { MembersPage } from './pages/MembersPage';
 import { NoticesPage } from './pages/NoticesPage';
+import { PoliciesPage } from './pages/PoliciesPage';
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { token } = useAuth();
@@ -36,7 +37,7 @@ export function App() {
               path="/members"
               element={
                 <Protected>
-                  <EntityListPage kind="members" />
+                  <MembersPage />
                 </Protected>
               }
             />
@@ -61,6 +62,14 @@ export function App() {
               element={
                 <Protected>
                   <NoticesPage />
+                </Protected>
+              }
+            />
+            <Route
+              path="/policies"
+              element={
+                <Protected>
+                  <PoliciesPage />
                 </Protected>
               }
             />

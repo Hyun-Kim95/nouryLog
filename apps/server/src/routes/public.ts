@@ -15,6 +15,17 @@ import {
 
 export const publicRouter = Router();
 
+async function recordLogin(userId: string) {
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date() },
+    });
+  } catch {
+    // 부수효과 분리: 실패해도 토큰 발급은 계속 진행한다.
+  }
+}
+
 async function issueTokensForUser(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return null;
@@ -66,13 +77,14 @@ publicRouter.post('/auth/login', async (req, res) => {
     return;
   }
   const role = user.role === 'ADMIN' ? 'ADMIN' : 'USER';
+  await recordLogin(user.id);
   res.json({
     accessToken: signAccess(user.id, role),
     refreshToken: signRefresh(user.id, role),
   });
 });
 
-publicRouter.post('/auth/refresh', (req, res) => {
+publicRouter.post('/auth/refresh', async (req, res) => {
   const raw = String((req.body as { refreshToken?: string })?.refreshToken ?? '');
   try {
     const p = verifyToken(raw);
@@ -80,6 +92,7 @@ publicRouter.post('/auth/refresh', (req, res) => {
       sendError(res, 401, ErrorCodes.AUTH_TOKEN_EXPIRED, '리프레시 토큰이 필요합니다.');
       return;
     }
+    await recordLogin(p.sub);
     res.json({
       accessToken: signAccess(p.sub, p.role),
       refreshToken: signRefresh(p.sub, p.role),
@@ -162,6 +175,7 @@ publicRouter.get('/auth/social/:provider/callback', async (req, res) => {
       return;
     }
     const role = linked.user.role === 'ADMIN' ? 'ADMIN' : 'USER';
+    await recordLogin(linked.user.id);
     const redirect = new URL(stateItem.redirectUri);
     redirect.searchParams.set('result', 'success');
     redirect.searchParams.set('accessToken', signAccess(linked.user.id, role));
@@ -214,6 +228,7 @@ publicRouter.get('/auth/social/:provider/callback', async (req, res) => {
     res.redirect(redirect.toString());
     return;
   }
+  await recordLogin(created.id);
   const redirect = new URL(stateItem.redirectUri);
   redirect.searchParams.set('result', 'success');
   redirect.searchParams.set('accessToken', tokenPair.accessToken);
@@ -293,4 +308,36 @@ publicRouter.post('/auth/social/conflict/resolve', async (req, res) => {
     return;
   }
   res.json(tokenPair);
+});
+
+const PUBLIC_POLICY_KINDS = ['terms', 'privacy'] as const;
+type PublicPolicyKind = (typeof PUBLIC_POLICY_KINDS)[number];
+function isPublicPolicyKind(v: unknown): v is PublicPolicyKind {
+  return typeof v === 'string' && (PUBLIC_POLICY_KINDS as readonly string[]).includes(v);
+}
+
+publicRouter.get('/public/policies/:kind', async (req, res) => {
+  const kind = req.params.kind;
+  if (!isPublicPolicyKind(kind)) {
+    sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_FAILED,
+      `kind는 ${PUBLIC_POLICY_KINDS.join(' | ')} 중 하나여야 합니다.`,
+      { allowed: [...PUBLIC_POLICY_KINDS] },
+    );
+    return;
+  }
+  const doc = await prisma.policyDocument.findUnique({ where: { kind } });
+  if (!doc || !doc.publishedAt) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '게시된 문서를 찾을 수 없습니다.');
+    return;
+  }
+  res.json({
+    kind: doc.kind,
+    body: doc.body,
+    version: doc.version,
+    publishedAt: doc.publishedAt.toISOString(),
+    updatedAt: doc.updatedAt.toISOString(),
+  });
 });

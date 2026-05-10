@@ -48,8 +48,6 @@ export function InquiriesPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detail, setDetail] = useState<InquiryDetail | null>(null);
   const [answerDraft, setAnswerDraft] = useState('');
-  const [statusDraft, setStatusDraft] = useState<InquiryStatus>('pending');
-  const [transitionToDone, setTransitionToDone] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -67,8 +65,6 @@ export function InquiriesPage() {
       const next = await apiFetch<InquiryDetail>(`/admin/inquiries/${id}`, { token });
       setDetail(next);
       setAnswerDraft(next.answer ?? '');
-      setStatusDraft(next.status);
-      setTransitionToDone(next.status !== 'done');
       setDrawerOpen(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '문의 상세를 불러오지 못했습니다.';
@@ -91,38 +87,14 @@ export function InquiriesPage() {
       const next = await apiFetch<InquiryDetail>(`/admin/inquiries/${detail.id}/answer`, {
         method: 'PATCH',
         token,
-        body: JSON.stringify({ answer, transitionToDone }),
+        body: JSON.stringify({ answer }),
       });
       setDetail(next);
-      setStatusDraft(next.status);
       reload();
-      setMessage('답변이 등록되었습니다.');
+      setMessage('답변이 등록되어 완료 상태로 전환되었습니다.');
       toast.show({ kind: 'success', message: '답변을 등록했어요.' });
     } catch (e) {
       const msg = e instanceof Error ? e.message : '답변을 등록하지 못했습니다.';
-      setMessage(msg);
-      toast.show({ kind: 'error', message: msg });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const updateStatus = async () => {
-    if (!token || !detail || busy) return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      await apiFetch(`/admin/inquiries/${detail.id}/status`, {
-        method: 'PATCH',
-        token,
-        body: JSON.stringify({ status: statusDraft }),
-      });
-      setDetail({ ...detail, status: statusDraft });
-      reload();
-      setMessage('상태가 변경되었습니다.');
-      toast.show({ kind: 'success', message: '상태를 변경했어요.' });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '상태를 변경하지 못했습니다.';
       setMessage(msg);
       toast.show({ kind: 'error', message: msg });
     } finally {
@@ -174,7 +146,12 @@ export function InquiriesPage() {
           width={560}
           footer={
             <>
-              <button type="button" className="btn btn-ghost" onClick={() => void deactivate()} disabled={busy}>
+              <button
+                type="button"
+                className="btn btn-row btn-danger-ghost"
+                onClick={() => void deactivate()}
+                disabled={busy}
+              >
                 비활성
               </button>
               <button type="button" className="btn" onClick={() => setDrawerOpen(false)}>
@@ -186,7 +163,10 @@ export function InquiriesPage() {
           {detail ? (
             <div className="form-stack">
               {message ? (
-                <div className={message.includes('되었습니다') ? 'banner banner-info' : 'banner banner-danger'} role="alert">
+                <div
+                  className={message.includes('되었습니다') ? 'banner banner-info' : 'banner banner-danger'}
+                  role="alert"
+                >
                   {message}
                 </div>
               ) : null}
@@ -196,17 +176,9 @@ export function InquiriesPage() {
                 <p>{detail.body}</p>
                 <div className="form-help">작성자: {detail.userId ?? '비회원/알 수 없음'}</div>
               </div>
-              <label className="form-field">
-                처리 상태
-                <select value={statusDraft} onChange={(e) => setStatusDraft(e.target.value as InquiryStatus)}>
-                  <option value="pending">접수</option>
-                  <option value="in_progress">처리중</option>
-                  <option value="done">완료</option>
-                </select>
-              </label>
-              <button type="button" className="btn" onClick={() => void updateStatus()} disabled={busy}>
-                상태 변경
-              </button>
+              <div className="form-help">
+                답변을 등록하면 자동으로 완료 상태로 전환됩니다. 별도의 상태 변경은 필요하지 않습니다.
+              </div>
               <label className="form-field">
                 답변
                 <textarea
@@ -219,14 +191,6 @@ export function InquiriesPage() {
                   {answerDraft.length}/4000
                   {detail.answeredAt ? ` · 마지막 답변: ${formatDateTime(detail.answeredAt)}` : ''}
                 </span>
-              </label>
-              <label className="cluster" style={{ gap: 'var(--ds-space-2)' }}>
-                <input
-                  type="checkbox"
-                  checked={transitionToDone}
-                  onChange={(e) => setTransitionToDone(e.target.checked)}
-                />
-                <span>답변 등록 후 완료로 전환</span>
               </label>
               <button type="button" className="btn btn-primary" onClick={() => void submitAnswer()} disabled={busy}>
                 {busy ? '처리 중…' : '답변 등록'}

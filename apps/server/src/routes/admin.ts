@@ -135,6 +135,87 @@ adminRouter.get('/admin/dashboard', async (req, res) => {
   });
 });
 
+adminRouter.get('/admin/dashboard/timeseries', async (req, res) => {
+  const days = clampPeriodDays(req.query.periodDays);
+  const now = new Date();
+  // 일별 0시 기준 슬롯을 만든다. UTC 기준으로 단순 계산(타임존 정밀도는 v1에서 비목표).
+  const slots: { from: Date; to: Date; key: string }[] = [];
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const dayStart = new Date(now);
+    dayStart.setDate(dayStart.getDate() - i);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const key = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, '0')}-${String(
+      dayStart.getDate(),
+    ).padStart(2, '0')}`;
+    slots.push({ from: dayStart, to: dayEnd, key });
+  }
+
+  const rangeFrom = slots[0]!.from;
+  const rangeTo = slots[slots.length - 1]!.to;
+
+  const [users, meals, inquiries] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        role: 'USER',
+        createdAt: { gte: rangeFrom, lt: rangeTo },
+      },
+      select: { createdAt: true },
+    }),
+    prisma.meal.findMany({
+      where: {
+        active: true,
+        consumedAt: { gte: rangeFrom, lt: rangeTo },
+      },
+      select: { consumedAt: true },
+    }),
+    prisma.inquiry.findMany({
+      where: {
+        active: true,
+        status: { not: 'done' },
+        createdAt: { gte: rangeFrom, lt: rangeTo },
+      },
+      select: { createdAt: true },
+    }),
+  ]);
+
+  function bucketKey(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  const newUsersByDay = new Map<string, number>();
+  for (const u of users) {
+    const k = bucketKey(u.createdAt);
+    newUsersByDay.set(k, (newUsersByDay.get(k) ?? 0) + 1);
+  }
+  const mealsByDay = new Map<string, number>();
+  for (const m of meals) {
+    const k = bucketKey(m.consumedAt);
+    mealsByDay.set(k, (mealsByDay.get(k) ?? 0) + 1);
+  }
+  const pendingByDay = new Map<string, number>();
+  for (const q of inquiries) {
+    const k = bucketKey(q.createdAt);
+    pendingByDay.set(k, (pendingByDay.get(k) ?? 0) + 1);
+  }
+
+  res.json({
+    period: {
+      from: rangeFrom.toISOString(),
+      to: rangeTo.toISOString(),
+      days,
+    },
+    timezone: TIMEZONE,
+    items: slots.map((s) => ({
+      date: s.key,
+      newUsers: newUsersByDay.get(s.key) ?? 0,
+      mealRecords: mealsByDay.get(s.key) ?? 0,
+      pendingInquiries: pendingByDay.get(s.key) ?? 0,
+    })),
+  });
+});
+
 adminRouter.post('/admin/stats/reaggregate', async (_req, res) => {
   const now = new Date();
   const batch = await prisma.statsBatch.upsert({
@@ -169,7 +250,14 @@ adminRouter.get('/admin/users', async (req, res) => {
       orderBy: { createdAt: 'desc' },
       skip,
       take: size,
-      select: { id: true, email: true, active: true, deactivatedAt: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        active: true,
+        deactivatedAt: true,
+        lastLoginAt: true,
+        createdAt: true,
+      },
     }),
   ]);
 
@@ -182,6 +270,7 @@ adminRouter.get('/admin/users', async (req, res) => {
       email: u.email,
       status: u.active ? 'active' : 'inactive',
       createdAt: u.createdAt.toISOString(),
+      lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
       deactivatedAt: u.deactivatedAt?.toISOString() ?? null,
     })),
   });
@@ -197,6 +286,20 @@ adminRouter.patch('/admin/users/:id/deactivate', async (req, res) => {
   await prisma.user.update({
     where: { id },
     data: { active: false, deactivatedAt: new Date() },
+  });
+  res.json({ ok: true });
+});
+
+adminRouter.patch('/admin/users/:id/activate', async (req, res) => {
+  const id = req.params.id;
+  const user = await prisma.user.findFirst({ where: { id, role: 'USER' } });
+  if (!user) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '회원을 찾을 수 없습니다.');
+    return;
+  }
+  await prisma.user.update({
+    where: { id },
+    data: { active: true, deactivatedAt: null },
   });
   res.json({ ok: true });
 });
@@ -465,7 +568,7 @@ adminRouter.patch('/admin/inquiries/:id/status', async (req, res) => {
 
 adminRouter.patch('/admin/inquiries/:id/answer', async (req, res) => {
   const id = req.params.id;
-  const b = (req.body ?? {}) as { answer?: unknown; transitionToDone?: unknown };
+  const b = (req.body ?? {}) as { answer?: unknown };
   const answerRaw = typeof b.answer === 'string' ? b.answer : '';
   const answer = answerRaw.trim();
   if (!answer) {
@@ -487,14 +590,14 @@ adminRouter.patch('/admin/inquiries/:id/answer', async (req, res) => {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '문의를 찾을 수 없습니다.');
     return;
   }
-  const transition = b.transitionToDone === true || b.transitionToDone === 'true';
+  // 답변 등록 시 항상 완료로 전환한다. transitionToDone 분기는 폐기(과거 호환을 위해 무시).
   const updated = await prisma.inquiry.update({
     where: { id },
     data: {
       answer,
       answeredAt: new Date(),
       answeredBy: adminUserId(req),
-      ...(transition ? { status: 'done' as InquiryStatus } : {}),
+      status: 'done' as InquiryStatus,
     },
   });
   res.json(serializeInquiryDetail(updated));
@@ -645,4 +748,104 @@ adminRouter.patch('/admin/notices/:id/activate', async (req, res) => {
   }
   await prisma.notice.update({ where: { id }, data: { active: true } });
   res.json({ ok: true });
+});
+
+const POLICY_KINDS = ['terms', 'privacy'] as const;
+type PolicyKind = (typeof POLICY_KINDS)[number];
+const POLICY_BODY_MAX_LEN = 50_000;
+
+function isPolicyKind(v: unknown): v is PolicyKind {
+  return typeof v === 'string' && (POLICY_KINDS as readonly string[]).includes(v);
+}
+
+function serializePolicy(p: {
+  id: string;
+  kind: string;
+  body: string;
+  version: number;
+  publishedAt: Date | null;
+  updatedAt: Date;
+}) {
+  return {
+    id: p.id,
+    kind: p.kind,
+    body: p.body,
+    version: p.version,
+    publishedAt: p.publishedAt ? p.publishedAt.toISOString() : null,
+    updatedAt: p.updatedAt.toISOString(),
+  };
+}
+
+adminRouter.get('/admin/policies/:kind', async (req, res) => {
+  const kind = req.params.kind;
+  if (!isPolicyKind(kind)) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `kind는 ${POLICY_KINDS.join(' | ')} 중 하나여야 합니다.`, {
+      allowed: [...POLICY_KINDS],
+    });
+    return;
+  }
+  const existing = await prisma.policyDocument.findUnique({ where: { kind } });
+  if (!existing) {
+    res.json({
+      id: null,
+      kind,
+      body: '',
+      version: 0,
+      publishedAt: null,
+      updatedAt: null,
+    });
+    return;
+  }
+  res.json(serializePolicy(existing));
+});
+
+adminRouter.put('/admin/policies/:kind', async (req, res) => {
+  const kind = req.params.kind;
+  if (!isPolicyKind(kind)) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `kind는 ${POLICY_KINDS.join(' | ')} 중 하나여야 합니다.`, {
+      allowed: [...POLICY_KINDS],
+    });
+    return;
+  }
+  const b = (req.body ?? {}) as { body?: unknown; publish?: unknown };
+  const bodyRaw = typeof b.body === 'string' ? b.body : '';
+  if (!bodyRaw.trim()) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'body가 필요합니다.');
+    return;
+  }
+  if (bodyRaw.length > POLICY_BODY_MAX_LEN) {
+    sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_FAILED,
+      `body는 ${POLICY_BODY_MAX_LEN}자 이하여야 합니다.`,
+      { maxLength: POLICY_BODY_MAX_LEN },
+    );
+    return;
+  }
+  const publish = b.publish === true || b.publish === 'true';
+
+  const now = new Date();
+  const existing = await prisma.policyDocument.findUnique({ where: { kind } });
+  if (!existing) {
+    const created = await prisma.policyDocument.create({
+      data: {
+        kind,
+        body: bodyRaw,
+        version: 1,
+        publishedAt: publish ? now : null,
+      },
+    });
+    res.status(201).json(serializePolicy(created));
+    return;
+  }
+  const updated = await prisma.policyDocument.update({
+    where: { kind },
+    data: {
+      body: bodyRaw,
+      version: { increment: 1 },
+      publishedAt: publish ? now : null,
+    },
+  });
+  res.json(serializePolicy(updated));
 });

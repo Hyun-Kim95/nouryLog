@@ -1,8 +1,59 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { useAuth } from '../auth';
 import { apiFetch, isAuthDenied } from '../api';
 import { ForbiddenState } from '../components/ForbiddenState';
+import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
+
+type TimeseriesPoint = {
+  date: string;
+  newUsers: number;
+  mealRecords: number;
+  pendingInquiries: number;
+};
+
+type Timeseries = {
+  period: { from: string; to: string; days: number };
+  timezone: string;
+  items: TimeseriesPoint[];
+};
+
+type ChartTokens = {
+  primary: string;
+  warn: string;
+  info: string;
+  success: string;
+  border: string;
+  fgMuted: string;
+};
+
+const FALLBACK_TOKENS: ChartTokens = {
+  primary: '#2563eb',
+  warn: '#d97706',
+  info: '#0891b2',
+  success: '#10b981',
+  border: '#e5e7eb',
+  fgMuted: '#6b7280',
+};
+
+function readVar(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 
 type Dash = {
   period?: {
@@ -61,7 +112,9 @@ function formatDate(iso: string | undefined): string {
 export function DashboardPage() {
   const { token } = useAuth();
   const toast = useToast();
+  const { dark } = useTheme();
   const [data, setData] = useState<Dash | null>(null);
+  const [series, setSeries] = useState<Timeseries | null>(null);
   const [periodDays, setPeriodDays] = useState<PeriodDays>(7);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,21 +122,39 @@ export function DashboardPage() {
   const [reaggregatedAt, setReaggregatedAt] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
 
+  const [tokens, setTokens] = useState<ChartTokens>(FALLBACK_TOKENS);
+  useEffect(() => {
+    setTokens({
+      primary: readVar('--ds-primary', FALLBACK_TOKENS.primary),
+      warn: readVar('--ds-warning-fg', FALLBACK_TOKENS.warn),
+      info: readVar('--ds-info-fg', FALLBACK_TOKENS.info),
+      success: readVar('--ds-success-fg', FALLBACK_TOKENS.success),
+      border: readVar('--ds-border', FALLBACK_TOKENS.border),
+      fgMuted: readVar('--ds-fg-muted', FALLBACK_TOKENS.fgMuted),
+    });
+  }, [dark]);
+
   const load = async () => {
     if (!token) return;
     setLoading(true);
     setErr(null);
     setForbidden(false);
     try {
-      const d = await apiFetch<Dash>(`/admin/dashboard?periodDays=${periodDays}`, { token });
+      const [d, ts] = await Promise.all([
+        apiFetch<Dash>(`/admin/dashboard?periodDays=${periodDays}`, { token }),
+        apiFetch<Timeseries>(`/admin/dashboard/timeseries?periodDays=${periodDays}`, { token }),
+      ]);
       setData(d);
+      setSeries(ts);
     } catch (e) {
       if (isAuthDenied(e)) {
         setForbidden(true);
         setData(null);
+        setSeries(null);
       } else {
         setErr(e instanceof Error ? e.message : '불러오기 실패');
         setData(null);
+        setSeries(null);
       }
     } finally {
       setLoading(false);
@@ -93,6 +164,20 @@ export function DashboardPage() {
   useEffect(() => {
     void load();
   }, [token, periodDays]);
+
+  const pieData = useMemo(() => {
+    if (!data) return [] as Array<{ name: string; value: number; color: string }>;
+    return [
+      { name: '신규 가입', value: data.newUsers, color: tokens.primary },
+      { name: '활성 사용자', value: data.activeUsers, color: tokens.info },
+      { name: '미처리 문의', value: data.inquiryCount, color: tokens.warn },
+    ];
+  }, [data, tokens]);
+
+  const pieHasData = pieData.some((d) => d.value > 0);
+  const seriesHasData = (series?.items ?? []).some(
+    (p) => p.newUsers > 0 || p.mealRecords > 0 || p.pendingInquiries > 0,
+  );
 
   const reaggregate = async () => {
     if (!token) return;
@@ -202,6 +287,122 @@ export function DashboardPage() {
           </div>
         ))}
       </div>
+
+      <section
+        className="card"
+        style={{ marginTop: 'var(--ds-space-4)' }}
+        aria-label="기간별 추이 차트"
+      >
+        <div className="card-title">기간 추이 ({periodDays}일)</div>
+        <div style={{ width: '100%', height: 280 }}>
+          {seriesHasData ? (
+            <ResponsiveContainer>
+              <LineChart data={series?.items ?? []} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke={tokens.border} strokeDasharray="3 3" />
+                <XAxis dataKey="date" stroke={tokens.fgMuted} fontSize={12} />
+                <YAxis stroke={tokens.fgMuted} fontSize={12} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{
+                    background: 'var(--ds-surface)',
+                    border: `1px solid ${tokens.border}`,
+                    borderRadius: 8,
+                    color: 'var(--ds-fg)',
+                  }}
+                  labelStyle={{ color: 'var(--ds-fg)' }}
+                />
+                <Legend wrapperStyle={{ color: tokens.fgMuted, fontSize: 12 }} />
+                <Line
+                  type="monotone"
+                  dataKey="newUsers"
+                  name="신규 가입"
+                  stroke={tokens.primary}
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="mealRecords"
+                  name="식사 기록"
+                  stroke={tokens.success}
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="pendingInquiries"
+                  name="미처리 문의"
+                  stroke={tokens.warn}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div
+              style={{
+                display: 'flex',
+                height: '100%',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: tokens.fgMuted,
+                fontSize: 'var(--ds-text-sm)',
+              }}
+            >
+              표시할 추이 데이터가 없습니다.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section
+        className="card"
+        style={{ marginTop: 'var(--ds-space-4)' }}
+        aria-label="KPI 비중 도넛 차트"
+      >
+        <div className="card-title">KPI 비중</div>
+        <div style={{ width: '100%', height: 280 }}>
+          {pieHasData ? (
+            <ResponsiveContainer>
+              <PieChart>
+                <Tooltip
+                  contentStyle={{
+                    background: 'var(--ds-surface)',
+                    border: `1px solid ${tokens.border}`,
+                    borderRadius: 8,
+                    color: 'var(--ds-fg)',
+                  }}
+                />
+                <Legend wrapperStyle={{ color: tokens.fgMuted, fontSize: 12 }} />
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={2}
+                >
+                  {pieData.map((entry, idx) => (
+                    <Cell key={idx} fill={entry.color} stroke={tokens.border} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div
+              style={{
+                display: 'flex',
+                height: '100%',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: tokens.fgMuted,
+                fontSize: 'var(--ds-text-sm)',
+              }}
+            >
+              비중을 계산할 데이터가 없습니다.
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className="card stale-widget" style={{ marginTop: 'var(--ds-space-4)' }}>
         <div className="stale-head">

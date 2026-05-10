@@ -132,15 +132,19 @@ export function NoticesPage() {
       }
       rowActions={(row) => (
         <>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void openEdit(row)}>
+          <button type="button" className="btn btn-row btn-sm" onClick={() => void openEdit(row)}>
             수정
           </button>
           {row.active === false ? (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void setActive(row, true)}>
+            <button type="button" className="btn btn-row btn-sm" onClick={() => void setActive(row, true)}>
               활성 재전환
             </button>
           ) : (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void setActive(row, false)}>
+            <button
+              type="button"
+              className="btn btn-row btn-sm btn-danger-ghost"
+              onClick={() => void setActive(row, false)}
+            >
               비활성
             </button>
           )}
@@ -177,7 +181,6 @@ export function NoticesPage() {
                 onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
                 style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
               />
-              <span className="form-help">plain textarea입니다. 줄바꿈은 그대로 저장됩니다.</span>
             </label>
           </div>
         </Modal>

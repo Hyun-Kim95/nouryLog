@@ -163,7 +163,7 @@ export function EntityListPage({
           </select>
         </label>
         {extraFilters}
-        <label className="cluster" style={{ flexDirection: 'row', alignItems: 'center', gap: 'var(--ds-space-2)' }}>
+        <label className="filter-bar-toggle">
           <input
             type="checkbox"
             checked={includeInactive}

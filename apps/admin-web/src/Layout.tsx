@@ -9,6 +9,7 @@ const NAV_ITEMS: { to: string; label: string; icon: string }[] = [
   { to: '/foods', label: '음식', icon: '◇' },
   { to: '/inquiries', label: '문의', icon: '◔' },
   { to: '/notices', label: '공지', icon: '◑' },
+  { to: '/policies', label: '정책 문서', icon: '◈' },
 ];
 
 const PATH_TITLE: Record<string, string> = {
@@ -17,6 +18,7 @@ const PATH_TITLE: Record<string, string> = {
   '/foods': '음식 템플릿',
   '/inquiries': '문의 관리',
   '/notices': '공지 관리',
+  '/policies': '정책 문서',
 };
 
 export function Layout() {

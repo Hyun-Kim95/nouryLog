@@ -18,10 +18,28 @@ const dateFmt = new Intl.DateTimeFormat('ko-KR', {
   day: '2-digit',
 });
 
+const dateTimeFmt = new Intl.DateTimeFormat('ko-KR', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
 function formatDate(v: unknown): string {
   if (typeof v !== 'string' || !v) return '—';
   try {
     return dateFmt.format(new Date(v));
+  } catch {
+    return v;
+  }
+}
+
+function formatDateTime(v: unknown): string {
+  if (typeof v !== 'string' || !v) return '—';
+  try {
+    return dateTimeFmt.format(new Date(v));
   } catch {
     return v;
   }
@@ -55,8 +73,15 @@ function ActiveBadge({ value }: { value: unknown }) {
 export const COLUMNS: Record<Kind, ColumnDef[]> = {
   members: [
     { key: 'email', label: '이메일', render: (r) => formatText(r.email) },
-    { key: 'status', label: '상태', render: (r) => <StatusBadge value={r.status} />, width: '120px' },
-    { key: 'createdAt', label: '가입일', render: (r) => formatDate(r.createdAt), width: '140px' },
+    { key: 'status', label: '상태', render: (r) => <StatusBadge value={r.status} />, width: '110px' },
+    { key: 'lastLoginAt', label: '마지막 로그인', render: (r) => formatDateTime(r.lastLoginAt), width: '170px' },
+    { key: 'createdAt', label: '가입일', render: (r) => formatDate(r.createdAt), width: '130px' },
+    {
+      key: 'deactivatedAt',
+      label: '비활성일',
+      render: (r) => (r.status === 'inactive' ? formatDateTime(r.deactivatedAt) : '—'),
+      width: '170px',
+    },
   ],
   foods: [
     { key: 'name', label: '이름', render: (r) => formatText(r.name) },

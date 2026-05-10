@@ -8,12 +8,14 @@
  *   2) `npm run smoke:dev` 또는 `node scripts/dev-smoke/all.mjs` 실행.
  *
  * 동작:
- *   - 두 단계의 dev smoke를 순차 실행한다.
+ *   - dev smoke 단계들을 순차 실행한다.
  *     1단계: phase-n.mjs (v1.1~v1.3 회귀, 14 케이스)
  *     2단계: phase-p.mjs (v1.4 권장 계산 분기, 9 케이스)
+ *     3단계: phase-t.mjs (사용자 override 입력, 6 케이스)
+ *     4단계: phase-q-admin.mjs (관리자 화면 수정사항 회귀, 14 케이스)
  *   - 각 단계의 stdout/stderr는 그대로 라이브로 흘려보낸다.
  *   - 어느 단계가 실패했는지를 명시적으로 출력하고, 실패가 있으면 exit 1.
- *   - PHASE_SMOKE_BASE 환경변수가 설정돼 있으면 두 스크립트에 그대로 전달한다(phase-n/p가 각자의 env name을 본다).
+ *   - PHASE_SMOKE_BASE 환경변수가 설정돼 있으면 각 스크립트에 그대로 전달한다(각자의 env name을 본다).
  */
 
 import { spawn } from 'node:child_process';
@@ -38,6 +40,11 @@ const STAGES = [
     label: 'phase-t (override input, 6 cases)',
     script: resolve(__dirname, 'phase-t.mjs'),
     envName: 'PHASE_T_BASE',
+  },
+  {
+    label: 'phase-q-admin (admin web fixes, 14 cases)',
+    script: resolve(__dirname, 'phase-q-admin.mjs'),
+    envName: 'PHASE_Q_ADMIN_BASE',
   },
 ];
 
@@ -78,7 +85,6 @@ async function main() {
   console.log('Combined dev smoke summary');
   console.log('='.repeat(72));
   const total = STAGES.length;
-  const ranIds = new Set(results.map((r) => r.label));
   for (const stage of STAGES) {
     const result = results.find((r) => r.label === stage.label);
     if (!result) {
