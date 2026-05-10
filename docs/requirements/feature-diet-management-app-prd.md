@@ -3,7 +3,7 @@ type: prd
 project: dietManagement
 status: approved
 owner: product
-updated_at: 2026-05-05
+updated_at: 2026-05-10
 tags: [requirements, prd, mobile-app, admin-web]
 ---
 
@@ -248,7 +248,10 @@ tags: [requirements, prd, mobile-app, admin-web]
 - 이미지 업로드 후 OCR 1차 결과는 평균 3초 이내 목표.
 - 통계 화면 기본 조회는 1초 이내(최근 30일 기준) 목표.
 - 다크모드 기본 지원.
-- 라이트/다크 모드 전환 토글을 제공하고, 선택 상태는 재방문 시에도 유지되어야 한다.
+- 라이트/다크 모드 전환 토글을 제공하고, 선택 상태는 재방문 시에도 유지되어야 한다. (admin-web 자체 토글 + `apps/mobile`은 v0.1로 Subscription 탭 "테마 설정" 카드에서 제공, 세부 정책 `feature-mobile-theme-toggle-prd.md`)
+- 결과 메시지(저장 성공/실패·경고)는 일관된 토스트 패턴으로 표시한다. 모바일은 `feature-mobile-toast-prd.md` v0.1(단일 교체 큐잉, 하단 safe-area 위치, success/error/info 3종), admin-web은 `feature-admin-toast-prd.md` v0.1(스택 최대 3개 큐잉, top-right 위치)로 양 플랫폼 공통화. 시간(success/info=3.5s, error=5s)·종류·자체 구현은 동일 정책. 인증 흐름(LoginPage/LoginScreen)도 토스트 적용 완료(이메일·SNS·계정 충돌 분기 포함, 인라인 메시지는 보조로 유지).
+- 사용자 설정은 별도 "설정" 탭에서 일관 진입한다(`feature-mobile-settings-tab-prd.md` v0.1, `mobile-settings-tab-spec.md` v0.5로 디자인+구현 완료. SettingsScreen 신규, MainTabs 5번째 탭, ProfileEdit·테마는 Settings로 이전, 알림은 "준비 중" 슬롯 예약, **계정 카드 신설(Phase M B1)로 로그아웃을 Settings 탭에 통합**, MainTabs 5탭에 **`@expo/vector-icons` Ionicons + 라벨 + 다크 정합 토큰 적용(Phase M B2)**). LoginScreen 색상도 `useTheme()` 토큰 정합 완료(SNS 브랜드 색만 의도적 유지). 모바일 `theme.tsx`에 `borderStrong` 토큰 신규(light `#cbd5e1` / dark `#475569`)이 추가돼 admin-web `--ds-border-strong`과 의미·역할이 정합된다.
+- 시각 점검 누적 체크리스트는 `docs/design/visual-inspection-cumulative.md` v0.3(78 항목, 실효 77)로 단일 진입점화. 새 트랙 산출 시 본 문서의 카테고리에 항목 추가.
 - 모바일/웹 접근성 기본 가이드 준수.
 
 ## 10) API 계약 초안 (요약)
@@ -257,9 +260,11 @@ tags: [requirements, prd, mobile-app, admin-web]
   - `POST /auth/login`
   - `POST /auth/refresh`
 - Profile
-  - `GET /me/profile`
-  - `PUT /me/profile`
-  - `POST /me/recommendation/recalculate`
+  - `GET /me/profile` — v1.3에서 응답에 `activityLevel?`/`goal?` 추가(nullable).
+  - `PUT /me/profile` — v1.2 검증 + v1.3 enum 보강(`activityLevel`/`goal`, `null` 명시 = clear). 자세한 계약은 `feature-diet-management-api-contract-v1.md` v1.3.
+  - `POST /me/recommendation/recalculate` — v1.3에서 BMR(미플린-세인트 지오어) × 활동 계수 × 목표 가감 로직으로 교체. NULL 시 안전 기본값 `moderate`/`maintain`.
+- Mobile Onboarding(APP_ONBOARD): 부팅 시 `dm_onboarding_done` SecureStore 플래그 기반 자동 진입, 저장 후 `POST /me/recommendation/recalculate` 자동 호출. 세부 정책은 `feature-mobile-onboarding-prd.md` v0.1.
+- Mobile Profile Extra(활동량·목표): Onboarding 슬롯 + ProfileEdit 화면(Subscription 탭 진입). 세부 정책은 `feature-mobile-profile-extra-prd.md` v0.1.
 - Meal Records
   - `POST /meals`
   - `GET /meals?from=&to=&page=`
@@ -400,3 +405,51 @@ tags: [requirements, prd, mobile-app, admin-web]
    - 이유: 무료 사용자 수익화와 유료 사용자 경험 개선을 동시에 달성하기 위함.
 30. 결제 모델을 단일 구독형(무료 + 프리미엄 월 1종)으로 확정함.
    - 이유: 초기 구현/운영 복잡도를 낮추고 사용자 결제 이해도를 높이기 위함.
+
+## 15) 구현 진행 이력 (Phase 타임라인)
+
+§9·§10에 흩어진 회차별 결과 메모를 단일 진입점으로 정리한다. 상세는 `docs/design/admin-stitch-gap-2026-05-08.md`의 회차 헤더에 그대로 있고, 본 절은 한 줄 요약 + 회차/Phase 번호 매핑만 담는다. 새 Phase 진행 시 본 표에 한 줄 추가한다.
+
+| 회차 | Phase | 날짜 | 트랙 요약 | 주 산출 |
+|---|---|---|---|---|
+| 1 | — | 2026-05-09 | 백엔드 API 계약 보강 v1.1 | `feature-diet-management-api-contract-v1.md` v1.1 |
+| 2 | — | 2026-05-09 | 프론트 UI 트랙 종료 (admin-web FOODS/INQUIRIES/NOTICES + 대시보드) | dev smoke 22 케이스 ✓ |
+| 3 | — | 2026-05-09 | 모바일 APP_ONBOARD v1.2 | `OnboardingScreen` + Field/Segmented + SecureStore + 자동 recalc |
+| 4 | — | 2026-05-09 | 모바일 프로필 확장 v1.3 (활동량·목표) | `ProfileEditScreen` + `RadioGroup` + Mifflin-St Jeor |
+| 5 | — | 2026-05-09 | 모바일 테마 사용자 토글 v0.1 | `userPrefs.ts` + `theme.tsx` 사용자 모드 영속 |
+| 6 | — | 2026-05-09 | emergent-rule (A) 정식 룰 승격 | `.cursor/rules/67-dual-design-exemption.mdc` |
+| 7 | G | 2026-05-09 | 모바일 토스트 v0.1 | `apps/mobile/src/toast/` (단일 교체 큐잉, 하단) |
+| 8 | H | 2026-05-09 | admin-web 토스트 v0.1 | `apps/admin-web/src/toast/` (스택 ≤3, 우상단) |
+| 9 | I | 2026-05-09 | 양 플랫폼 LoginPage/LoginScreen 토스트 + Settings 탭 PRD v0.1 | 인증 분기 토스트 + `feature-mobile-settings-tab-prd.md` |
+| 10 | J | 2026-05-09 | Settings 탭 구현 + LoginScreen 다크 정합 | SettingsScreen 신설, MainTabs 5번째 탭, LoginScreen 토큰화 |
+| 11 | K | 2026-05-09 | `borderStrong` 토큰 + emergent-rule (B)·(C) 점검 | `theme.tsx` 토큰 추가, 누적 1회 유지 |
+| 12 | L | 2026-05-09 | 시각 점검 누적 통합 + MainTabs 텍스트 이모지 | `visual-inspection-cumulative.md` v0.1 + 5탭 이모지 |
+| 13 | M | 2026-05-10 | Settings 계정 카드(B1) + Ionicons 업그레이드(B2) | `SettingsScreen` 카드 4 + `@expo/vector-icons` Ionicons |
+| 14 | N | 2026-05-10 | 모체 PRD §15 타임라인 신설(A2) + dev smoke 회귀 점검(A3) | 본 절 신규 + `scripts/dev-smoke/phase-n.mjs` 14/14 PASS |
+| 15 | O | 2026-05-10 | 모바일 알림 본 기능 (B3) — PRD v0.2 + 디자인 스펙 v0.2 + 67 면제 단일안 + 단계 4 구현 | `expo-notifications` 도입, `notifications/` 4파일 + `notifPrefs.ts` + `NotificationCard.tsx` 신규. 식사 3개(08:00/12:30/18:30) + 권장량 미달 1개(20:00, 동적 본문). dev smoke 14/14, 시각 점검 누적 v0.4(92항/실효 90) |
+| 16 | P | 2026-05-10 | 권장 계산 v1.4 (B4) 단계 1+2+4 — 근거 조사 + PRD v0.2 + 디자인 스펙 v0.2 + 구현 + 검증 (67 면제 단일안) | `recommendation-v14-evidence.md` + `feature-recommendation-v14-prd.md` v0.2 + `recommendation-v14-spec.md` v0.2. **서버**: `recommendation.ts` v1.4 정책(청소년 maintain_with_caution / 고령 delta clamp 150~300 + 단백질 ≥1.1 g/kg / floor M1500·F1200 / 자동 단백질 상한 2.0 g/kg) + `me.ts` GET·recalc 양쪽에 `recommendationVersion`/`policy`/`warnings` 메타. **모바일**: `api/profile` 메타 타입 + `copy/recommendation` SSOT 8키 + `ProfileEditScreen` 카드(v1.4 caption + 추정 보조 + warnings 행) + `OnboardingScreen` success 토스트 본문 교체 + `NotificationCard` 미달 토글 helper. **검증**: phase-p.mjs 9/9 + phase-n.mjs 14/14 + tsc(server·mobile) clean |
+| 17 | Q+R+S | 2026-05-10 | 안정화 패스 — 회귀 baseline + dev smoke 통합 러너 + warn 토큰 의미 확장 | **Q**: phase-n 14/14 + phase-p 9/9 + server·mobile·admin-web tsc clean(실 디바이스 시각 점검은 사용자 환경 위임). **R**: `scripts/dev-smoke/all.mjs` 신규 + `package.json` `smoke:dev`/`:n`/`:p` 스크립트. **S**: `theme.tsx` `warn` 토큰 의미 주석 보강(별도 신규 토큰 없음, 67 좁은 스코프 유지) + `ProfileEditScreen` warnings 행을 `t.colors.warn`으로 적용 + `recommendation-v14-spec.md` v0.3 + `visual-inspection-cumulative.md` 항목 갱신 |
+| 18 | T+U+V | 2026-05-10 | 사용자 override 입력 + 안내 확장 검토 + 릴리즈 점검 (67 면제 단일안) | **T**: `feature-recommendation-override-prd.md` v0.1(7개 결정 일괄 채택) + `recommendation-override-spec.md` v0.2(구현 완료). 모바일 3파일(`api/profile` `ProfileInput` 두 필드 추가 + `copy/recommendation` `OVERRIDE_COPY` 11키 + `ProfileEditScreen` 토글/입력/reset/medicalGeneric). 서버 변경 0(기존 PUT 재사용). dev smoke `phase-t.mjs` 7/7 신규. **U**: HomeScreen/StatsScreen이 권장량 미노출이라 안내 확장 보류 결론(스펙 §11.3 기록). **V**: server build + admin-web build + api-client build + mobile tsc 모두 clean. 통합 smoke `phase-n` 14/14 + `phase-p` 9/9 + `phase-t` 7/7 = **30/30 PASS** |
+
+### emergent-rule 누적 상태 (Phase V 종료 시점)
+
+| 후보 | 누적 | 정식 룰 승격 |
+|---|---|---|
+| (A) 67-dual-design-exemption | 승격 시점 3회 + 이후 다수 적용 (G·H·I·J·L·O·**P**·**S**·**T**) | ✓ 승격됨 (2026-05-09, `67-dual-design-exemption.mdc`). Phase S(warn 토큰 의미 확장) + Phase T(override 입력 — 신규 화면 0, 컴포넌트 0, 서버 변경 0) 모두 단일안 그대로 진행 |
+| (B) PUT nullable clear | 1회 | 보류 (Phase O·P 미발동: 신규 PUT nullable 필드 없음, 응답 메타 추가만) |
+| (C) 부팅 비동기 컨텍스트 미렌더 | 1회 | 보류 (Phase O·P 미발동: 부팅 컨텍스트 변경 없음) |
+
+### 다음 Phase 후보
+
+| Phase | 트랙 | 진입 조건 |
+|---|---|---|
+| N | ✓ 완료 (2026-05-10, 14회차) | — |
+| O | ✓ 완료 (2026-05-10, 15회차) | — |
+| P | ✓ 완료 (2026-05-10, 16회차) — 권장 계산 v1.4 단계 1+2+4 자동 통합 진행 | — |
+| Q | ✓ 완료 (2026-05-10, 17회차) — 회귀 baseline 자동 점검 | — |
+| R | ✓ 완료 (2026-05-10, 17회차) — `scripts/dev-smoke/all.mjs` 통합 러너 + npm scripts | — |
+| S | ✓ 완료 (2026-05-10, 17회차) — `warn` 토큰 의미 확장 (신규 토큰 0) | — |
+| T | ✓ 완료 (2026-05-10, 18회차) — 사용자 override 입력 (PRD v0.1 + 디자인 v0.2 + 구현 + smoke 7/7) | — |
+| U | ✓ 완료 (2026-05-10, 18회차) — 홈/통계 안내 확장 보류 결론(권장량 미노출) | — |
+| V | ✓ 완료 (2026-05-10, 18회차) — release-check: server/admin-web/api-client build + mobile tsc + 통합 smoke 30/30 PASS | — |
+| W (후보) | StatsScreen에 권장량 대비 충족률(`protein/proteinGoalG`) 도입 + 충족률 카드 안에서 v1.4 warnings 1줄 노출 (Phase U 보류 항목 후속) | 우선순위 보통. 사용자 요청 시 진입 |

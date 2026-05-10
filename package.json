@@ -13,6 +13,18 @@
     "build": "npm run build -w @diet-management/server && npm run build -w @diet-management/admin-web && npm run build -w @diet-management/api-client",
     "generate:api": "npm run generate -w @diet-management/api-client",
     "db:generate": "npm run prisma:generate -w @diet-management/server",
-    "db:migrate": "npm run prisma:migrate -w @diet-management/server"
+    "db:migrate": "npm run prisma:migrate -w @diet-management/server",
+    "stitch:health": "tsx scripts/stitch/01-healthcheck.ts",
+    "stitch:generate": "tsx scripts/stitch/02-generate-screens.ts",
+    "stitch:apply-ds": "tsx scripts/stitch/03-apply-design-system.ts",
+    "stitch:collect": "tsx scripts/stitch/04-collect-screens.ts",
+    "smoke:dev": "node scripts/dev-smoke/all.mjs",
+    "smoke:dev:n": "node scripts/dev-smoke/phase-n.mjs",
+    "smoke:dev:p": "node scripts/dev-smoke/phase-p.mjs",
+    "smoke:dev:t": "node scripts/dev-smoke/phase-t.mjs"
+  },
+  "devDependencies": {
+    "@google/stitch-sdk": "^0.2.0",
+    "tsx": "^4.21.0"
   }
 }
