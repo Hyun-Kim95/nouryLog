@@ -15,6 +15,7 @@
  *   - GET /admin/dashboard/timeseries 가 periodDays 만큼 배열 반환
  *   - GET /public/policies/:kind 가 publish 후에만 200, 그 외 404
  *   - POST /admin/notices 의 pinned + publishStart/publishEnd round-trip + 검증
+ *   - POST /admin/foods 의 servingGrams + 4 macros 필수 + round-trip + PUT 검증
  */
 
 const BASE = process.env.PHASE_Q_ADMIN_BASE ?? process.env.PHASE_SMOKE_BASE ?? 'http://localhost:3000';
@@ -294,6 +295,115 @@ async function main() {
     'POST /admin/notices publishStart > publishEnd → 422',
     noticeInvalid.status === 422,
     `status=${noticeInvalid.status}`,
+  );
+
+  // 8) 음식 템플릿 영양 5필드 필수 + round-trip + PUT 검증.
+  const foodMissing = await authed(adminToken, '/admin/foods', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `phase-q food ${Date.now()}`,
+      category: '간식',
+    }),
+  });
+  log(
+    'POST /admin/foods (영양 필드 누락 → 422)',
+    foodMissing.status === 422,
+    `status=${foodMissing.status}`,
+  );
+
+  const foodPayload = {
+    name: `phase-q food ${Date.now()}`,
+    category: '간식',
+    memo: 'smoke',
+    servingGrams: 100,
+    calories: 250,
+    protein: 12.5,
+    fat: 8,
+    carbohydrate: 30,
+  };
+  const foodCreate = await authed(adminToken, '/admin/foods', {
+    method: 'POST',
+    body: JSON.stringify(foodPayload),
+  });
+  log(
+    'POST /admin/foods 정상 (5필드 입력)',
+    foodCreate.status === 201 && typeof foodCreate.body?.id === 'string',
+    `status=${foodCreate.status}, id=${foodCreate.body?.id}`,
+  );
+  const newFoodId = foodCreate.body?.id ?? null;
+
+  if (newFoodId) {
+    const foodDetail = await authed(adminToken, `/admin/foods/${newFoodId}`);
+    log(
+      'GET /admin/foods/:id 응답에 5필드 round-trip',
+      foodDetail.status === 200 &&
+        foodDetail.body?.servingGrams === foodPayload.servingGrams &&
+        foodDetail.body?.calories === foodPayload.calories &&
+        foodDetail.body?.protein === foodPayload.protein &&
+        foodDetail.body?.fat === foodPayload.fat &&
+        foodDetail.body?.carbohydrate === foodPayload.carbohydrate,
+      `status=${foodDetail.status}, kcal=${foodDetail.body?.calories}, p=${foodDetail.body?.protein}`,
+    );
+
+    const foodList = await authed(adminToken, '/admin/foods?page=1&size=15&includeInactive=true');
+    const listed = foodList.body?.items?.find((f) => f.id === newFoodId) ?? null;
+    log(
+      'GET /admin/foods 목록 응답에 5필드 포함',
+      listed &&
+        listed.servingGrams === foodPayload.servingGrams &&
+        listed.calories === foodPayload.calories &&
+        listed.protein === foodPayload.protein &&
+        listed.fat === foodPayload.fat &&
+        listed.carbohydrate === foodPayload.carbohydrate,
+      `listed=${JSON.stringify({
+        servingGrams: listed?.servingGrams,
+        calories: listed?.calories,
+        protein: listed?.protein,
+        fat: listed?.fat,
+        carbohydrate: listed?.carbohydrate,
+      })}`,
+    );
+
+    const foodPutMissing = await authed(adminToken, `/admin/foods/${newFoodId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name: 'phase-q renamed' }),
+    });
+    log(
+      'PUT /admin/foods/:id (영양 필드 누락 → 422)',
+      foodPutMissing.status === 422,
+      `status=${foodPutMissing.status}`,
+    );
+
+    const foodPutOk = await authed(adminToken, `/admin/foods/${newFoodId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...foodPayload,
+        name: 'phase-q renamed',
+        calories: 300,
+      }),
+    });
+    log(
+      'PUT /admin/foods/:id 정상 (5필드 갱신)',
+      foodPutOk.status === 200,
+      `status=${foodPutOk.status}`,
+    );
+  }
+
+  const foodNegative = await authed(adminToken, '/admin/foods', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `phase-q neg ${Date.now()}`,
+      servingGrams: 100,
+      calories: -10,
+      protein: 1,
+      fat: 1,
+      carbohydrate: 1,
+    }),
+  });
+  log(
+    'POST /admin/foods (음수 → 422)',
+    foodNegative.status === 422,
+    `status=${foodNegative.status}`,
   );
 
   console.log('-'.repeat(60));

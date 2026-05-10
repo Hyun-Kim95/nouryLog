@@ -42,7 +42,7 @@ const STAGES = [
     envName: 'PHASE_T_BASE',
   },
   {
-    label: 'phase-q-admin (admin web fixes, 21 cases)',
+    label: 'phase-q-admin (admin web fixes, 28 cases)',
     script: resolve(__dirname, 'phase-q-admin.mjs'),
     envName: 'PHASE_Q_ADMIN_BASE',
   },
