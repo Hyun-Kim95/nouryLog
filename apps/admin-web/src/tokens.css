@@ -1,0 +1,126 @@
+/**
+ * DietManagement DS v1 — Design Tokens
+ * SSOT 근거:
+ *   - Stitch projectId=7726060931590277332, designSystem=assets/1329886661735568102
+ *   - Stitch 폴리시드 화면(2026-05-08): ADM_FOODS/ADM_INQUIRIES/ADM_NOTICES/APP_ONBOARD HTML 분석
+ *   - 정합 노트: docs/design/diet-management-alignment-notes.md
+ *
+ * 색상 베이스: Tailwind slate(border/text), green(brand) — Stitch DS 출력값과 1:1 매핑.
+ * 폰트: 한국어 우선 Pretendard, 영문/숫자 폴백 Inter, 헤드라인용 Manrope(별도 변수).
+ * 다크모드 진입: html[data-theme='dark'].
+ * 접근성 기준:
+ *   - 텍스트 대비 4.5:1 이상(보조 텍스트 3:1 이상).
+ *   - primary(#16a34a) on white: 3.32:1 — 비텍스트 또는 굵은 14px+ 라벨 한정 사용.
+ */
+
+:root {
+  /* color — surfaces */
+  --ds-bg: #f9fafb;
+  --ds-surface: #ffffff;
+  --ds-surface-2: #f1f5f9;
+  --ds-overlay: rgba(15, 23, 42, 0.45);
+
+  /* color — foreground */
+  --ds-fg: #0f172a;
+  --ds-fg-muted: #475569;
+  --ds-fg-subtle: #64748b;
+
+  /* color — borders */
+  --ds-border: #e2e8f0;
+  --ds-border-strong: #cbd5e1;
+
+  /* color — brand (식단 그린) */
+  --ds-primary: #16a34a;
+  --ds-primary-fg: #ffffff;
+  --ds-primary-hover: #15803d;
+  --ds-primary-soft: #f0fdf4;
+  --ds-primary-soft-fg: #166534;
+
+  /* color — semantic */
+  --ds-success-bg: #dcfce7;
+  --ds-success-fg: #166534;
+  --ds-warning-bg: #fef3c7;
+  --ds-warning-fg: #92400e;
+  --ds-danger-bg: #fee2e2;
+  --ds-danger-fg: #991b1b;
+  --ds-info-bg: #dbeafe;
+  --ds-info-fg: #1e40af;
+
+  /* typography */
+  --ds-font-sans: 'Pretendard', 'Pretendard Variable', 'Inter', -apple-system, BlinkMacSystemFont,
+    system-ui, 'Segoe UI', Roboto, sans-serif;
+  --ds-font-display: 'Pretendard', 'Pretendard Variable', 'Manrope', 'Inter', -apple-system,
+    BlinkMacSystemFont, system-ui, sans-serif;
+  --ds-text-xs: 0.75rem;
+  --ds-text-sm: 0.875rem;
+  --ds-text-md: 1rem;
+  --ds-text-lg: 1.125rem;
+  --ds-text-xl: 1.375rem;
+  --ds-text-2xl: 1.75rem;
+  --ds-line-tight: 1.25;
+  --ds-line-normal: 1.5;
+  --ds-weight-regular: 400;
+  --ds-weight-medium: 500;
+  --ds-weight-semibold: 600;
+  --ds-weight-bold: 700;
+  --ds-weight-extrabold: 800;
+
+  /* spacing */
+  --ds-space-1: 0.25rem;
+  --ds-space-2: 0.5rem;
+  --ds-space-3: 0.75rem;
+  --ds-space-4: 1rem;
+  --ds-space-5: 1.5rem;
+  --ds-space-6: 2rem;
+  --ds-space-7: 2.5rem;
+
+  /* radius — Stitch DS roundness=ROUND_EIGHT(0.5rem 기준) */
+  --ds-radius-sm: 4px;
+  --ds-radius-md: 8px;
+  --ds-radius-lg: 12px;
+  --ds-radius-pill: 999px;
+
+  /* shadow (light) */
+  --ds-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --ds-shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --ds-shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+
+  /* layout */
+  --ds-sidebar-w: 240px;
+  --ds-header-h: 56px;
+  --ds-content-max: 1200px;
+  --ds-bp-md: 768px;
+}
+
+html[data-theme='dark'] {
+  --ds-bg: #0b1117;
+  --ds-surface: #161b22;
+  --ds-surface-2: #1f2630;
+  --ds-overlay: rgba(0, 0, 0, 0.6);
+
+  --ds-fg: #e6edf3;
+  --ds-fg-muted: #c9d1d9;
+  --ds-fg-subtle: #8b949e;
+
+  --ds-border: #30363d;
+  --ds-border-strong: #3f4750;
+
+  --ds-primary: #22c55e;
+  --ds-primary-fg: #052e16;
+  --ds-primary-hover: #16a34a;
+  --ds-primary-soft: #14532d;
+  --ds-primary-soft-fg: #bbf7d0;
+
+  --ds-success-bg: #14532d;
+  --ds-success-fg: #bbf7d0;
+  --ds-warning-bg: #422006;
+  --ds-warning-fg: #fde68a;
+  --ds-danger-bg: #450a0a;
+  --ds-danger-fg: #fecaca;
+  --ds-info-bg: #172554;
+  --ds-info-fg: #bfdbfe;
+
+  --ds-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --ds-shadow-md: 0 4px 8px rgba(0, 0, 0, 0.55);
+  --ds-shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.6);
+}

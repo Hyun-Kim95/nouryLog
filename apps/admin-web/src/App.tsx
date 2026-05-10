@@ -1,10 +1,14 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
 import { ThemeProvider } from './theme';
+import { ToastProvider } from './toast/ToastProvider';
 import { Layout } from './Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EntityListPage } from './pages/EntityListPage';
+import { FoodsPage } from './pages/FoodsPage';
+import { InquiriesPage } from './pages/InquiriesPage';
+import { NoticesPage } from './pages/NoticesPage';
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { token } = useAuth();
@@ -16,7 +20,8 @@ export function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Routes>
+        <ToastProvider>
+          <Routes>
           <Route element={<Layout />}>
             <Route path="/login" element={<LoginPage />} />
             <Route
@@ -39,7 +44,7 @@ export function App() {
               path="/foods"
               element={
                 <Protected>
-                  <EntityListPage kind="foods" />
+                  <FoodsPage />
                 </Protected>
               }
             />
@@ -47,7 +52,7 @@ export function App() {
               path="/inquiries"
               element={
                 <Protected>
-                  <EntityListPage kind="inquiries" />
+                  <InquiriesPage />
                 </Protected>
               }
             />
@@ -55,14 +60,15 @@ export function App() {
               path="/notices"
               element={
                 <Protected>
-                  <EntityListPage kind="notices" />
+                  <NoticesPage />
                 </Protected>
               }
             />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
-        </Routes>
+          </Routes>
+        </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
   );

@@ -1,4 +1,4 @@
-import { Router, type Request } from 'express';
+import { Router, type Request, type Response } from 'express';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { requireAdmin } from '../middleware/requireAuth.js';
@@ -7,26 +7,127 @@ import { sendError, ErrorCodes } from '../lib/errors.js';
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
 
+const INQUIRY_STATUSES = ['pending', 'in_progress', 'done'] as const;
+type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
+
+const CATEGORY_MAX_LEN = 50;
+const ANSWER_MAX_LEN = 4000;
+const DEFAULT_PERIOD_DAYS = 7;
+const MAX_PERIOD_DAYS = 90;
+const TIMEZONE = 'Asia/Seoul';
+
 function paginate(q: Request['query']) {
   const page = Math.max(1, Number(q.page ?? 1));
   const size = Math.min(100, Math.max(1, Number(q.size ?? 15)));
   return { page, size, skip: (page - 1) * size };
 }
 
-adminRouter.get('/admin/dashboard', async (_req, res) => {
-  const since7 = new Date();
-  since7.setDate(since7.getDate() - 7);
-  const since30 = new Date();
-  since30.setDate(since30.getDate() - 30);
+function parseIsoDate(input: unknown): Date | null {
+  if (input === undefined || input === null || input === '') return null;
+  const s = String(input).trim();
+  if (!s) return null;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
 
-  const [newUsers, activeUsers, mealRecordCount, inquiryCount] = await Promise.all([
-    prisma.user.count({ where: { createdAt: { gte: since7 }, role: 'USER' } }),
-    prisma.user.count({ where: { active: true, role: 'USER' } }),
-    prisma.meal.count({ where: { active: true } }),
-    prisma.inquiry.count({ where: { active: true, status: { not: 'done' } } }),
+type DateRange = { from: Date | null; to: Date | null; error?: string };
+
+function parseDateRange(q: Request['query']): DateRange {
+  const fromRaw = q.from;
+  const toRaw = q.to;
+  const from = fromRaw !== undefined ? parseIsoDate(fromRaw) : null;
+  const to = toRaw !== undefined ? parseIsoDate(toRaw) : null;
+  if (fromRaw !== undefined && fromRaw !== '' && !from) {
+    return { from: null, to: null, error: 'from은 ISO 8601 날짜여야 합니다.' };
+  }
+  if (toRaw !== undefined && toRaw !== '' && !to) {
+    return { from: null, to: null, error: 'to는 ISO 8601 날짜여야 합니다.' };
+  }
+  if (from && to && from.getTime() > to.getTime()) {
+    return { from: null, to: null, error: 'from은 to보다 이후일 수 없습니다.' };
+  }
+  return { from, to };
+}
+
+function isInquiryStatus(v: unknown): v is InquiryStatus {
+  return typeof v === 'string' && (INQUIRY_STATUSES as readonly string[]).includes(v);
+}
+
+function clampPeriodDays(input: unknown): number {
+  const n = Number(input);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_PERIOD_DAYS;
+  return Math.min(MAX_PERIOD_DAYS, Math.max(1, Math.floor(n)));
+}
+
+function adminUserId(req: Request): string | null {
+  return req.auth?.userId ?? null;
+}
+
+function dateRangeFilter(range: DateRange): Prisma.DateTimeFilter | undefined {
+  if (!range.from && !range.to) return undefined;
+  const f: Prisma.DateTimeFilter = {};
+  if (range.from) f.gte = range.from;
+  if (range.to) f.lte = range.to;
+  return f;
+}
+
+function rejectInvalidRange(res: Response, range: DateRange): boolean {
+  if (range.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, range.error);
+    return true;
+  }
+  return false;
+}
+
+const STALE_THRESHOLD_HOURS = 6;
+
+function computeStale(aggregatedAt: Date | null, now: Date) {
+  if (!aggregatedAt) return { isStale: true, staleHours: null as number | null };
+  const diffMs = now.getTime() - aggregatedAt.getTime();
+  const hours = Math.max(0, Math.round((diffMs / 3_600_000) * 10) / 10);
+  return { isStale: hours >= STALE_THRESHOLD_HOURS, staleHours: hours };
+}
+
+adminRouter.get('/admin/dashboard', async (req, res) => {
+  const days = clampPeriodDays(req.query.periodDays);
+  const now = new Date();
+  const from = new Date(now);
+  from.setDate(from.getDate() - days);
+
+  const [newUsers, activeUsers, mealRecordCount, inquiryCount, batch] = await Promise.all([
+    prisma.user.count({
+      where: { role: 'USER', createdAt: { gte: from, lte: now } },
+    }),
+    prisma.meal
+      .findMany({
+        where: { active: true, consumedAt: { gte: from, lte: now } },
+        select: { userId: true },
+        distinct: ['userId'],
+      })
+      .then((rows) => rows.length),
+    prisma.meal.count({
+      where: { active: true, consumedAt: { gte: from, lte: now } },
+    }),
+    prisma.inquiry.count({
+      where: { active: true, status: { not: 'done' } },
+    }),
+    prisma.statsBatch.findUnique({ where: { id: 'singleton' } }),
   ]);
 
+  const aggregatedAt = batch?.lastRunAt ?? null;
+  const { isStale, staleHours } = computeStale(aggregatedAt, now);
+
   res.json({
+    period: {
+      from: from.toISOString(),
+      to: now.toISOString(),
+      days,
+    },
+    timezone: TIMEZONE,
+    aggregatedAt: aggregatedAt ? aggregatedAt.toISOString() : null,
+    isStale,
+    staleHours,
     newUsers,
     activeUsers,
     mealRecordCount,
@@ -35,12 +136,16 @@ adminRouter.get('/admin/dashboard', async (_req, res) => {
 });
 
 adminRouter.post('/admin/stats/reaggregate', async (_req, res) => {
-  await prisma.statsBatch.upsert({
+  const now = new Date();
+  const batch = await prisma.statsBatch.upsert({
     where: { id: 'singleton' },
-    create: { id: 'singleton', lastRunAt: new Date() },
-    update: { lastRunAt: new Date() },
+    create: { id: 'singleton', lastRunAt: now },
+    update: { lastRunAt: now },
   });
-  res.status(202).json({ accepted: true });
+  res.status(202).json({
+    accepted: true,
+    aggregatedAt: batch.lastRunAt.toISOString(),
+  });
 });
 
 adminRouter.get('/admin/users', async (req, res) => {
@@ -96,17 +201,51 @@ adminRouter.patch('/admin/users/:id/deactivate', async (req, res) => {
   res.json({ ok: true });
 });
 
+function serializeFood(f: {
+  id: string;
+  name: string;
+  memo: string | null;
+  category: string | null;
+  active: boolean;
+  createdAt: Date;
+}) {
+  return {
+    id: f.id,
+    name: f.name,
+    memo: f.memo,
+    category: f.category,
+    status: f.active ? 'active' : 'inactive',
+    createdAt: f.createdAt.toISOString(),
+  };
+}
+
+function validateCategory(input: unknown): { value: string | null; error?: string } {
+  if (input === undefined || input === null) return { value: null };
+  const raw = String(input).trim();
+  if (!raw) return { value: null };
+  if (raw.length > CATEGORY_MAX_LEN) {
+    return { value: null, error: `category는 ${CATEGORY_MAX_LEN}자 이하여야 합니다.` };
+  }
+  return { value: raw };
+}
+
 adminRouter.get('/admin/foods', async (req, res) => {
   const { page, size, skip } = paginate(req.query);
   const query = String(req.query.query ?? '').trim();
   const status = String(req.query.status ?? 'all');
   const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === '1';
+  const categoryFilter = validateCategory(req.query.category);
+  if (categoryFilter.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, categoryFilter.error);
+    return;
+  }
 
   const where: Prisma.FoodTemplateWhereInput = {
     ...(includeInactive ? {} : { active: true }),
-    ...(query ? { name: { contains: query } } : {}),
+    ...(query ? { name: { contains: query, mode: 'insensitive' } } : {}),
     ...(status === 'active' ? { active: true } : {}),
     ...(status === 'inactive' ? { active: false } : {}),
+    ...(categoryFilter.value ? { category: categoryFilter.value } : {}),
   };
 
   const [total, rows] = await Promise.all([
@@ -123,42 +262,65 @@ adminRouter.get('/admin/foods', async (req, res) => {
     page,
     size,
     total,
-    items: rows.map((f) => ({
-      id: f.id,
-      name: f.name,
-      status: f.active ? 'active' : 'inactive',
-      memo: f.memo,
-      createdAt: f.createdAt.toISOString(),
-    })),
+    items: rows.map(serializeFood),
   });
 });
 
+adminRouter.get('/admin/foods/:id', async (req, res) => {
+  const id = req.params.id;
+  const food = await prisma.foodTemplate.findUnique({ where: { id } });
+  if (!food) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '음식을 찾을 수 없습니다.');
+    return;
+  }
+  res.json(serializeFood(food));
+});
+
 adminRouter.post('/admin/foods', async (req, res) => {
-  const b = req.body as { name?: string; memo?: string };
+  const b = req.body as { name?: string; memo?: string; category?: string };
   const name = String(b.name ?? '').trim();
   if (!name) {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '이름이 필요합니다.');
     return;
   }
+  const category = validateCategory(b.category);
+  if (category.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, category.error);
+    return;
+  }
   const f = await prisma.foodTemplate.create({
-    data: { name, memo: b.memo ? String(b.memo) : null },
+    data: {
+      name,
+      memo: b.memo ? String(b.memo) : null,
+      category: category.value,
+    },
   });
   res.status(201).json({ id: f.id });
 });
 
 adminRouter.put('/admin/foods/:id', async (req, res) => {
   const id = req.params.id;
-  const b = req.body as { name?: string; memo?: string };
+  const b = req.body as { name?: string; memo?: string; category?: string | null };
   const existing = await prisma.foodTemplate.findUnique({ where: { id } });
   if (!existing) {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '음식을 찾을 수 없습니다.');
     return;
   }
+  let categoryUpdate: { category: string | null } | Record<string, never> = {};
+  if (b.category !== undefined) {
+    const category = validateCategory(b.category);
+    if (category.error) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, category.error);
+      return;
+    }
+    categoryUpdate = { category: category.value };
+  }
   await prisma.foodTemplate.update({
     where: { id },
     data: {
-      ...(b.name !== undefined ? { name: String(b.name) } : {}),
+      ...(b.name !== undefined ? { name: String(b.name).trim() } : {}),
       ...(b.memo !== undefined ? { memo: b.memo ? String(b.memo) : null } : {}),
+      ...categoryUpdate,
     },
   });
   res.json({ ok: true });
@@ -175,18 +337,80 @@ adminRouter.patch('/admin/foods/:id/deactivate', async (req, res) => {
   res.json({ ok: true });
 });
 
+adminRouter.patch('/admin/foods/:id/activate', async (req, res) => {
+  const id = req.params.id;
+  const existing = await prisma.foodTemplate.findUnique({ where: { id } });
+  if (!existing) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '음식을 찾을 수 없습니다.');
+    return;
+  }
+  await prisma.foodTemplate.update({ where: { id }, data: { active: true } });
+  res.json({ ok: true });
+});
+
+type InquiryRow = {
+  id: string;
+  userId: string | null;
+  subject: string;
+  body: string;
+  status: string;
+  active: boolean;
+  answer: string | null;
+  answeredAt: Date | null;
+  answeredBy: string | null;
+  createdAt: Date;
+};
+
+function serializeInquirySummary(i: InquiryRow) {
+  return {
+    id: i.id,
+    subject: i.subject,
+    status: i.status,
+    active: i.active,
+    answered: i.answer !== null,
+    createdAt: i.createdAt.toISOString(),
+  };
+}
+
+function serializeInquiryDetail(i: InquiryRow) {
+  return {
+    id: i.id,
+    userId: i.userId,
+    subject: i.subject,
+    body: i.body,
+    status: i.status,
+    active: i.active,
+    answer: i.answer,
+    answeredAt: i.answeredAt?.toISOString() ?? null,
+    answeredBy: i.answeredBy,
+    createdAt: i.createdAt.toISOString(),
+  };
+}
+
 adminRouter.get('/admin/inquiries', async (req, res) => {
   const { page, size, skip } = paginate(req.query);
   const query = String(req.query.query ?? '').trim();
   const status = String(req.query.status ?? 'all');
   const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === '1';
+  const range = parseDateRange(req.query);
+  if (rejectInvalidRange(res, range)) return;
+  const createdAtFilter = dateRangeFilter(range);
 
   const where: Prisma.InquiryWhereInput = {
     ...(includeInactive ? {} : { active: true }),
-    ...(query ? { OR: [{ subject: { contains: query } }, { body: { contains: query } }] } : {}),
+    ...(query
+      ? {
+          OR: [
+            { subject: { contains: query, mode: 'insensitive' } },
+            { body: { contains: query, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
     ...(status === 'inactive' ? { active: false } : {}),
     ...(status === 'pending' ? { status: 'pending', active: true } : {}),
+    ...(status === 'in_progress' ? { status: 'in_progress', active: true } : {}),
     ...(status === 'done' ? { status: 'done', active: true } : {}),
+    ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
   };
 
   const [total, rows] = await Promise.all([
@@ -203,21 +427,31 @@ adminRouter.get('/admin/inquiries', async (req, res) => {
     page,
     size,
     total,
-    items: rows.map((i) => ({
-      id: i.id,
-      subject: i.subject,
-      status: i.status,
-      active: i.active,
-      createdAt: i.createdAt.toISOString(),
-    })),
+    items: rows.map(serializeInquirySummary),
   });
+});
+
+adminRouter.get('/admin/inquiries/:id', async (req, res) => {
+  const id = req.params.id;
+  const inquiry = await prisma.inquiry.findUnique({ where: { id } });
+  if (!inquiry) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '문의를 찾을 수 없습니다.');
+    return;
+  }
+  res.json(serializeInquiryDetail(inquiry));
 });
 
 adminRouter.patch('/admin/inquiries/:id/status', async (req, res) => {
   const id = req.params.id;
-  const status = String((req.body as { status?: string })?.status ?? '');
-  if (!status) {
-    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'status가 필요합니다.');
+  const raw = (req.body as { status?: unknown })?.status;
+  if (!isInquiryStatus(raw)) {
+    sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_FAILED,
+      `status는 ${INQUIRY_STATUSES.join(' | ')} 중 하나여야 합니다.`,
+      { allowed: [...INQUIRY_STATUSES] },
+    );
     return;
   }
   const existing = await prisma.inquiry.findUnique({ where: { id } });
@@ -225,8 +459,45 @@ adminRouter.patch('/admin/inquiries/:id/status', async (req, res) => {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '문의를 찾을 수 없습니다.');
     return;
   }
-  await prisma.inquiry.update({ where: { id }, data: { status } });
+  await prisma.inquiry.update({ where: { id }, data: { status: raw } });
   res.json({ ok: true });
+});
+
+adminRouter.patch('/admin/inquiries/:id/answer', async (req, res) => {
+  const id = req.params.id;
+  const b = (req.body ?? {}) as { answer?: unknown; transitionToDone?: unknown };
+  const answerRaw = typeof b.answer === 'string' ? b.answer : '';
+  const answer = answerRaw.trim();
+  if (!answer) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'answer가 필요합니다.');
+    return;
+  }
+  if (answer.length > ANSWER_MAX_LEN) {
+    sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_FAILED,
+      `answer는 ${ANSWER_MAX_LEN}자 이하여야 합니다.`,
+      { maxLength: ANSWER_MAX_LEN },
+    );
+    return;
+  }
+  const existing = await prisma.inquiry.findUnique({ where: { id } });
+  if (!existing) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '문의를 찾을 수 없습니다.');
+    return;
+  }
+  const transition = b.transitionToDone === true || b.transitionToDone === 'true';
+  const updated = await prisma.inquiry.update({
+    where: { id },
+    data: {
+      answer,
+      answeredAt: new Date(),
+      answeredBy: adminUserId(req),
+      ...(transition ? { status: 'done' as InquiryStatus } : {}),
+    },
+  });
+  res.json(serializeInquiryDetail(updated));
 });
 
 adminRouter.patch('/admin/inquiries/:id/deactivate', async (req, res) => {
@@ -240,17 +511,59 @@ adminRouter.patch('/admin/inquiries/:id/deactivate', async (req, res) => {
   res.json({ ok: true });
 });
 
+function serializeNoticeSummary(n: {
+  id: string;
+  title: string;
+  body: string;
+  active: boolean;
+  createdAt: Date;
+}) {
+  return {
+    id: n.id,
+    title: n.title,
+    active: n.active,
+    createdAt: n.createdAt.toISOString(),
+  };
+}
+
+function serializeNoticeDetail(n: {
+  id: string;
+  title: string;
+  body: string;
+  active: boolean;
+  createdAt: Date;
+}) {
+  return {
+    id: n.id,
+    title: n.title,
+    body: n.body,
+    active: n.active,
+    createdAt: n.createdAt.toISOString(),
+  };
+}
+
 adminRouter.get('/admin/notices', async (req, res) => {
   const { page, size, skip } = paginate(req.query);
   const query = String(req.query.query ?? '').trim();
   const status = String(req.query.status ?? 'all');
   const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === '1';
+  const range = parseDateRange(req.query);
+  if (rejectInvalidRange(res, range)) return;
+  const createdAtFilter = dateRangeFilter(range);
 
   const where: Prisma.NoticeWhereInput = {
     ...(includeInactive ? {} : { active: true }),
-    ...(query ? { OR: [{ title: { contains: query } }, { body: { contains: query } }] } : {}),
+    ...(query
+      ? {
+          OR: [
+            { title: { contains: query, mode: 'insensitive' } },
+            { body: { contains: query, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
     ...(status === 'active' ? { active: true } : {}),
     ...(status === 'inactive' ? { active: false } : {}),
+    ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
   };
 
   const [total, rows] = await Promise.all([
@@ -267,13 +580,18 @@ adminRouter.get('/admin/notices', async (req, res) => {
     page,
     size,
     total,
-    items: rows.map((n) => ({
-      id: n.id,
-      title: n.title,
-      active: n.active,
-      createdAt: n.createdAt.toISOString(),
-    })),
+    items: rows.map(serializeNoticeSummary),
   });
+});
+
+adminRouter.get('/admin/notices/:id', async (req, res) => {
+  const id = req.params.id;
+  const notice = await prisma.notice.findUnique({ where: { id } });
+  if (!notice) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '공지를 찾을 수 없습니다.');
+    return;
+  }
+  res.json(serializeNoticeDetail(notice));
 });
 
 adminRouter.post('/admin/notices', async (req, res) => {
@@ -300,7 +618,7 @@ adminRouter.put('/admin/notices/:id', async (req, res) => {
   await prisma.notice.update({
     where: { id },
     data: {
-      ...(b.title !== undefined ? { title: String(b.title) } : {}),
+      ...(b.title !== undefined ? { title: String(b.title).trim() } : {}),
       ...(b.body !== undefined ? { body: String(b.body) } : {}),
     },
   });
@@ -315,5 +633,16 @@ adminRouter.patch('/admin/notices/:id/deactivate', async (req, res) => {
     return;
   }
   await prisma.notice.update({ where: { id }, data: { active: false } });
+  res.json({ ok: true });
+});
+
+adminRouter.patch('/admin/notices/:id/activate', async (req, res) => {
+  const id = req.params.id;
+  const existing = await prisma.notice.findUnique({ where: { id } });
+  if (!existing) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '공지를 찾을 수 없습니다.');
+    return;
+  }
+  await prisma.notice.update({ where: { id }, data: { active: true } });
   res.json({ ok: true });
 });

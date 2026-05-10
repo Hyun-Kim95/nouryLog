@@ -3,6 +3,33 @@ export const API_BASE = (import.meta.env.VITE_API_BASE ?? '/api').replace(/\/$/,
 
 export type ApiErrorBody = { code: string; message: string; details?: Record<string, unknown>; traceId: string };
 
+export class ApiError extends Error {
+  readonly code: string;
+  readonly status: number;
+  readonly traceId?: string;
+  readonly details?: Record<string, unknown>;
+
+  constructor(status: number, body: ApiErrorBody) {
+    super(body.message || `HTTP ${status}`);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = body.code || 'UNKNOWN';
+    this.traceId = body.traceId;
+    this.details = body.details;
+  }
+}
+
+export function isAuthDenied(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    (err.code === 'AUTH_FORBIDDEN' ||
+      err.code === 'AUTH_UNAUTHORIZED' ||
+      err.code === 'AUTH_TOKEN_EXPIRED' ||
+      err.status === 401 ||
+      err.status === 403)
+  );
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit & { token?: string | null } = {},
@@ -19,8 +46,7 @@ export async function apiFetch<T>(
   const text = await res.text();
   const json = text ? JSON.parse(text) : {};
   if (!res.ok) {
-    const err = json as ApiErrorBody;
-    throw new Error(err.message || res.statusText);
+    throw new ApiError(res.status, (json ?? {}) as ApiErrorBody);
   }
   return json as T;
 }

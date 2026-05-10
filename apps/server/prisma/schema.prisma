@@ -51,11 +51,15 @@ model SocialAccount {
 }
 
 model Profile {
-  userId          String @id
-  gender          String @default("unspecified")
-  age             Int    @default(30)
-  heightCm        Int    @default(170)
-  weightKg        Float  @default(70)
+  userId          String  @id
+  gender          String  @default("unspecified")
+  age             Int     @default(30)
+  heightCm        Int     @default(170)
+  weightKg        Float   @default(70)
+  /// `sedentary` / `light` / `moderate` / `active`. NULL이면 권장 계산 시 임시 기본값 `moderate` 적용.
+  activityLevel   String?
+  /// `lose` / `maintain` / `gain`. NULL이면 권장 계산 시 임시 기본값 `maintain` 적용.
+  goal            String?
   proteinGoalG    Int?
   calorieGoalKcal Int?
 
@@ -86,18 +90,26 @@ model FoodTemplate {
   id        String   @id @default(cuid())
   name      String
   memo      String?
+  category  String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  @@index([category])
 }
 
 model Inquiry {
-  id        String   @id @default(cuid())
-  userId    String?
-  subject   String
-  body      String
-  status    String   @default("pending")
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  userId      String?
+  subject     String
+  body        String
+  status      String    @default("pending")
+  active      Boolean   @default(true)
+  answer      String?
+  answeredAt  DateTime?
+  answeredBy  String?
+  createdAt   DateTime  @default(now())
+
+  @@index([status, active])
 }
 
 model Notice {
