@@ -35,10 +35,31 @@ async function main() {
   await upsertUser('user@example.com', 'user123', 'USER');
 
   if ((await prisma.foodTemplate.count()) === 0) {
+    // 신규 시드는 영양 5필드를 모두 채워 음식 추가/수정 정책과 일관 유지.
     await prisma.foodTemplate.createMany({
       data: [
-        { name: '계란', memo: '템플릿', active: true },
-        { name: '김치', memo: '템플릿', active: true },
+        {
+          name: '계란',
+          memo: '삶은 계란 1개 기준',
+          category: '간식',
+          servingGrams: 50,
+          calories: 78,
+          protein: 6.3,
+          fat: 5.3,
+          carbohydrate: 0.6,
+          active: true,
+        },
+        {
+          name: '김치',
+          memo: '배추김치 한 접시 기준',
+          category: '한식',
+          servingGrams: 60,
+          calories: 18,
+          protein: 1.1,
+          fat: 0.4,
+          carbohydrate: 2.4,
+          active: true,
+        },
       ],
     });
   }

@@ -360,19 +360,31 @@ adminRouter.patch('/admin/users/:id/activate', async (req, res) => {
   res.json({ ok: true });
 });
 
-function serializeFood(f: {
+type FoodTemplateRow = {
   id: string;
   name: string;
   memo: string | null;
   category: string | null;
+  servingGrams: number | null;
+  calories: number | null;
+  protein: number | null;
+  fat: number | null;
+  carbohydrate: number | null;
   active: boolean;
   createdAt: Date;
-}) {
+};
+
+function serializeFood(f: FoodTemplateRow) {
   return {
     id: f.id,
     name: f.name,
     memo: f.memo,
     category: f.category,
+    servingGrams: f.servingGrams,
+    calories: f.calories,
+    protein: f.protein,
+    fat: f.fat,
+    carbohydrate: f.carbohydrate,
     status: f.active ? 'active' : 'inactive',
     createdAt: f.createdAt.toISOString(),
   };
@@ -386,6 +398,43 @@ function validateCategory(input: unknown): { value: string | null; error?: strin
     return { value: null, error: `category는 ${CATEGORY_MAX_LEN}자 이하여야 합니다.` };
   }
   return { value: raw };
+}
+
+const FOOD_NUTRITION_FIELDS = [
+  { key: 'servingGrams', max: 5000, label: '기준 분량(g)' },
+  { key: 'calories', max: 10000, label: '칼로리(kcal)' },
+  { key: 'protein', max: 1000, label: '단백질(g)' },
+  { key: 'fat', max: 1000, label: '지방(g)' },
+  { key: 'carbohydrate', max: 1000, label: '탄수화물(g)' },
+] as const;
+
+type FoodNutritionKey = (typeof FOOD_NUTRITION_FIELDS)[number]['key'];
+
+type FoodNutritionResult =
+  | { ok: true; values: Record<FoodNutritionKey, number> }
+  | { ok: false; field: FoodNutritionKey; message: string };
+
+/** 음식 영양 5필드를 모두 검증한다. 신규/수정 모두 동일하게 5개를 요구한다. */
+function validateFoodNutrition(input: Record<string, unknown>): FoodNutritionResult {
+  const values: Partial<Record<FoodNutritionKey, number>> = {};
+  for (const f of FOOD_NUTRITION_FIELDS) {
+    const raw = input[f.key];
+    if (raw === undefined || raw === null || raw === '') {
+      return { ok: false, field: f.key, message: `${f.label} 값이 필요합니다.` };
+    }
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n)) {
+      return { ok: false, field: f.key, message: `${f.label}은 숫자여야 합니다.` };
+    }
+    if (n < 0) {
+      return { ok: false, field: f.key, message: `${f.label}은 0 이상이어야 합니다.` };
+    }
+    if (n > f.max) {
+      return { ok: false, field: f.key, message: `${f.label}은 ${f.max} 이하여야 합니다.` };
+    }
+    values[f.key] = n;
+  }
+  return { ok: true, values: values as Record<FoodNutritionKey, number> };
 }
 
 adminRouter.get('/admin/foods', async (req, res) => {
@@ -436,8 +485,8 @@ adminRouter.get('/admin/foods/:id', async (req, res) => {
 });
 
 adminRouter.post('/admin/foods', async (req, res) => {
-  const b = req.body as { name?: string; memo?: string; category?: string };
-  const name = String(b.name ?? '').trim();
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const name = String((b.name as string | undefined) ?? '').trim();
   if (!name) {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '이름이 필요합니다.');
     return;
@@ -447,11 +496,22 @@ adminRouter.post('/admin/foods', async (req, res) => {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, category.error);
     return;
   }
+  const nutrition = validateFoodNutrition(b);
+  if (!nutrition.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, nutrition.message, { field: nutrition.field });
+    return;
+  }
+  const memoRaw = b.memo;
   const f = await prisma.foodTemplate.create({
     data: {
       name,
-      memo: b.memo ? String(b.memo) : null,
+      memo: memoRaw ? String(memoRaw) : null,
       category: category.value,
+      servingGrams: nutrition.values.servingGrams,
+      calories: nutrition.values.calories,
+      protein: nutrition.values.protein,
+      fat: nutrition.values.fat,
+      carbohydrate: nutrition.values.carbohydrate,
     },
   });
   res.status(201).json({ id: f.id });
@@ -459,7 +519,7 @@ adminRouter.post('/admin/foods', async (req, res) => {
 
 adminRouter.put('/admin/foods/:id', async (req, res) => {
   const id = req.params.id;
-  const b = req.body as { name?: string; memo?: string; category?: string | null };
+  const b = (req.body ?? {}) as Record<string, unknown>;
   const existing = await prisma.foodTemplate.findUnique({ where: { id } });
   if (!existing) {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '음식을 찾을 수 없습니다.');
@@ -474,12 +534,23 @@ adminRouter.put('/admin/foods/:id', async (req, res) => {
     }
     categoryUpdate = { category: category.value };
   }
+  // 수정도 5개 영양값을 모두 요구한다(부분 갱신 없음).
+  const nutrition = validateFoodNutrition(b);
+  if (!nutrition.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, nutrition.message, { field: nutrition.field });
+    return;
+  }
   await prisma.foodTemplate.update({
     where: { id },
     data: {
       ...(b.name !== undefined ? { name: String(b.name).trim() } : {}),
       ...(b.memo !== undefined ? { memo: b.memo ? String(b.memo) : null } : {}),
       ...categoryUpdate,
+      servingGrams: nutrition.values.servingGrams,
+      calories: nutrition.values.calories,
+      protein: nutrition.values.protein,
+      fat: nutrition.values.fat,
+      carbohydrate: nutrition.values.carbohydrate,
     },
   });
   res.json({ ok: true });

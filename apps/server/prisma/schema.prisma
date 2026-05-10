@@ -97,6 +97,16 @@ model FoodTemplate {
   name      String
   memo      String?
   category  String?
+  /// 기준 분량(g). 신규/수정 시 라우트에서 필수, 기존 행은 NULL 허용.
+  servingGrams Float?
+  /// 기준 분량당 칼로리(kcal). 신규/수정 시 필수, 기존 행 NULL 허용.
+  calories     Float?
+  /// 기준 분량당 단백질(g). 신규/수정 시 필수.
+  protein      Float?
+  /// 기준 분량당 지방(g). 신규/수정 시 필수.
+  fat          Float?
+  /// 기준 분량당 탄수화물(g). 신규/수정 시 필수.
+  carbohydrate Float?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
