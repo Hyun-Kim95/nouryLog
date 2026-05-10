@@ -144,6 +144,7 @@ export function InquiriesPage() {
           onClose={() => setDrawerOpen(false)}
           title="문의 상세"
           width={560}
+          hideHeaderClose
           footer={
             <>
               <button

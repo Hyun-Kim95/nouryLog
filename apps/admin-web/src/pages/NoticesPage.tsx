@@ -13,6 +13,9 @@ type NoticeDetail = {
   title: string;
   body: string;
   active: boolean;
+  pinned: boolean;
+  publishStart: string | null;
+  publishEnd: string | null;
   createdAt: string;
 };
 
@@ -20,9 +23,19 @@ type NoticeForm = {
   id?: string;
   title: string;
   body: string;
+  pinned: boolean;
+  /** datetime-local 입력값(빈 문자열 = 미설정) */
+  publishStart: string;
+  publishEnd: string;
 };
 
-const EMPTY_FORM: NoticeForm = { title: '', body: '' };
+const EMPTY_FORM: NoticeForm = {
+  title: '',
+  body: '',
+  pinned: false,
+  publishStart: '',
+  publishEnd: '',
+};
 
 function rangeFromPeriod(period: Period): Record<string, string> {
   if (!period) return {};
@@ -30,6 +43,24 @@ function rangeFromPeriod(period: Period): Record<string, string> {
   const from = new Date(to);
   from.setDate(from.getDate() - Number(period));
   return { from: from.toISOString(), to: to.toISOString() };
+}
+
+/** ISO 문자열을 `<input type="datetime-local">` 값(`YYYY-MM-DDTHH:mm`)으로 변환. 로컬 타임존 기준. */
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** datetime-local 입력값을 ISO 문자열로 변환. 빈값이면 null. */
+function localInputToIso(v: string): string | null {
+  const trimmed = v.trim();
+  if (!trimmed) return null;
+  const d = new Date(trimmed);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
 }
 
 export function NoticesPage() {
@@ -59,7 +90,14 @@ export function NoticesPage() {
     setMessage(null);
     try {
       const detail = await apiFetch<NoticeDetail>(`/admin/notices/${id}`, { token });
-      setForm({ id: detail.id, title: detail.title, body: detail.body });
+      setForm({
+        id: detail.id,
+        title: detail.title,
+        body: detail.body,
+        pinned: Boolean(detail.pinned),
+        publishStart: isoToLocalInput(detail.publishStart),
+        publishEnd: isoToLocalInput(detail.publishEnd),
+      });
       setModalOpen(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '공지 상세를 불러오지 못했습니다.';
@@ -76,10 +114,23 @@ export function NoticesPage() {
       setMessage('제목을 입력해 주세요.');
       return;
     }
+    const publishStart = localInputToIso(form.publishStart);
+    const publishEnd = localInputToIso(form.publishEnd);
+    if (publishStart && publishEnd && new Date(publishStart).getTime() > new Date(publishEnd).getTime()) {
+      setMessage('게시 시작은 게시 종료보다 이후일 수 없습니다.');
+      return;
+    }
     setSaving(true);
     setMessage(null);
     try {
-      const body = JSON.stringify({ title, body: form.body });
+      const payload = {
+        title,
+        body: form.body,
+        pinned: form.pinned,
+        publishStart,
+        publishEnd,
+      };
+      const body = JSON.stringify(payload);
       if (form.id) {
         await apiFetch(`/admin/notices/${form.id}`, { method: 'PUT', token, body });
       } else {
@@ -173,6 +224,41 @@ export function NoticesPage() {
               제목
               <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
             </label>
+            <label
+              className="filter-bar-toggle"
+              style={{ paddingLeft: 0, alignSelf: 'flex-start' }}
+            >
+              <input
+                type="checkbox"
+                checked={form.pinned}
+                onChange={(e) => setForm((f) => ({ ...f, pinned: e.target.checked }))}
+              />
+              상단 고정
+            </label>
+            <div
+              className="form-field"
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--ds-space-3)' }}
+            >
+              <label className="form-field">
+                게시 시작 (선택)
+                <input
+                  type="datetime-local"
+                  value={form.publishStart}
+                  onChange={(e) => setForm((f) => ({ ...f, publishStart: e.target.value }))}
+                />
+              </label>
+              <label className="form-field">
+                게시 종료 (선택)
+                <input
+                  type="datetime-local"
+                  value={form.publishEnd}
+                  onChange={(e) => setForm((f) => ({ ...f, publishEnd: e.target.value }))}
+                />
+              </label>
+            </div>
+            <span className="form-help">
+              둘 중 한쪽만 비워두면 무기한으로 처리됩니다. 자동 노출 필터링은 v2에서 적용 예정입니다.
+            </span>
             <label className="form-field">
               본문
               <textarea

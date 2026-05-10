@@ -50,6 +50,50 @@ function formatText(v: unknown): string {
   return String(v);
 }
 
+const DEACTIVATION_REASON_LABEL: Record<string, string> = {
+  spam: '스팸/광고',
+  inactive_long: '장기 미접속',
+  terms_violation: '약관 위반',
+  etc: '기타',
+};
+
+export function deactivationReasonLabel(code: unknown): string {
+  if (typeof code !== 'string') return '—';
+  return DEACTIVATION_REASON_LABEL[code] ?? code;
+}
+
+function DeactivationReasonCell({ row }: { row: Row }) {
+  const reason = (row.deactivationReason ?? null) as { code?: string; text?: string | null } | null;
+  if (row.status !== 'inactive' || !reason || !reason.code) return <span>—</span>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ds-space-1)' }}>
+      <Badge tone="neutral">{deactivationReasonLabel(reason.code)}</Badge>
+      {reason.text ? (
+        <span
+          title={reason.text}
+          style={{
+            fontSize: 'var(--ds-text-xs)',
+            color: 'var(--ds-fg-muted)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '180px',
+          }}
+        >
+          {reason.text}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function NoticeWindowCell({ row }: { row: Row }) {
+  const start = formatDate(row.publishStart);
+  const end = formatDate(row.publishEnd);
+  if (start === '—' && end === '—') return <span>—</span>;
+  return <span>{`${start} ~ ${end}`}</span>;
+}
+
 const STATUS_LABEL: Record<string, { label: string; tone: BadgeTone }> = {
   active: { label: '활성', tone: 'success' },
   inactive: { label: '비활성', tone: 'neutral' },
@@ -82,6 +126,12 @@ export const COLUMNS: Record<Kind, ColumnDef[]> = {
       render: (r) => (r.status === 'inactive' ? formatDateTime(r.deactivatedAt) : '—'),
       width: '170px',
     },
+    {
+      key: 'deactivationReason',
+      label: '비활성 사유',
+      render: (r) => <DeactivationReasonCell row={r} />,
+      width: '200px',
+    },
   ],
   foods: [
     { key: 'name', label: '이름', render: (r) => formatText(r.name) },
@@ -95,8 +145,20 @@ export const COLUMNS: Record<Kind, ColumnDef[]> = {
     { key: 'createdAt', label: '등록일', render: (r) => formatDate(r.createdAt), width: '140px' },
   ],
   notices: [
+    {
+      key: 'pinned',
+      label: '고정',
+      render: (r) => (r.pinned === true ? <Badge tone="info">★ 고정</Badge> : <span>—</span>),
+      width: '90px',
+    },
     { key: 'title', label: '제목', render: (r) => formatText(r.title) },
     { key: 'active', label: '활성', render: (r) => <ActiveBadge value={r.active} />, width: '120px' },
+    {
+      key: 'publishWindow',
+      label: '게시기간',
+      render: (r) => <NoticeWindowCell row={r} />,
+      width: '210px',
+    },
     { key: 'createdAt', label: '등록일', render: (r) => formatDate(r.createdAt), width: '140px' },
   ],
 };
