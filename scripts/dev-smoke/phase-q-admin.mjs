@@ -226,10 +226,12 @@ async function main() {
     `status=${publicTerms.status}`,
   );
 
+  // 20260510160000_seed_food_nutrition_and_legal_policies 마이그레이션이 publishedAt 까지 채운 시드를
+  // ON CONFLICT DO NOTHING 으로 넣기 때문에, 운영자가 별도 작성하지 않아도 항상 200 으로 노출된다.
   const publicPrivacy = await req('/public/policies/privacy');
   log(
-    'GET /public/policies/privacy (미게시 → 404)',
-    publicPrivacy.status === 404,
+    'GET /public/policies/privacy (시드 후 200)',
+    publicPrivacy.status === 200 && publicPrivacy.body?.kind === 'privacy',
     `status=${publicPrivacy.status}`,
   );
 
