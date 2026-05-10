@@ -2,7 +2,7 @@
 type: design-spec
 project: dietManagement
 doc_lane: design
-updated_at: 2026-05-05
+updated_at: 2026-05-08
 tags: [design, mockup, option-b, stitch]
 ---
 
@@ -68,12 +68,27 @@ tags: [design, mockup, option-b, stitch]
 
 ### 확정 화면 (screen 리소스 이름 · 스티치 내부 id · 요약)
 
+#### 1차 세트 (2026-05-05)
+
 | 화면 ID(브리프) | `projects/.../screens/{id}` | 제목/요약 |
 |----------------|-----------------------------|-----------|
 | APP_HOME (+ 상태 라벨 데모) | `projects/7726060931590277332/screens/edd17276ff6d46e4b5ccb918c6b7918e` | 홈 요약·OCR 배너·상태 섹션·OCR/수동 입력 |
 | APP_LOG_OCR (페이월) | `projects/7726060931590277332/screens/07a9c65551c148d3b9ba1cd480a1718b` | 5회 소진 바텀시트·`premium_monthly` CTA |
 | APP_STATS + APP_SUB_SETTINGS | `projects/7726060931590277332/screens/04b38f07d7a844bbbc64bf9d29589d83` | stale 배너·기간 탭·구독/복구 |
 | ADM_DASH + ADM_MEMBERS | `projects/7726060931590277332/screens/9c137926c717437f918041b3a75c2abc` | KPI·재집계·필터+초기화·15행·페이지네이션 |
+
+#### 2차 세트 (2026-05-08, SDK 기반 단독 화면)
+
+생성·DS v1 적용 후 폴리시(polish_edit_theme_agent) 처리된 최종 screen ID 입니다. 스크립트 산출은 `scripts/stitch/out/`에 보존(git 제외).
+
+| 화면 ID(브리프) | Device | `projects/.../screens/{polished id}` | 제목/요약 |
+|----------------|--------|--------------------------------------|-----------|
+| ADM_FOODS | DESKTOP | `projects/7726060931590277332/screens/454cc85ce4394104bd4859fd99eabb05` | 음식 템플릿 관리 — 필터바(검색/상태/카테고리)·15행·드로어·5상태 |
+| ADM_INQUIRIES | DESKTOP | `projects/7726060931590277332/screens/3b2bf02c38394d769a24759f52ccb25b` | 문의 관리 — 필터바·15행·답변 드로어·상태 변경·5상태 |
+| ADM_NOTICES | DESKTOP | `projects/7726060931590277332/screens/3dc3d8becec44bf6a275c6276f6e2fa0` | 공지 관리 — 필터바·15행·작성 모달(MD 에디터)·5상태 |
+| APP_ONBOARD | MOBILE | `projects/7726060931590277332/screens/fd8994c143c84e6b89d98bbad6ffad35` | 단일 스텝 프로필 입력(성별/나이/신장/체중/활동량/목표)·필드 단위 인라인 오류·sticky 다음 |
+
+생성/DS 적용에 사용된 프롬프트 SSOT는 `scripts/stitch/lib/briefs.ts`. 응답 원본(테마·htmlCode·screenshot 다운로드 URL 포함)은 `scripts/stitch/out/03-apply-design-system.json`.
 
 ### 스크린샷·HTML (예시)
 - APP_HOME 스크린샷 파일: `projects/7726060931590277332/files/50f9f9b8c011408d8b3213827c2616e1` (다운로드 URL은 Stitch 세션에서 제공)
@@ -83,13 +98,15 @@ tags: [design, mockup, option-b, stitch]
 - Mobile 세트 1: `sessionId` `1953197298073461136`
 - Desktop 세트 1: `sessionId` `1995706918058668943`
 - Mobile 세트 2: `sessionId` `18210500338580534169`
+- 2차 단독 세트(2026-05-08, DS apply): `sessionId` `6052554810571617396`
 
 ### 프롬프트·수정 요약
 - 공통 접두: PRD 승인본·`premium_monthly` 단일 SKU·OCR 5회·4회 배너·stale·관리자 테이블 15건·검색 오른쪽 초기화 (`docs/agent/diet-management-dual-mockup-brief.md`).
 - 후속 제안(Stitch 출력): 회원 상세 팝업 / 엑셀 다운로드 / 대시보드 차트 — **미반영**, 필요 시 `edit_screens` 또는 신규 생성.
 
 ### 범위 메모
-- **APP_ONBOARD**, **ADM_FOODS / ADM_INQUIRIES / ADM_NOTICES** 는 이번 생성에서 별도 스크린으로 분리하지 않았습니다. 관리자 목록은 동일 패턴(SSOT 브리프)으로 간주하고 Gate 2 전 `generate_screen_from_text` 또는 `edit_screens`로 확장합니다.
+- ~~**APP_ONBOARD**, **ADM_FOODS / ADM_INQUIRIES / ADM_NOTICES** 는 이번 생성에서 별도 스크린으로 분리하지 않았습니다.~~ → **2026-05-08 SDK(`@google/stitch-sdk`) 기반으로 4화면을 단독 생성하고 DS v1을 일괄 적용했습니다.** 위 "2차 세트" 표 참조.
+- 관리자 4종(대시/회원/음식/문의/공지) 및 모바일 온보딩까지 단독 화면 커버리지를 모두 확보했고, 후속 보정은 `edit_screens` 또는 신규 generate로 확장합니다.
 
 ## 리스크
 - 초기 생성 결과가 요구와 어긋날 수 있어 수정 루프 시간이 필요

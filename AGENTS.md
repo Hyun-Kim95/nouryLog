@@ -59,7 +59,8 @@
 다른 프로젝트에 동일 규칙을 적용할 때는 아래 파일을 최소 세트로 복사한다.
 
 - `AGENTS.md` (운영 원칙·역할 분담·우선순위·**직접 처리 예외 목록 SSOT**)
-- `.cursor/rules/60-delivery-gates.mdc`, `.cursor/rules/70-client-lifecycle-default.mdc` (고객 프로젝트형 로컬 규칙)
+- `.cursor/rules/60-delivery-gates.mdc`, `.cursor/rules/65-design-gate.mdc`, `.cursor/rules/70-client-lifecycle-default.mdc` (고객 프로젝트형 로컬 규칙 + 디자인 게이트)
+- `.cursor/rules/67-dual-design-exemption.mdc` (65-design-gate의 이중 안 면제 보조 룰; 65를 함께 사용하는 환경에서만 의미)
 
 ## 게이트/병렬/완료 기준
 

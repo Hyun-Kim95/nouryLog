@@ -9,3 +9,4 @@ apps/server/prisma/*.db
 apps/server/prisma/*.db-journal
 .expo/
 apps/mobile/.expo/
+scripts/stitch/out/
