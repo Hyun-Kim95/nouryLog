@@ -9,11 +9,12 @@
  *
  * 점검 범위:
  *   - 로그인 시 lastLoginAt 갱신 (admin/users 응답)
- *   - PATCH /admin/users/:id/deactivate → activate 토글
+ *   - PATCH /admin/users/:id/deactivate body 검증 + activate 토글로 사유 초기화
  *   - 답변 PATCH 가 transitionToDone 미전송에도 status='done' 강제
  *   - PUT/GET /admin/policies/:kind 정책 CRUD + version 증가
  *   - GET /admin/dashboard/timeseries 가 periodDays 만큼 배열 반환
  *   - GET /public/policies/:kind 가 publish 후에만 200, 그 외 404
+ *   - POST /admin/notices 의 pinned + publishStart/publishEnd round-trip + 검증
  */
 
 const BASE = process.env.PHASE_Q_ADMIN_BASE ?? process.env.PHASE_SMOKE_BASE ?? 'http://localhost:3000';
@@ -95,9 +96,37 @@ async function main() {
     return;
   }
 
-  // 2) deactivate → activate 토글.
-  const deact = await authed(adminToken, `/admin/users/${userRow.id}/deactivate`, { method: 'PATCH' });
-  log('PATCH /admin/users/:id/deactivate', deact.status === 200, `status=${deact.status}`);
+  // 2) deactivate → activate 토글 + 사유 검증.
+  const deactNoBody = await authed(adminToken, `/admin/users/${userRow.id}/deactivate`, {
+    method: 'PATCH',
+    body: JSON.stringify({}),
+  });
+  log(
+    'PATCH /admin/users/:id/deactivate (reasonCode 누락 → 422)',
+    deactNoBody.status === 422,
+    `status=${deactNoBody.status}`,
+  );
+
+  const deactEtcMissing = await authed(adminToken, `/admin/users/${userRow.id}/deactivate`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reasonCode: 'etc' }),
+  });
+  log(
+    "PATCH /admin/users/:id/deactivate (reasonCode='etc' + reasonText 누락 → 422)",
+    deactEtcMissing.status === 422,
+    `status=${deactEtcMissing.status}`,
+  );
+
+  const deactReasonText = `phase-q smoke ${Date.now()}`;
+  const deact = await authed(adminToken, `/admin/users/${userRow.id}/deactivate`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reasonCode: 'etc', reasonText: deactReasonText }),
+  });
+  log(
+    "PATCH /admin/users/:id/deactivate (reasonCode='etc' + reasonText)",
+    deact.status === 200,
+    `status=${deact.status}`,
+  );
 
   const afterDeact = await authed(adminToken, `/admin/users?page=1&size=15&includeInactive=true&query=${encodeURIComponent(USER.email)}`);
   const inactiveRow = afterDeact.body?.items?.find((u) => u.id === userRow.id);
@@ -106,6 +135,11 @@ async function main() {
     inactiveRow && inactiveRow.status === 'inactive' && typeof inactiveRow.deactivatedAt === 'string',
     inactiveRow ? `status=${inactiveRow.status}, deactivatedAt=${inactiveRow.deactivatedAt}` : 'row missing',
   );
+  log(
+    "deactivate 후 deactivationReason round-trip (code='etc', text 일치)",
+    inactiveRow?.deactivationReason?.code === 'etc' && inactiveRow?.deactivationReason?.text === deactReasonText,
+    `reason=${JSON.stringify(inactiveRow?.deactivationReason ?? null)}`,
+  );
 
   const act = await authed(adminToken, `/admin/users/${userRow.id}/activate`, { method: 'PATCH' });
   log('PATCH /admin/users/:id/activate', act.status === 200, `status=${act.status}`);
@@ -113,9 +147,14 @@ async function main() {
   const afterAct = await authed(adminToken, `/admin/users?page=1&size=15&includeInactive=true&query=${encodeURIComponent(USER.email)}`);
   const reActiveRow = afterAct.body?.items?.find((u) => u.id === userRow.id);
   log(
-    'activate 후 status=active + deactivatedAt=null',
-    reActiveRow && reActiveRow.status === 'active' && reActiveRow.deactivatedAt === null,
-    reActiveRow ? `status=${reActiveRow.status}, deactivatedAt=${reActiveRow.deactivatedAt}` : 'row missing',
+    'activate 후 status=active + deactivatedAt=null + 사유 초기화',
+    reActiveRow &&
+      reActiveRow.status === 'active' &&
+      reActiveRow.deactivatedAt === null &&
+      reActiveRow.deactivationReason === null,
+    reActiveRow
+      ? `status=${reActiveRow.status}, deactivatedAt=${reActiveRow.deactivatedAt}, reason=${JSON.stringify(reActiveRow.deactivationReason)}`
+      : 'row missing',
   );
 
   // 3) 문의 답변이 transitionToDone 미전송에도 status='done' 강제.
@@ -191,6 +230,70 @@ async function main() {
     'GET /public/policies/privacy (미게시 → 404)',
     publicPrivacy.status === 404,
     `status=${publicPrivacy.status}`,
+  );
+
+  // 7) 공지 pinned + 게시기간 round-trip + 검증.
+  const startIso = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const endIso = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+  const noticeCreate = await authed(adminToken, '/admin/notices', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `phase-q pinned ${Date.now()}`,
+      body: 'phase-q smoke pinned notice',
+      pinned: true,
+      publishStart: startIso,
+      publishEnd: endIso,
+    }),
+  });
+  log(
+    'POST /admin/notices pinned + 게시기간',
+    noticeCreate.status === 201 && typeof noticeCreate.body?.id === 'string',
+    `status=${noticeCreate.status}, id=${noticeCreate.body?.id}`,
+  );
+  const newNoticeId = noticeCreate.body?.id ?? null;
+
+  const noticeList = await authed(adminToken, '/admin/notices?page=1&size=15&includeInactive=true');
+  const firstItem = noticeList.body?.items?.[0] ?? null;
+  log(
+    'GET /admin/notices: pinned 공지가 첫 항목 + 응답에 신규 필드 포함',
+    firstItem &&
+      firstItem.id === newNoticeId &&
+      firstItem.pinned === true &&
+      typeof firstItem.publishStart === 'string' &&
+      typeof firstItem.publishEnd === 'string',
+    `first=${JSON.stringify({
+      id: firstItem?.id,
+      pinned: firstItem?.pinned,
+      publishStart: firstItem?.publishStart,
+      publishEnd: firstItem?.publishEnd,
+    })}`,
+  );
+
+  if (newNoticeId) {
+    const detail = await authed(adminToken, `/admin/notices/${newNoticeId}`);
+    log(
+      'GET /admin/notices/:id 응답에 publishStart/publishEnd 일치',
+      detail.status === 200 &&
+        detail.body?.publishStart === startIso &&
+        detail.body?.publishEnd === endIso,
+      `status=${detail.status}, start=${detail.body?.publishStart}, end=${detail.body?.publishEnd}`,
+    );
+  }
+
+  const noticeInvalid = await authed(adminToken, '/admin/notices', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `phase-q invalid ${Date.now()}`,
+      body: 'invalid range',
+      publishStart: endIso,
+      publishEnd: startIso,
+    }),
+  });
+  log(
+    'POST /admin/notices publishStart > publishEnd → 422',
+    noticeInvalid.status === 422,
+    `status=${noticeInvalid.status}`,
   );
 
   console.log('-'.repeat(60));
