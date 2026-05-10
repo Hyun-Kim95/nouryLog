@@ -10,6 +10,8 @@ type ModalProps = {
   children: ReactNode;
   footer?: ReactNode;
   size?: ModalSize;
+  /** 헤더 우측 닫기 버튼을 숨긴다(하단/푸터에 별도 닫기 버튼이 있는 모달용). */
+  hideHeaderClose?: boolean;
 };
 
 const SIZE_CLASS: Record<ModalSize, string> = {
@@ -18,19 +20,35 @@ const SIZE_CLASS: Record<ModalSize, string> = {
   lg: 'modal-lg',
 };
 
-export function Modal({ open, onClose, title, children, footer, size = 'md' }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+  size = 'md',
+  hideHeaderClose = false,
+}: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // Drawer와 동일한 패턴으로 부모가 매 렌더 새 onClose 함수를 넘겨도 effect가 재실행되며
+  // 포커스가 첫 버튼으로 점프하지 않게 ref로 보관한다.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', onKeyDown);
-    const target = panelRef.current?.querySelector<HTMLElement>('input, select, textarea, button');
-    target?.focus();
+    const root = panelRef.current;
+    const inputTarget = root?.querySelector<HTMLElement>('textarea, input, select');
+    const fallback = root?.querySelector<HTMLElement>('button');
+    (inputTarget ?? fallback)?.focus();
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -46,9 +64,11 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
       >
         <div className="modal-head">
           <h3 id="modal-title">{title}</h3>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            닫기
-          </button>
+          {hideHeaderClose ? null : (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
+              닫기
+            </button>
+          )}
         </div>
         <div className="modal-body">{children}</div>
         {footer ? <div className="modal-foot">{footer}</div> : null}

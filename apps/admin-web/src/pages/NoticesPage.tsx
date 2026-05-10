@@ -207,6 +207,7 @@ export function NoticesPage() {
           onClose={() => setModalOpen(false)}
           title={form.id ? '공지 수정' : '공지 작성'}
           size="lg"
+          hideHeaderClose
           footer={
             <>
               <button type="button" className="btn" onClick={() => setModalOpen(false)}>

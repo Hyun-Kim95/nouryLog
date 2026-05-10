@@ -50,6 +50,13 @@ function formatText(v: unknown): string {
   return String(v);
 }
 
+function formatNumber(v: unknown, fractionDigits = 1): string {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return Number.isInteger(n) ? String(n) : n.toFixed(fractionDigits);
+}
+
 const DEACTIVATION_REASON_LABEL: Record<string, string> = {
   spam: '스팸/광고',
   inactive_long: '장기 미접속',
@@ -135,8 +142,13 @@ export const COLUMNS: Record<Kind, ColumnDef[]> = {
   ],
   foods: [
     { key: 'name', label: '이름', render: (r) => formatText(r.name) },
-    { key: 'category', label: '카테고리', render: (r) => formatText(r.category), width: '120px' },
-    { key: 'status', label: '상태', render: (r) => <StatusBadge value={r.status} />, width: '120px' },
+    { key: 'category', label: '카테고리', render: (r) => formatText(r.category), width: '110px' },
+    { key: 'status', label: '상태', render: (r) => <StatusBadge value={r.status} />, width: '110px' },
+    { key: 'servingGrams', label: '기준(g)', render: (r) => formatNumber(r.servingGrams), width: '90px' },
+    { key: 'calories', label: 'kcal', render: (r) => formatNumber(r.calories), width: '90px' },
+    { key: 'protein', label: '단백(g)', render: (r) => formatNumber(r.protein), width: '90px' },
+    { key: 'fat', label: '지방(g)', render: (r) => formatNumber(r.fat), width: '90px' },
+    { key: 'carbohydrate', label: '탄수(g)', render: (r) => formatNumber(r.carbohydrate), width: '90px' },
     { key: 'memo', label: '메모', render: (r) => formatText(r.memo) },
   ],
   inquiries: [

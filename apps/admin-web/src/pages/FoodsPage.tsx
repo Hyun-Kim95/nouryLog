@@ -13,9 +13,50 @@ type FoodForm = {
   name: string;
   memo: string;
   category: string;
+  /** 입력값은 빈 문자열 가능. 저장 시 number로 변환·검증한다. */
+  servingGrams: string;
+  calories: string;
+  protein: string;
+  fat: string;
+  carbohydrate: string;
 };
 
-const EMPTY_FORM: FoodForm = { name: '', memo: '', category: '' };
+const EMPTY_FORM: FoodForm = {
+  name: '',
+  memo: '',
+  category: '',
+  servingGrams: '',
+  calories: '',
+  protein: '',
+  fat: '',
+  carbohydrate: '',
+};
+
+const NUTRITION_FIELDS = [
+  { key: 'servingGrams', label: '기준 분량(g)', max: 5000 },
+  { key: 'calories', label: '칼로리(kcal)', max: 10000 },
+  { key: 'protein', label: '단백질(g)', max: 1000 },
+  { key: 'fat', label: '지방(g)', max: 1000 },
+  { key: 'carbohydrate', label: '탄수화물(g)', max: 1000 },
+] as const;
+
+type NutritionKey = (typeof NUTRITION_FIELDS)[number]['key'];
+
+type FoodDetail = {
+  id: string;
+  name: string;
+  memo: string | null;
+  category: string | null;
+  servingGrams: number | null;
+  calories: number | null;
+  protein: number | null;
+  fat: number | null;
+  carbohydrate: number | null;
+};
+
+function nullableNumberToInput(v: number | null | undefined): string {
+  return v === null || v === undefined ? '' : String(v);
+}
 
 export function FoodsPage() {
   const { token } = useAuth();
@@ -38,18 +79,38 @@ export function FoodsPage() {
     setDrawerOpen(true);
   };
 
-  const openEdit = (row: Row) => {
-    setForm({
-      id: String(row.id ?? ''),
-      name: String(row.name ?? ''),
-      memo: typeof row.memo === 'string' ? row.memo : '',
-      category: typeof row.category === 'string' ? row.category : '',
-    });
+  const openEdit = async (row: Row) => {
+    const id = String(row.id ?? '');
+    if (!id || !token) return;
+    setSaving(true);
     setMessage(null);
-    setDrawerOpen(true);
+    try {
+      // 행에 영양값이 비어 있을 수 있어 detail로 한 번 더 가져와 정확히 매핑.
+      const detail = await apiFetch<FoodDetail>(`/admin/foods/${id}`, { token });
+      setForm({
+        id: detail.id,
+        name: detail.name,
+        memo: detail.memo ?? '',
+        category: detail.category ?? '',
+        servingGrams: nullableNumberToInput(detail.servingGrams),
+        calories: nullableNumberToInput(detail.calories),
+        protein: nullableNumberToInput(detail.protein),
+        fat: nullableNumberToInput(detail.fat),
+        carbohydrate: nullableNumberToInput(detail.carbohydrate),
+      });
+      setDrawerOpen(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '음식 상세를 불러오지 못했습니다.';
+      toast.show({ kind: 'error', message: msg });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const reload = () => setReloadKey((v) => v + 1);
+
+  const updateField = (key: keyof FoodForm, value: string) =>
+    setForm((f) => ({ ...f, [key]: value }));
 
   const save = async () => {
     if (!token || saving) return;
@@ -58,6 +119,28 @@ export function FoodsPage() {
       setMessage('이름을 입력해 주세요.');
       return;
     }
+    const numeric: Partial<Record<NutritionKey, number>> = {};
+    for (const f of NUTRITION_FIELDS) {
+      const raw = form[f.key].trim();
+      if (!raw) {
+        setMessage(`${f.label} 값을 입력해 주세요.`);
+        return;
+      }
+      const n = Number(raw);
+      if (!Number.isFinite(n)) {
+        setMessage(`${f.label}은 숫자여야 합니다.`);
+        return;
+      }
+      if (n < 0) {
+        setMessage(`${f.label}은 0 이상이어야 합니다.`);
+        return;
+      }
+      if (n > f.max) {
+        setMessage(`${f.label}은 ${f.max} 이하여야 합니다.`);
+        return;
+      }
+      numeric[f.key] = n;
+    }
     setSaving(true);
     setMessage(null);
     try {
@@ -65,6 +148,11 @@ export function FoodsPage() {
         name,
         memo: form.memo.trim() || null,
         category: form.category || null,
+        servingGrams: numeric.servingGrams,
+        calories: numeric.calories,
+        protein: numeric.protein,
+        fat: numeric.fat,
+        carbohydrate: numeric.carbohydrate,
       });
       if (form.id) {
         await apiFetch(`/admin/foods/${form.id}`, { method: 'PUT', token, body });
@@ -122,7 +210,7 @@ export function FoodsPage() {
         }
         rowActions={(row) => (
           <>
-            <button type="button" className="btn btn-row btn-sm" onClick={() => openEdit(row)}>
+            <button type="button" className="btn btn-row btn-sm" onClick={() => void openEdit(row)}>
               수정
             </button>
             {row.status === 'inactive' ? (
@@ -145,6 +233,7 @@ export function FoodsPage() {
             open={drawerOpen}
             onClose={() => setDrawerOpen(false)}
             title={form.id ? '음식 템플릿 수정' : '음식 추가'}
+            hideHeaderClose
             footer={
               <>
                 <button type="button" className="btn" onClick={() => setDrawerOpen(false)}>
@@ -160,11 +249,11 @@ export function FoodsPage() {
               {message ? <div className="banner banner-danger" role="alert">{message}</div> : null}
               <label className="form-field">
                 이름
-                <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                <input value={form.name} onChange={(e) => updateField('name', e.target.value)} />
               </label>
               <label className="form-field">
                 카테고리
-                <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
+                <select value={form.category} onChange={(e) => updateField('category', e.target.value)}>
                   <option value="">미지정</option>
                   {CATEGORY_OPTIONS.map((option) => (
                     <option key={option} value={option}>
@@ -174,11 +263,76 @@ export function FoodsPage() {
                 </select>
               </label>
               <label className="form-field">
+                기준 분량 (g)
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="0.1"
+                  value={form.servingGrams}
+                  onChange={(e) => updateField('servingGrams', e.target.value)}
+                  placeholder="예: 100"
+                />
+                <span className="form-help">아래 영양값은 이 분량 기준입니다.</span>
+              </label>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 'var(--ds-space-3)',
+                }}
+              >
+                <label className="form-field">
+                  칼로리 (kcal)
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.1"
+                    value={form.calories}
+                    onChange={(e) => updateField('calories', e.target.value)}
+                  />
+                </label>
+                <label className="form-field">
+                  단백질 (g)
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.1"
+                    value={form.protein}
+                    onChange={(e) => updateField('protein', e.target.value)}
+                  />
+                </label>
+                <label className="form-field">
+                  지방 (g)
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.1"
+                    value={form.fat}
+                    onChange={(e) => updateField('fat', e.target.value)}
+                  />
+                </label>
+                <label className="form-field">
+                  탄수화물 (g)
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.1"
+                    value={form.carbohydrate}
+                    onChange={(e) => updateField('carbohydrate', e.target.value)}
+                  />
+                </label>
+              </div>
+              <label className="form-field">
                 메모
                 <textarea
-                  rows={5}
+                  rows={3}
                   value={form.memo}
-                  onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))}
+                  onChange={(e) => updateField('memo', e.target.value)}
                 />
               </label>
             </div>
