@@ -1,8 +1,9 @@
 -- 회원 라이프사이클 컬럼: 마지막 로그인 시각.
-ALTER TABLE "User" ADD COLUMN "lastLoginAt" TIMESTAMP(3);
+-- IF NOT EXISTS: 이전 빌드가 동일 컬럼을 자동 추가했을 가능성에 대비.
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastLoginAt" TIMESTAMP(3);
 
 -- 정책 문서: 이용약관 / 개인정보처리방침 단일 본문 저장.
-CREATE TABLE "PolicyDocument" (
+CREATE TABLE IF NOT EXISTS "PolicyDocument" (
     "id" TEXT NOT NULL,
     "kind" TEXT NOT NULL,
     "body" TEXT NOT NULL,
@@ -13,4 +14,4 @@ CREATE TABLE "PolicyDocument" (
     CONSTRAINT "PolicyDocument_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "PolicyDocument_kind_key" ON "PolicyDocument"("kind");
+CREATE UNIQUE INDEX IF NOT EXISTS "PolicyDocument_kind_key" ON "PolicyDocument"("kind");

@@ -1,0 +1,5 @@
+-- Placeholder for the anonymous migration that Railway's previous build created
+-- via `prisma migrate dev` directly against the production database.
+-- The actual schema changes are absorbed by the IF NOT EXISTS guards in the
+-- following migrations, so this file is intentionally empty to keep
+-- `_prisma_migrations` history consistent without re-running anything.
