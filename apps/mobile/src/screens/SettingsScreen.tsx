@@ -139,6 +139,56 @@ export function SettingsScreen() {
           }}
         >
           <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, fontWeight: '700' }}>
+            약관 및 정책
+          </Text>
+          <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
+            게시 중인 이용약관과 개인정보처리방침을 확인할 수 있어요.
+          </Text>
+          <View style={{ gap: t.spacing.sm }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="이용약관 보기"
+              onPress={() => navigation.navigate('PolicyView', { kind: 'terms' })}
+              style={({ pressed }) => ({
+                borderColor: t.colors.border,
+                borderWidth: 1,
+                borderRadius: t.radius.md,
+                padding: t.spacing.md,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Text style={{ color: t.colors.info, fontWeight: '700', fontSize: t.fontSize.body }}>이용약관</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="개인정보처리방침 보기"
+              onPress={() => navigation.navigate('PolicyView', { kind: 'privacy' })}
+              style={({ pressed }) => ({
+                borderColor: t.colors.border,
+                borderWidth: 1,
+                borderRadius: t.radius.md,
+                padding: t.spacing.md,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Text style={{ color: t.colors.info, fontWeight: '700', fontSize: t.fontSize.body }}>
+                개인정보처리방침
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View
+          style={{
+            padding: t.spacing.md,
+            borderRadius: t.radius.md,
+            borderColor: t.colors.border,
+            borderWidth: 1,
+            backgroundColor: t.colors.surface,
+            gap: t.spacing.sm,
+          }}
+        >
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, fontWeight: '700' }}>
             계정
           </Text>
           <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>

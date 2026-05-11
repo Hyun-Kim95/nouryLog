@@ -34,6 +34,47 @@ export async function loginRequest(
   return { accessToken: data.accessToken, refreshToken: data.refreshToken };
 }
 
+export type PolicyKind = 'terms' | 'privacy';
+export type PolicyDocument = {
+  kind: PolicyKind;
+  body: string;
+  version: number;
+  publishedAt: string;
+  updatedAt: string;
+};
+export type ConsentVersions = Record<PolicyKind, { version: number }>;
+
+export async function signupRequest(body: {
+  email: string;
+  password: string;
+  ageConfirmed: boolean;
+  consents: ConsentVersions;
+}): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getPolicyDocument(kind: PolicyKind): Promise<PolicyDocument> {
+  return apiFetch<PolicyDocument>(`/public/policies/${kind}`);
+}
+
+export async function postConsents(
+  token: string,
+  body: {
+    ageConfirmed: boolean;
+    consents: ConsentVersions;
+    source?: string;
+  },
+): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/me/consents', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body),
+  });
+}
+
 export type SocialProvider = 'naver' | 'google' | 'kakao';
 
 export async function socialStartRequest(provider: SocialProvider, redirectUri: string): Promise<{ authorizationUrl: string }> {
@@ -46,8 +87,8 @@ export async function socialStartRequest(provider: SocialProvider, redirectUri: 
 export async function socialResolveConflictRequest(
   conflictToken: string,
   action: 'link' | 'separate',
-): Promise<{ accessToken: string; refreshToken: string }> {
-  return apiFetch<{ accessToken: string; refreshToken: string }>('/auth/social/conflict/resolve', {
+): Promise<{ accessToken: string; refreshToken: string; requiresConsent?: boolean }> {
+  return apiFetch<{ accessToken: string; refreshToken: string; requiresConsent?: boolean }>('/auth/social/conflict/resolve', {
     method: 'POST',
     body: JSON.stringify({ conflictToken, action }),
   });

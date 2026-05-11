@@ -10,13 +10,17 @@ import { SubscriptionScreen } from './screens/SubscriptionScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import { ProfileEditScreen } from './screens/ProfileEditScreen';
+import { PolicyViewScreen } from './screens/PolicyViewScreen';
+import { SignUpScreen } from './screens/SignUpScreen';
 import { useTheme } from './theme';
 
 export type RootStackParamList = {
   Login: undefined;
+  SignUp: undefined;
   Onboarding: undefined;
   Main: undefined;
   ProfileEdit: undefined;
+  PolicyView: { kind: 'terms' | 'privacy' };
 };
 
 export type InitialRoute = 'Login' | 'Onboarding' | 'Main';
@@ -69,12 +73,22 @@ export function RootNavigator({ initialRoute }: { initialRoute: InitialRoute }) 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRoute}>
       <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen
+        name="SignUp"
+        component={SignUpScreen}
+        options={{ headerShown: true, title: '회원가입' }}
+      />
       <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       <Stack.Screen name="Main" component={MainTabs} />
       <Stack.Screen
         name="ProfileEdit"
         component={ProfileEditScreen}
         options={{ headerShown: true, title: '프로필 편집' }}
+      />
+      <Stack.Screen
+        name="PolicyView"
+        component={PolicyViewScreen}
+        options={{ headerShown: true, title: '정책 문서' }}
       />
     </Stack.Navigator>
   );
