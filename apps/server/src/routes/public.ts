@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { signAccess, signRefresh, verifyToken } from '../lib/jwt.js';
@@ -41,6 +42,97 @@ function makeFallbackEmail(provider: 'NAVER' | 'GOOGLE' | 'KAKAO', providerUserI
   return `${provider.toLowerCase()}_${providerUserId}@social.local`;
 }
 
+const REQUIRED_CONSENT_KINDS = ['terms', 'privacy'] as const;
+type ConsentKind = (typeof REQUIRED_CONSENT_KINDS)[number];
+type ConsentVersions = Record<ConsentKind, number>;
+
+function parseConsentVersions(body: unknown): { versions?: ConsentVersions; message?: string; details?: Record<string, unknown> } {
+  const b = body as {
+    ageConfirmed?: unknown;
+    consents?: Partial<Record<ConsentKind, { version?: unknown }>>;
+  };
+  if (b.ageConfirmed !== true) {
+    return {
+      message: '만 14세 이상 확인이 필요합니다.',
+      details: { field: 'ageConfirmed' },
+    };
+  }
+
+  const versions: Partial<ConsentVersions> = {};
+  for (const kind of REQUIRED_CONSENT_KINDS) {
+    const raw = b.consents?.[kind]?.version;
+    const version = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isInteger(version) || version <= 0) {
+      return {
+        message: '이용약관과 개인정보처리방침 동의 버전이 필요합니다.',
+        details: { field: `consents.${kind}.version`, kind },
+      };
+    }
+    versions[kind] = version;
+  }
+  return { versions: versions as ConsentVersions };
+}
+
+async function validatePublishedConsentVersions(
+  client: Prisma.TransactionClient | typeof prisma,
+  versions: ConsentVersions,
+): Promise<{ ok: true } | { ok: false; message: string; details: Record<string, unknown> }> {
+  const docs = await client.policyDocument.findMany({
+    where: { kind: { in: [...REQUIRED_CONSENT_KINDS] }, publishedAt: { not: null } },
+    select: { kind: true, version: true },
+  });
+  const byKind = new Map(docs.map((doc) => [doc.kind, doc.version]));
+  for (const kind of REQUIRED_CONSENT_KINDS) {
+    const current = byKind.get(kind);
+    if (!current) {
+      return {
+        ok: false,
+        message: '게시된 정책 문서를 찾을 수 없습니다.',
+        details: { kind },
+      };
+    }
+    if (current !== versions[kind]) {
+      return {
+        ok: false,
+        message: '최신 정책 문서에 다시 동의해 주세요.',
+        details: { kind, currentVersion: current, submittedVersion: versions[kind] },
+      };
+    }
+  }
+  return { ok: true };
+}
+
+async function createMissingConsents(
+  client: Prisma.TransactionClient | typeof prisma,
+  userId: string,
+  versions: ConsentVersions,
+  source: string | null,
+) {
+  for (const kind of REQUIRED_CONSENT_KINDS) {
+    const existing = await client.userConsent.findFirst({
+      where: { userId, kind, policyVersion: versions[kind] },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await client.userConsent.create({
+      data: { userId, kind, policyVersion: versions[kind], source },
+    });
+  }
+}
+
+async function requiresCurrentConsent(userId: string): Promise<boolean> {
+  const docs = await prisma.policyDocument.findMany({
+    where: { kind: { in: [...REQUIRED_CONSENT_KINDS] }, publishedAt: { not: null } },
+    select: { kind: true, version: true },
+  });
+  if (docs.length < REQUIRED_CONSENT_KINDS.length) return true;
+  const rows = await prisma.userConsent.findMany({
+    where: { userId, kind: { in: [...REQUIRED_CONSENT_KINDS] } },
+    select: { kind: true, policyVersion: true },
+  });
+  return docs.some((doc) => !rows.some((row) => row.kind === doc.kind && row.policyVersion === doc.version));
+}
+
 publicRouter.post('/auth/signup', async (req, res) => {
   const email = String((req.body as { email?: string })?.email ?? '').trim().toLowerCase();
   const password = String((req.body as { password?: string })?.password ?? '');
@@ -48,18 +140,39 @@ publicRouter.post('/auth/signup', async (req, res) => {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '이메일과 비밀번호(6자 이상)가 필요합니다.');
     return;
   }
+  const consent = parseConsentVersions(req.body);
+  if (!consent.versions) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, consent.message ?? '동의 정보가 필요합니다.', consent.details);
+    return;
+  }
   try {
     const passwordHash = await hashPassword(password);
-    await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        profile: { create: { gender: 'unspecified', age: 30, heightCm: 170, weightKg: 70 } },
-        billing: { create: {} },
-      },
+    await prisma.$transaction(async (tx) => {
+      const validation = await validatePublishedConsentVersions(tx, consent.versions!);
+      if (!validation.ok) {
+        throw Object.assign(new Error(validation.message), {
+          consentValidation: true,
+          details: validation.details,
+        });
+      }
+      const user = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          profile: { create: { gender: 'unspecified', age: 30, heightCm: 170, weightKg: 70 } },
+          billing: { create: {} },
+        },
+        select: { id: true },
+      });
+      await createMissingConsents(tx, user.id, consent.versions!, 'email-signup');
     });
     res.status(201).json({ ok: true });
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && 'consentValidation' in e) {
+      const detail = e as Error & { details?: Record<string, unknown> };
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, detail.message, detail.details);
+      return;
+    }
     sendError(res, 422, ErrorCodes.RESOURCE_CONFLICT, '이미 사용 중인 이메일입니다.');
   }
 });
@@ -180,6 +293,7 @@ publicRouter.get('/auth/social/:provider/callback', async (req, res) => {
     redirect.searchParams.set('result', 'success');
     redirect.searchParams.set('accessToken', signAccess(linked.user.id, role));
     redirect.searchParams.set('refreshToken', signRefresh(linked.user.id, role));
+    redirect.searchParams.set('requiresConsent', String(await requiresCurrentConsent(linked.user.id)));
     res.redirect(redirect.toString());
     return;
   }
@@ -233,6 +347,7 @@ publicRouter.get('/auth/social/:provider/callback', async (req, res) => {
   redirect.searchParams.set('result', 'success');
   redirect.searchParams.set('accessToken', tokenPair.accessToken);
   redirect.searchParams.set('refreshToken', tokenPair.refreshToken);
+  redirect.searchParams.set('requiresConsent', 'true');
   res.redirect(redirect.toString());
 });
 
@@ -283,7 +398,7 @@ publicRouter.post('/auth/social/conflict/resolve', async (req, res) => {
       sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '비활성화된 계정입니다.');
       return;
     }
-    res.json(tokenPair);
+    res.json({ ...tokenPair, requiresConsent: await requiresCurrentConsent(user.id) });
     return;
   }
 
@@ -307,7 +422,7 @@ publicRouter.post('/auth/social/conflict/resolve', async (req, res) => {
     sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '계정을 사용할 수 없습니다.');
     return;
   }
-  res.json(tokenPair);
+  res.json({ ...tokenPair, requiresConsent: true });
 });
 
 const PUBLIC_POLICY_KINDS = ['terms', 'privacy'] as const;

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
@@ -8,6 +9,78 @@ import { calculateRecommendationFull } from '../lib/recommendation.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
+
+const REQUIRED_CONSENT_KINDS = ['terms', 'privacy'] as const;
+type ConsentKind = (typeof REQUIRED_CONSENT_KINDS)[number];
+type ConsentVersions = Record<ConsentKind, number>;
+
+function parseConsentVersions(body: unknown): { versions?: ConsentVersions; message?: string; details?: Record<string, unknown> } {
+  const b = body as {
+    ageConfirmed?: unknown;
+    consents?: Partial<Record<ConsentKind, { version?: unknown }>>;
+  };
+  if (b.ageConfirmed !== true) {
+    return { message: '만 14세 이상 확인이 필요합니다.', details: { field: 'ageConfirmed' } };
+  }
+  const versions: Partial<ConsentVersions> = {};
+  for (const kind of REQUIRED_CONSENT_KINDS) {
+    const raw = b.consents?.[kind]?.version;
+    const version = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isInteger(version) || version <= 0) {
+      return {
+        message: '이용약관과 개인정보처리방침 동의 버전이 필요합니다.',
+        details: { field: `consents.${kind}.version`, kind },
+      };
+    }
+    versions[kind] = version;
+  }
+  return { versions: versions as ConsentVersions };
+}
+
+function parseConsentSource(input: unknown): string | null {
+  if (input === undefined || input === null) return null;
+  const source = String(input).trim();
+  return source ? source.slice(0, 80) : null;
+}
+
+async function validatePublishedConsentVersions(
+  client: Prisma.TransactionClient | typeof prisma,
+  versions: ConsentVersions,
+): Promise<{ ok: true } | { ok: false; message: string; details: Record<string, unknown> }> {
+  const docs = await client.policyDocument.findMany({
+    where: { kind: { in: [...REQUIRED_CONSENT_KINDS] }, publishedAt: { not: null } },
+    select: { kind: true, version: true },
+  });
+  const byKind = new Map(docs.map((doc) => [doc.kind, doc.version]));
+  for (const kind of REQUIRED_CONSENT_KINDS) {
+    const current = byKind.get(kind);
+    if (!current) return { ok: false, message: '게시된 정책 문서를 찾을 수 없습니다.', details: { kind } };
+    if (current !== versions[kind]) {
+      return {
+        ok: false,
+        message: '최신 정책 문서에 다시 동의해 주세요.',
+        details: { kind, currentVersion: current, submittedVersion: versions[kind] },
+      };
+    }
+  }
+  return { ok: true };
+}
+
+async function createMissingConsents(
+  client: Prisma.TransactionClient | typeof prisma,
+  userId: string,
+  versions: ConsentVersions,
+  source: string | null,
+) {
+  for (const kind of REQUIRED_CONSENT_KINDS) {
+    const existing = await client.userConsent.findFirst({
+      where: { userId, kind, policyVersion: versions[kind] },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await client.userConsent.create({ data: { userId, kind, policyVersion: versions[kind], source } });
+  }
+}
 
 function rangeFrom(range: string): Date {
   const now = new Date();
@@ -30,6 +103,42 @@ function rangeFrom(range: string): Date {
   }
   throw new Error('bad_range');
 }
+
+meRouter.post('/me/consents', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 동의 정보를 저장할 수 있습니다.');
+    return;
+  }
+
+  const consent = parseConsentVersions(req.body);
+  if (!consent.versions) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, consent.message ?? '동의 정보가 필요합니다.', consent.details);
+    return;
+  }
+
+  const source = parseConsentSource((req.body as { source?: unknown })?.source);
+  try {
+    await prisma.$transaction(async (tx) => {
+      const validation = await validatePublishedConsentVersions(tx, consent.versions!);
+      if (!validation.ok) {
+        throw Object.assign(new Error(validation.message), {
+          consentValidation: true,
+          details: validation.details,
+        });
+      }
+      await createMissingConsents(tx, userId, consent.versions!, source);
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    if (e instanceof Error && 'consentValidation' in e) {
+      const detail = e as Error & { details?: Record<string, unknown> };
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, detail.message, detail.details);
+      return;
+    }
+    throw e;
+  }
+});
 
 meRouter.get('/me/profile', async (req, res) => {
   const userId = req.auth!.userId;

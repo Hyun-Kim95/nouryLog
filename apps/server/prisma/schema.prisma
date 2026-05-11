@@ -34,6 +34,7 @@ model User {
   meals   Meal[]
   billing Billing?
   socialAccounts SocialAccount[]
+  consents UserConsent[]
 }
 
 enum SocialProvider {
@@ -153,6 +154,22 @@ model Billing {
 model StatsBatch {
   id        String   @id @default("singleton")
   lastRunAt DateTime @default(now())
+}
+
+/// 사용자의 약관·개인정보처리방침 동의 이력. 정책 개정 시 버전별 동의 기록을 남긴다.
+model UserConsent {
+  id            String   @id @default(cuid())
+  userId        String
+  /// 'terms' | 'privacy'. 라우트에서 검증한다.
+  kind          String
+  policyVersion Int
+  acceptedAt    DateTime @default(now())
+  /// 'email-signup' | 'social-signup:google' 같은 유입 경로.
+  source        String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
 }
 
 /// 이용약관·개인정보처리방침 같은 정책 문서. kind 단일성으로 종류별 단일 본문을 유지한다.
