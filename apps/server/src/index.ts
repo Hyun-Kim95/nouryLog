@@ -26,7 +26,7 @@ app.use(meRouter);
 app.use(adminRouter);
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'diet-management-api', contract: 'v1-fixed' });
+  res.json({ ok: true, service: 'diet-management-api', contract: 'v1.4.0' });
 });
 
 app.listen(port, () => {

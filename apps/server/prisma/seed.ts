@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PortionUnit, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -42,6 +42,8 @@ async function main() {
           name: '계란',
           memo: '삶은 계란 1개 기준',
           category: '간식',
+          portionUnit: PortionUnit.PIECE,
+          portionLabel: '개',
           servingGrams: 50,
           calories: 78,
           protein: 6.3,
@@ -53,6 +55,8 @@ async function main() {
           name: '김치',
           memo: '배추김치 한 접시 기준',
           category: '한식',
+          portionUnit: PortionUnit.PLATE,
+          portionLabel: '접시',
           servingGrams: 60,
           calories: 18,
           protein: 1.1,

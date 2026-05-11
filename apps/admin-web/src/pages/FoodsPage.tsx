@@ -8,11 +8,21 @@ import type { Row } from './entityColumns';
 
 const CATEGORY_OPTIONS = ['한식', '중식', '일식', '양식', '간식', '음료'] as const;
 
+const PORTION_UNIT_OPTIONS = [
+  { value: 'GRAM', label: '그램(g)' },
+  { value: 'PIECE', label: '개' },
+  { value: 'PLATE', label: '접시' },
+  { value: 'BOWL', label: '공기' },
+  { value: 'CUSTOM', label: '직접 표기' },
+] as const;
+
 type FoodForm = {
   id?: string;
   name: string;
   memo: string;
   category: string;
+  portionUnit: (typeof PORTION_UNIT_OPTIONS)[number]['value'];
+  portionLabel: string;
   /** 입력값은 빈 문자열 가능. 저장 시 number로 변환·검증한다. */
   servingGrams: string;
   calories: string;
@@ -25,6 +35,8 @@ const EMPTY_FORM: FoodForm = {
   name: '',
   memo: '',
   category: '',
+  portionUnit: 'GRAM',
+  portionLabel: '',
   servingGrams: '',
   calories: '',
   protein: '',
@@ -47,6 +59,8 @@ type FoodDetail = {
   name: string;
   memo: string | null;
   category: string | null;
+  portionUnit: string;
+  portionLabel: string | null;
   servingGrams: number | null;
   calories: number | null;
   protein: number | null;
@@ -92,6 +106,10 @@ export function FoodsPage() {
         name: detail.name,
         memo: detail.memo ?? '',
         category: detail.category ?? '',
+        portionUnit: (PORTION_UNIT_OPTIONS.some((o) => o.value === detail.portionUnit)
+          ? detail.portionUnit
+          : 'GRAM') as FoodForm['portionUnit'],
+        portionLabel: detail.portionLabel ?? '',
         servingGrams: nullableNumberToInput(detail.servingGrams),
         calories: nullableNumberToInput(detail.calories),
         protein: nullableNumberToInput(detail.protein),
@@ -148,6 +166,8 @@ export function FoodsPage() {
         name,
         memo: form.memo.trim() || null,
         category: form.category || null,
+        portionUnit: form.portionUnit,
+        portionLabel: form.portionLabel.trim() || null,
         servingGrams: numeric.servingGrams,
         calories: numeric.calories,
         protein: numeric.protein,
@@ -261,6 +281,29 @@ export function FoodsPage() {
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="form-field">
+                1단위 종류
+                <select
+                  value={form.portionUnit}
+                  onChange={(e) => updateField('portionUnit', e.target.value as FoodForm['portionUnit'])}
+                >
+                  {PORTION_UNIT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="form-help">앱 기록 시 “분량 수” 입력에 쓰는 단위 힌트입니다.</span>
+              </label>
+              <label className="form-field">
+                단위 표시(선택, CUSTOM 시 필수)
+                <input
+                  value={form.portionLabel}
+                  onChange={(e) => updateField('portionLabel', e.target.value)}
+                  placeholder={form.portionUnit === 'CUSTOM' ? '예: 컵' : '예: 소접시'}
+                  maxLength={20}
+                />
               </label>
               <label className="form-field">
                 기준 분량 (g)

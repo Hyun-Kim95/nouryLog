@@ -43,6 +43,20 @@ enum SocialProvider {
   KAKAO
 }
 
+/// 템플릿 1단위 표시·입력 UX 힌트. `servingGrams`는 항상 그 1단위의 질량(g).
+enum PortionUnit {
+  GRAM
+  PIECE
+  PLATE
+  BOWL
+  CUSTOM
+}
+
+enum MealInputMode {
+  PORTION_COUNT
+  TOTAL_GRAMS
+}
+
 model SocialAccount {
   id             String         @id @default(cuid())
   provider       SocialProvider
@@ -88,9 +102,16 @@ model Meal {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodTemplateId  String?
+  mealInputMode   MealInputMode?
+  /// `PORTION_COUNT`일 때만 값이 있음. `TOTAL_GRAMS` 모드에서는 null.
+  portionQuantity Float?
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodTemplate FoodTemplate? @relation(fields: [foodTemplateId], references: [id], onDelete: SetNull)
 
   @@index([userId, consumedAt])
+  @@index([foodTemplateId])
 }
 
 model FoodTemplate {
@@ -98,6 +119,8 @@ model FoodTemplate {
   name      String
   memo      String?
   category  String?
+  portionUnit  PortionUnit @default(GRAM)
+  portionLabel String?
   /// 기준 분량(g). 신규/수정 시 라우트에서 필수, 기존 행은 NULL 허용.
   servingGrams Float?
   /// 기준 분량당 칼로리(kcal). 신규/수정 시 필수, 기존 행 NULL 허용.
@@ -110,6 +133,8 @@ model FoodTemplate {
   carbohydrate Float?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  meals Meal[]
 
   @@index([category])
 }

@@ -213,6 +213,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/food-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 활성 음식 템플릿 목록(일반 사용자) */
+        get: {
+            parameters: {
+                query?: {
+                    query?: string;
+                    category?: string;
+                    page?: number;
+                    size?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FoodTemplateListResponse"];
+                    };
+                };
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/meals": {
         parameters: {
             query?: never;
@@ -1130,11 +1179,60 @@ export interface components {
             /** @default 15 */
             size: number;
         };
+        /** @enum {string} */
+        PortionUnit: "GRAM" | "PIECE" | "PLATE" | "BOWL" | "CUSTOM";
+        /** @enum {string} */
+        MealInputMode: "PORTION_COUNT" | "TOTAL_GRAMS";
+        FoodTemplatePublic: {
+            id: string;
+            name: string;
+            memo?: string | null;
+            category?: string | null;
+            portionUnit: components["schemas"]["PortionUnit"];
+            portionLabel?: string | null;
+            servingGrams: number;
+            calories: number;
+            protein: number;
+            fat: number;
+            carbohydrate: number;
+        };
+        FoodTemplateListResponse: {
+            page: number;
+            size: number;
+            total: number;
+            items: components["schemas"]["FoodTemplatePublic"][];
+        };
         MealInput: {
-            [key: string]: unknown;
+            name?: string;
+            /** Format: date-time */
+            consumedAt?: string;
+            note?: string | null;
+            imageUrl?: string | null;
+            grams?: number;
+            calories?: number;
+            carbohydrate?: number;
+            protein?: number;
+            fat?: number;
+            foodTemplateId?: string | null;
+            mealInputMode?: components["schemas"]["MealInputMode"];
+            portionQuantity?: number;
+            totalGrams?: number;
         };
         Meal: {
-            [key: string]: unknown;
+            mealId?: string;
+            note?: string | null;
+            /** Format: date-time */
+            consumedAt?: string;
+            name?: string;
+            grams?: number;
+            calories?: number;
+            carbohydrate?: number;
+            protein?: number;
+            fat?: number;
+            imageUrl?: string | null;
+            foodTemplateId?: string | null;
+            mealInputMode?: components["schemas"]["MealInputMode"];
+            portionQuantity?: number | null;
         };
         OcrResult: {
             calories?: number;

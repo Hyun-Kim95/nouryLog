@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Diet Management API
-  version: v1-fixed
+  version: v1.4.0
   description: >
     스냅샷 계약 (SSOT 본문: docs/requirements/feature-diet-management-api-contract-v1.md).
     구현체는 본 파일과 문서를 함께 유지한다.
@@ -43,13 +43,74 @@ components:
         page: { type: integer, minimum: 1, default: 1 }
         size: { type: integer, minimum: 1, default: 15 }
 
+    PortionUnit:
+      type: string
+      enum: [GRAM, PIECE, PLATE, BOWL, CUSTOM]
+
+    MealInputMode:
+      type: string
+      enum: [PORTION_COUNT, TOTAL_GRAMS]
+
+    FoodTemplatePublic:
+      type: object
+      required: [id, name, portionUnit, servingGrams, calories, protein, fat, carbohydrate]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        memo: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        portionUnit: { $ref: '#/components/schemas/PortionUnit' }
+        portionLabel: { type: string, nullable: true }
+        servingGrams: { type: number, minimum: 0 }
+        calories: { type: number, minimum: 0 }
+        protein: { type: number, minimum: 0 }
+        fat: { type: number, minimum: 0 }
+        carbohydrate: { type: number, minimum: 0 }
+
+    FoodTemplateListResponse:
+      type: object
+      required: [page, size, total, items]
+      properties:
+        page: { type: integer, minimum: 1 }
+        size: { type: integer, minimum: 1 }
+        total: { type: integer, minimum: 0 }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/FoodTemplatePublic' }
+
     MealInput:
       type: object
-      additionalProperties: true
+      properties:
+        name: { type: string }
+        consumedAt: { type: string, format: date-time }
+        note: { type: string, nullable: true }
+        imageUrl: { type: string, nullable: true }
+        grams: { type: number, minimum: 0 }
+        calories: { type: number, minimum: 0 }
+        carbohydrate: { type: number, minimum: 0 }
+        protein: { type: number, minimum: 0 }
+        fat: { type: number, minimum: 0 }
+        foodTemplateId: { type: string, nullable: true }
+        mealInputMode: { $ref: '#/components/schemas/MealInputMode' }
+        portionQuantity: { type: number, minimum: 0 }
+        totalGrams: { type: number, minimum: 0 }
 
     Meal:
       type: object
-      additionalProperties: true
+      properties:
+        mealId: { type: string }
+        note: { type: string, nullable: true }
+        consumedAt: { type: string, format: date-time }
+        name: { type: string }
+        grams: { type: number }
+        calories: { type: number }
+        carbohydrate: { type: number }
+        protein: { type: number }
+        fat: { type: number }
+        imageUrl: { type: string, nullable: true }
+        foodTemplateId: { type: string, nullable: true }
+        mealInputMode: { $ref: '#/components/schemas/MealInputMode', nullable: true }
+        portionQuantity: { type: number, nullable: true }
 
     OcrResult:
       type: object
@@ -150,6 +211,35 @@ paths:
       security: [{ BearerAuth: [] }]
       responses:
         '200': { description: OK }
+
+  /me/food-templates:
+    get:
+      tags: [Meals]
+      summary: 활성 음식 템플릿 목록(일반 사용자)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: query
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: size
+          schema: { type: integer, minimum: 1, maximum: 100, default: 15 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FoodTemplateListResponse' }
+        '403':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /meals:
     post:

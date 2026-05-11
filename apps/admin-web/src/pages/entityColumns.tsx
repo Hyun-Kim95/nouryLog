@@ -142,6 +142,17 @@ export const COLUMNS: Record<Kind, ColumnDef[]> = {
   ],
   foods: [
     { key: 'name', label: '이름', render: (r) => formatText(r.name) },
+    {
+      key: 'portionUnit',
+      label: '1단위',
+      render: (r) =>
+        formatText(
+          [r.portionUnit, r.portionLabel].filter(Boolean).length
+            ? `${String(r.portionUnit ?? '')}${r.portionLabel ? ` · ${String(r.portionLabel)}` : ''}`
+            : null,
+        ),
+      width: '130px',
+    },
     { key: 'category', label: '카테고리', render: (r) => formatText(r.category), width: '110px' },
     { key: 'status', label: '상태', render: (r) => <StatusBadge value={r.status} />, width: '110px' },
     { key: 'servingGrams', label: '기준(g)', render: (r) => formatNumber(r.servingGrams), width: '90px' },

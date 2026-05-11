@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import type { Prisma } from '@prisma/client';
+import { MealInputMode, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { computeScaledNutritionFromGrams } from '../lib/mealFromTemplate.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
 import { OCR_FREE_LIMIT, STATS_STALE_HOURS } from '../lib/config.js';
@@ -9,6 +10,41 @@ import { calculateRecommendationFull } from '../lib/recommendation.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
+
+const PORTION_QTY_MIN = 0.25;
+const PORTION_QTY_MAX = 50;
+const TOTAL_GRAMS_MIN = 1;
+const TOTAL_GRAMS_MAX = 5000;
+
+function paginateFoodTemplates(q: { page?: unknown; size?: unknown }) {
+  const page = Math.max(1, Number(q.page ?? 1));
+  const size = Math.min(100, Math.max(1, Number(q.size ?? 15)));
+  return { page, size, skip: (page - 1) * size };
+}
+
+function parseMealInputMode(raw: unknown): MealInputMode | null {
+  if (raw === MealInputMode.PORTION_COUNT || raw === MealInputMode.TOTAL_GRAMS) return raw;
+  if (raw === 'PORTION_COUNT') return MealInputMode.PORTION_COUNT;
+  if (raw === 'TOTAL_GRAMS') return MealInputMode.TOTAL_GRAMS;
+  return null;
+}
+
+function isTemplateNutritionComplete(t: {
+  servingGrams: number | null;
+  calories: number | null;
+  protein: number | null;
+  fat: number | null;
+  carbohydrate: number | null;
+}): boolean {
+  return (
+    t.servingGrams != null &&
+    t.servingGrams > 0 &&
+    t.calories != null &&
+    t.protein != null &&
+    t.fat != null &&
+    t.carbohydrate != null
+  );
+}
 
 const REQUIRED_CONSENT_KINDS = ['terms', 'privacy'] as const;
 type ConsentKind = (typeof REQUIRED_CONSENT_KINDS)[number];
@@ -390,29 +426,151 @@ meRouter.post('/me/recommendation/recalculate', async (req, res) => {
   });
 });
 
+meRouter.get('/me/food-templates', async (req, res) => {
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 조회할 수 있습니다.');
+    return;
+  }
+  const { page, size, skip } = paginateFoodTemplates(req.query);
+  const query = String(req.query.query ?? '').trim();
+  const categoryFilter = String(req.query.category ?? '').trim();
+
+  const where: Prisma.FoodTemplateWhereInput = {
+    active: true,
+    servingGrams: { gt: 0 },
+    calories: { not: null },
+    protein: { not: null },
+    fat: { not: null },
+    carbohydrate: { not: null },
+    ...(query ? { name: { contains: query, mode: 'insensitive' } } : {}),
+    ...(categoryFilter ? { category: categoryFilter } : {}),
+  };
+
+  const [total, rows] = await Promise.all([
+    prisma.foodTemplate.count({ where }),
+    prisma.foodTemplate.findMany({
+      where,
+      orderBy: { name: 'asc' },
+      skip,
+      take: size,
+    }),
+  ]);
+
+  res.json({
+    page,
+    size,
+    total,
+    items: rows.map((f) => ({
+      id: f.id,
+      name: f.name,
+      memo: f.memo,
+      category: f.category,
+      portionUnit: f.portionUnit,
+      portionLabel: f.portionLabel,
+      servingGrams: f.servingGrams!,
+      calories: f.calories!,
+      protein: f.protein!,
+      fat: f.fat!,
+      carbohydrate: f.carbohydrate!,
+    })),
+  });
+});
+
 meRouter.post('/meals', async (req, res) => {
   const userId = req.auth!.userId;
   if (req.auth!.role !== 'USER') {
     sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 기록할 수 있습니다.');
     return;
   }
-  const b = req.body as Partial<{
-    name: string;
-    consumedAt: string;
-    grams: number;
-    calories: number;
-    carbohydrate: number;
-    protein: number;
-    fat: number;
-    note: string;
-    imageUrl: string;
-  }>;
+  const b = req.body as Record<string, unknown>;
+  const consumedAt = b.consumedAt ? new Date(String(b.consumedAt)) : new Date();
+
+  const rawTplId = b.foodTemplateId;
+  const templateId = typeof rawTplId === 'string' && rawTplId.trim() ? rawTplId.trim() : null;
+
+  if (templateId) {
+    const mode = parseMealInputMode(b.mealInputMode);
+    if (!mode) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'mealInputMode가 필요합니다.', { field: 'mealInputMode' });
+      return;
+    }
+    const template = await prisma.foodTemplate.findFirst({
+      where: { id: templateId, active: true },
+    });
+    if (!template || !isTemplateNutritionComplete(template)) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '템플릿을 사용할 수 없습니다.', { field: 'foodTemplateId' });
+      return;
+    }
+
+    let userTotalGrams: number;
+    let portionQuantity: number | null = null;
+    if (mode === MealInputMode.PORTION_COUNT) {
+      const qRaw = b.portionQuantity;
+      const q = typeof qRaw === 'number' ? qRaw : Number(qRaw);
+      if (!Number.isFinite(q) || q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
+        sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, {
+          field: 'portionQuantity',
+        });
+        return;
+      }
+      portionQuantity = q;
+      userTotalGrams = q * template.servingGrams!;
+    } else {
+      const gRaw = b.totalGrams;
+      const g = typeof gRaw === 'number' ? gRaw : Number(gRaw);
+      if (!Number.isFinite(g) || g < TOTAL_GRAMS_MIN || g > TOTAL_GRAMS_MAX) {
+        sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `totalGrams는 ${TOTAL_GRAMS_MIN}~${TOTAL_GRAMS_MAX} 사이여야 합니다.`, {
+          field: 'totalGrams',
+        });
+        return;
+      }
+      userTotalGrams = g;
+      portionQuantity = null;
+    }
+
+    let nutrition: ReturnType<typeof computeScaledNutritionFromGrams>;
+    try {
+      nutrition = computeScaledNutritionFromGrams(
+        {
+          servingGrams: template.servingGrams!,
+          calories: template.calories!,
+          protein: template.protein!,
+          fat: template.fat!,
+          carbohydrate: template.carbohydrate!,
+        },
+        userTotalGrams,
+      );
+    } catch {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '템플릿 기준 분량이 올바르지 않습니다.', { field: 'foodTemplateId' });
+      return;
+    }
+
+    const meal = await prisma.meal.create({
+      data: {
+        userId,
+        name: template.name,
+        consumedAt,
+        grams: nutrition.grams,
+        calories: nutrition.calories,
+        carbohydrate: nutrition.carbohydrate,
+        protein: nutrition.protein,
+        fat: nutrition.fat,
+        note: b.note !== undefined && b.note !== null ? String(b.note) : null,
+        imageUrl: b.imageUrl !== undefined && b.imageUrl !== null ? String(b.imageUrl) : null,
+        foodTemplateId: templateId,
+        mealInputMode: mode,
+        portionQuantity,
+      },
+    });
+    res.status(201).json({ mealId: meal.id });
+    return;
+  }
+
   const name = String(b.name ?? '').trim();
   if (!name) {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '음식명이 필요합니다.');
     return;
   }
-  const consumedAt = b.consumedAt ? new Date(b.consumedAt) : new Date();
   const meal = await prisma.meal.create({
     data: {
       userId,
@@ -425,6 +583,9 @@ meRouter.post('/meals', async (req, res) => {
       fat: Number(b.fat ?? 0),
       note: b.note ? String(b.note) : null,
       imageUrl: b.imageUrl ? String(b.imageUrl) : null,
+      foodTemplateId: null,
+      mealInputMode: null,
+      portionQuantity: null,
     },
   });
   res.status(201).json({ mealId: meal.id });
@@ -457,6 +618,9 @@ meRouter.get('/meals', async (req, res) => {
         protein: true,
         fat: true,
         imageUrl: true,
+        foodTemplateId: true,
+        mealInputMode: true,
+        portionQuantity: true,
       },
     }),
   ]);
@@ -475,6 +639,9 @@ meRouter.get('/meals', async (req, res) => {
       protein: m.protein,
       fat: m.fat,
       imageUrl: m.imageUrl,
+      foodTemplateId: m.foodTemplateId,
+      mealInputMode: m.mealInputMode,
+      portionQuantity: m.portionQuantity,
     })),
   });
 });
@@ -491,7 +658,115 @@ meRouter.put('/meals/:mealId', async (req, res) => {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '기록을 찾을 수 없습니다.');
     return;
   }
-  const b = req.body as Partial<{
+  const b = req.body as Record<string, unknown>;
+
+  const hasTplKey = Object.prototype.hasOwnProperty.call(b, 'foodTemplateId');
+  if (hasTplKey && (b.foodTemplateId === null || b.foodTemplateId === '')) {
+    const nextName = b.name !== undefined ? String(b.name).trim() : meal.name;
+    if (!nextName) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '음식명이 필요합니다.', { field: 'name' });
+      return;
+    }
+    await prisma.meal.update({
+      where: { id: mealId },
+      data: {
+        foodTemplateId: null,
+        mealInputMode: null,
+        portionQuantity: null,
+        name: nextName,
+        ...(b.consumedAt !== undefined ? { consumedAt: new Date(String(b.consumedAt)) } : {}),
+        ...(b.grams !== undefined ? { grams: Number(b.grams) } : {}),
+        ...(b.calories !== undefined ? { calories: Number(b.calories) } : {}),
+        ...(b.carbohydrate !== undefined ? { carbohydrate: Number(b.carbohydrate) } : {}),
+        ...(b.protein !== undefined ? { protein: Number(b.protein) } : {}),
+        ...(b.fat !== undefined ? { fat: Number(b.fat) } : {}),
+        ...(b.note !== undefined ? { note: b.note ? String(b.note) : null } : {}),
+        ...(b.imageUrl !== undefined ? { imageUrl: b.imageUrl ? String(b.imageUrl) : null } : {}),
+      },
+    });
+    res.json({ ok: true });
+    return;
+  }
+
+  const rawTplId = b.foodTemplateId;
+  const templateId = typeof rawTplId === 'string' && rawTplId.trim() ? rawTplId.trim() : null;
+
+  if (templateId) {
+    const mode = parseMealInputMode(b.mealInputMode);
+    if (!mode) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'mealInputMode가 필요합니다.', { field: 'mealInputMode' });
+      return;
+    }
+    const template = await prisma.foodTemplate.findFirst({
+      where: { id: templateId, active: true },
+    });
+    if (!template || !isTemplateNutritionComplete(template)) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '템플릿을 사용할 수 없습니다.', { field: 'foodTemplateId' });
+      return;
+    }
+    let userTotalGrams: number;
+    let portionQuantity: number | null = null;
+    if (mode === MealInputMode.PORTION_COUNT) {
+      const qRaw = b.portionQuantity;
+      const q = typeof qRaw === 'number' ? qRaw : Number(qRaw);
+      if (!Number.isFinite(q) || q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
+        sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, {
+          field: 'portionQuantity',
+        });
+        return;
+      }
+      portionQuantity = q;
+      userTotalGrams = q * template.servingGrams!;
+    } else {
+      const gRaw = b.totalGrams;
+      const g = typeof gRaw === 'number' ? gRaw : Number(gRaw);
+      if (!Number.isFinite(g) || g < TOTAL_GRAMS_MIN || g > TOTAL_GRAMS_MAX) {
+        sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `totalGrams는 ${TOTAL_GRAMS_MIN}~${TOTAL_GRAMS_MAX} 사이여야 합니다.`, {
+          field: 'totalGrams',
+        });
+        return;
+      }
+      userTotalGrams = g;
+      portionQuantity = null;
+    }
+    let nutrition: ReturnType<typeof computeScaledNutritionFromGrams>;
+    try {
+      nutrition = computeScaledNutritionFromGrams(
+        {
+          servingGrams: template.servingGrams!,
+          calories: template.calories!,
+          protein: template.protein!,
+          fat: template.fat!,
+          carbohydrate: template.carbohydrate!,
+        },
+        userTotalGrams,
+      );
+    } catch {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '템플릿 기준 분량이 올바르지 않습니다.', { field: 'foodTemplateId' });
+      return;
+    }
+    await prisma.meal.update({
+      where: { id: mealId },
+      data: {
+        name: template.name,
+        ...(b.consumedAt !== undefined ? { consumedAt: new Date(String(b.consumedAt)) } : {}),
+        grams: nutrition.grams,
+        calories: nutrition.calories,
+        carbohydrate: nutrition.carbohydrate,
+        protein: nutrition.protein,
+        fat: nutrition.fat,
+        ...(b.note !== undefined ? { note: b.note ? String(b.note) : null } : {}),
+        ...(b.imageUrl !== undefined ? { imageUrl: b.imageUrl ? String(b.imageUrl) : null } : {}),
+        foodTemplateId: templateId,
+        mealInputMode: mode,
+        portionQuantity,
+      },
+    });
+    res.json({ ok: true });
+    return;
+  }
+
+  const legacy = b as Partial<{
     name: string;
     consumedAt: string;
     grams: number;
@@ -505,15 +780,15 @@ meRouter.put('/meals/:mealId', async (req, res) => {
   await prisma.meal.update({
     where: { id: mealId },
     data: {
-      ...(b.name !== undefined ? { name: String(b.name) } : {}),
-      ...(b.consumedAt !== undefined ? { consumedAt: new Date(b.consumedAt) } : {}),
-      ...(b.grams !== undefined ? { grams: Number(b.grams) } : {}),
-      ...(b.calories !== undefined ? { calories: Number(b.calories) } : {}),
-      ...(b.carbohydrate !== undefined ? { carbohydrate: Number(b.carbohydrate) } : {}),
-      ...(b.protein !== undefined ? { protein: Number(b.protein) } : {}),
-      ...(b.fat !== undefined ? { fat: Number(b.fat) } : {}),
-      ...(b.note !== undefined ? { note: b.note ? String(b.note) : null } : {}),
-      ...(b.imageUrl !== undefined ? { imageUrl: b.imageUrl ? String(b.imageUrl) : null } : {}),
+      ...(legacy.name !== undefined ? { name: String(legacy.name) } : {}),
+      ...(legacy.consumedAt !== undefined ? { consumedAt: new Date(legacy.consumedAt) } : {}),
+      ...(legacy.grams !== undefined ? { grams: Number(legacy.grams) } : {}),
+      ...(legacy.calories !== undefined ? { calories: Number(legacy.calories) } : {}),
+      ...(legacy.carbohydrate !== undefined ? { carbohydrate: Number(legacy.carbohydrate) } : {}),
+      ...(legacy.protein !== undefined ? { protein: Number(legacy.protein) } : {}),
+      ...(legacy.fat !== undefined ? { fat: Number(legacy.fat) } : {}),
+      ...(legacy.note !== undefined ? { note: legacy.note ? String(legacy.note) : null } : {}),
+      ...(legacy.imageUrl !== undefined ? { imageUrl: legacy.imageUrl ? String(legacy.imageUrl) : null } : {}),
     },
   });
   res.json({ ok: true });

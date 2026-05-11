@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
-import type { Prisma } from '@prisma/client';
+import { PortionUnit, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { normalizePortionLabel, resolvePortionUnit, validatePortionLabelForUnit } from '../lib/portionUnit.js';
 import { requireAdmin } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
 
@@ -365,6 +366,8 @@ type FoodTemplateRow = {
   name: string;
   memo: string | null;
   category: string | null;
+  portionUnit: PortionUnit;
+  portionLabel: string | null;
   servingGrams: number | null;
   calories: number | null;
   protein: number | null;
@@ -380,6 +383,8 @@ function serializeFood(f: FoodTemplateRow) {
     name: f.name,
     memo: f.memo,
     category: f.category,
+    portionUnit: f.portionUnit,
+    portionLabel: f.portionLabel,
     servingGrams: f.servingGrams,
     calories: f.calories,
     protein: f.protein,
@@ -501,12 +506,25 @@ adminRouter.post('/admin/foods', async (req, res) => {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, nutrition.message, { field: nutrition.field });
     return;
   }
+  const pu = resolvePortionUnit(b.portionUnit);
+  if (!pu.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, pu.message, { field: pu.field });
+    return;
+  }
+  const plRaw = normalizePortionLabel(b.portionLabel);
+  const pl = validatePortionLabelForUnit(pu.unit, plRaw);
+  if (!pl.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, pl.message, { field: pl.field });
+    return;
+  }
   const memoRaw = b.memo;
   const f = await prisma.foodTemplate.create({
     data: {
       name,
       memo: memoRaw ? String(memoRaw) : null,
       category: category.value,
+      portionUnit: pu.unit as PortionUnit,
+      portionLabel: pl.value,
       servingGrams: nutrition.values.servingGrams,
       calories: nutrition.values.calories,
       protein: nutrition.values.protein,
@@ -540,12 +558,25 @@ adminRouter.put('/admin/foods/:id', async (req, res) => {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, nutrition.message, { field: nutrition.field });
     return;
   }
+  const pu = resolvePortionUnit(b.portionUnit);
+  if (!pu.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, pu.message, { field: pu.field });
+    return;
+  }
+  const plRaw = normalizePortionLabel(b.portionLabel);
+  const pl = validatePortionLabelForUnit(pu.unit, plRaw);
+  if (!pl.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, pl.message, { field: pl.field });
+    return;
+  }
   await prisma.foodTemplate.update({
     where: { id },
     data: {
       ...(b.name !== undefined ? { name: String(b.name).trim() } : {}),
       ...(b.memo !== undefined ? { memo: b.memo ? String(b.memo) : null } : {}),
       ...categoryUpdate,
+      portionUnit: pu.unit as PortionUnit,
+      portionLabel: pl.value,
       servingGrams: nutrition.values.servingGrams,
       calories: nutrition.values.calories,
       protein: nutrition.values.protein,

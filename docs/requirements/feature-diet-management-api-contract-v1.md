@@ -2,8 +2,8 @@
 type: contract
 project: dietManagement
 doc_lane: requirements
-version: v1.3
-updated_at: 2026-05-09
+version: v1.4
+updated_at: 2026-05-11
 tags: [api, contract, backend, frontend]
 ---
 
@@ -88,10 +88,29 @@ tags: [api, contract, backend, frontend]
 - `PUT /me/profile`은 권장량을 자동 갱신하지 않는다. 클라이언트가 저장 직후 본 엔드포인트를 명시 호출한다.
 
 ### Meals
+- `GET /me/food-templates?query=&category=&page=&size=15` — 활성 음식 템플릿만(일반 사용자). 응답 `items[]`에 `portionUnit`, `portionLabel`, `servingGrams`, `calories`, `protein`, `fat`, `carbohydrate`, `memo`, `category` 포함.
 - `POST /meals`
 - `GET /meals?from=&to=&page=&size=15`
 - `PUT /meals/{mealId}`
 - `PATCH /meals/{mealId}/deactivate`
+
+#### 식사 기록 모드 (v1.4)
+
+**수동 기록** (`foodTemplateId` 미전송 또는 `null`): 기존과 같이 `name`, `grams`(미입력 시 기본 100), `calories`, `carbohydrate`, `protein`, `fat`를 요청 본문에 포함하면 서버는 그대로 저장한다. `foodTemplateId` / `mealInputMode` / `portionQuantity`는 저장하지 않는다(null).
+
+**템플릿 기록** (`foodTemplateId` 문자열 전송): 활성 템플릿만 허용. `mealInputMode`는 `PORTION_COUNT` 또는 `TOTAL_GRAMS` 필수.
+- `PORTION_COUNT`: `portionQuantity` 필수(소수 허용, 예: 1.5). 서버가 `grams = portionQuantity × template.servingGrams`로 환산한 뒤, 템플릿에 저장된 기준 분량(`servingGrams`)당 영양 합계에 비례해 `calories`/`protein`/`fat`/`carbohydrate`를 **서버가 계산**한다. 클라이언트가 동시에 보낸 영양 필드는 **무시**한다.
+- `TOTAL_GRAMS`: `totalGrams` 필수. `grams = totalGrams`, 스케일 `totalGrams / template.servingGrams`로 동일 계산.
+- 템플릿 기록 시 `name`은 **항상 템플릿의 `name`**으로 저장한다(요청 `name` 무시).
+
+검증·한도(422, `details.field`):
+- `portionQuantity`: 0.25 이상 50 이하.
+- `totalGrams`: 1 이상 5000 이하.
+- 템플릿의 `servingGrams`가 0 이하이거나 영양 필드가 비어 있으면 템플릿 모드 사용 불가.
+
+**수정 `PUT /meals/{mealId}`**: 위와 동일하게 `foodTemplateId`+`mealInputMode`+수량 필드가 오면 재계산. `foodTemplateId`에 `null`을 명시하면 템플릿 연동을 해제하고 이후 필드는 수동 기록 규칙으로 갱신한다. 그 외 부분 갱신은 기존 필드 단위 규칙을 따른다.
+
+응답 `GET /meals` 항목: 기존 필드에 더해 `foodTemplateId`(nullable), `mealInputMode`(nullable enum), `portionQuantity`(nullable number) 포함.
 
 검증 원칙:
 - 섭취량/영양소 음수 입력 불가 (`422`)
@@ -132,18 +151,21 @@ tags: [api, contract, backend, frontend]
 ### Foods
 - `GET /admin/foods?query=&status=&category=&includeInactive=&page=&size=15`
 - `GET /admin/foods/{id}`
-- `POST /admin/foods` — body: `{ name, memo?, category? }`
-- `PUT /admin/foods/{id}` — body: `{ name?, memo?, category? }` (필드 단위 부분 갱신)
+- `POST /admin/foods` — body: `{ name, memo?, category?, portionUnit?, portionLabel?, servingGrams, calories, protein, fat, carbohydrate }`
+- `PUT /admin/foods/{id}` — body: `{ name?, memo?, category?, portionUnit?, portionLabel?, servingGrams, calories, protein, fat, carbohydrate }` (영양 5필드는 수정 시 모두 필수, 기존 정책 유지)
 - `PATCH /admin/foods/{id}/deactivate`
 - `PATCH /admin/foods/{id}/activate`
 
+`portionUnit` 허용값: `GRAM` | `PIECE` | `PLATE` | `BOWL` | `CUSTOM` (기본 `GRAM`). `portionLabel`: UI 표시용 짧은 문자열(최대 20자, 빈 문자열은 `null`). `portionUnit`이 `CUSTOM`이면 `portionLabel` 필수(비어 있으면 422).
+
 응답(목록·상세 공통) 필드:
-- `id`, `name`, `memo`, `category`(nullable), `status`(`active`|`inactive`), `createdAt`
+- `id`, `name`, `memo`, `category`(nullable), `portionUnit`, `portionLabel`(nullable), `servingGrams`, `calories`, `protein`, `fat`, `carbohydrate`, `status`(`active`|`inactive`), `createdAt`
 
 정책:
 - 템플릿 비활성화 후 신규 기록 선택 불가
 - 과거 기록 데이터는 보존
 - `category`는 자유 문자열, 길이 1~50자(빈 문자열은 `null`로 취급)
+- `servingGrams`는 템플릿에 적힌 영양 4필드가 해당하는 **질량(g)**; “1개/1접시” 등은 `portionUnit`+`portionLabel`+`memo`로 표현한다.
 
 ### Inquiries
 - `GET /admin/inquiries?query=&status=&from=&to=&includeInactive=&page=&size=15`
