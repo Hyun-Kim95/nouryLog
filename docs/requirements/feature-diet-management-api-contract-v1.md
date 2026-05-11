@@ -88,7 +88,7 @@ tags: [api, contract, backend, frontend]
 - `PUT /me/profile`은 권장량을 자동 갱신하지 않는다. 클라이언트가 저장 직후 본 엔드포인트를 명시 호출한다.
 
 ### Meals
-- `GET /me/food-templates?query=&category=&page=&size=15` — 활성 음식 템플릿만(일반 사용자). 응답 `items[]`에 `portionUnit`, `portionLabel`, `servingGrams`, `calories`, `protein`, `fat`, `carbohydrate`, `memo`, `category` 포함.
+- `GET /me/food-templates?query=&category=&page=&size=15` — 활성 음식 템플릿만(일반 사용자). 응답 `items[]`에 `referenceAmount`, `portionUnit`, `portionLabel`, `servingGrams`, `calories`, `protein`, `fat`, `carbohydrate`, `memo`, `category` 포함.
 - `POST /meals`
 - `GET /meals?from=&to=&page=&size=15`
 - `PUT /meals/{mealId}`
@@ -151,21 +151,25 @@ tags: [api, contract, backend, frontend]
 ### Foods
 - `GET /admin/foods?query=&status=&category=&includeInactive=&page=&size=15`
 - `GET /admin/foods/{id}`
-- `POST /admin/foods` — body: `{ name, memo?, category?, portionUnit?, portionLabel?, servingGrams, calories, protein, fat, carbohydrate }`
-- `PUT /admin/foods/{id}` — body: `{ name?, memo?, category?, portionUnit?, portionLabel?, servingGrams, calories, protein, fat, carbohydrate }` (영양 5필드는 수정 시 모두 필수, 기존 정책 유지)
+- `POST /admin/foods` — body: `{ name, memo?, category?, referenceAmount, portionUnit?, portionLabel?, servingGrams, calories, protein, fat, carbohydrate }`
+- `PUT /admin/foods/{id}` — body: `{ name?, memo?, category?, referenceAmount, portionUnit?, portionLabel?, servingGrams, calories, protein, fat, carbohydrate }` (기준·영양 필드는 수정 시 모두 필수, 부분 갱신 없음)
 - `PATCH /admin/foods/{id}/deactivate`
 - `PATCH /admin/foods/{id}/activate`
 
-`portionUnit` 허용값: `GRAM` | `PIECE` | `PLATE` | `BOWL` | `CUSTOM` (기본 `GRAM`). `portionLabel`: UI 표시용 짧은 문자열(최대 20자, 빈 문자열은 `null`). `portionUnit`이 `CUSTOM`이면 `portionLabel` 필수(비어 있으면 422).
+`referenceAmount`: 기준 분량의 **숫자**(그램이면 g 수, 개·접시면 개수 등). 0보다 큰 값, 상한은 서버 정책.
+
+`portionUnit` 허용값: `GRAM` | `PIECE` | `PLATE` | `BOWL` | `CUSTOM` (기본 `GRAM`). **기준 단위**로 해석한다. `portionLabel`: UI 표시용 짧은 문자열(최대 20자, 빈 문자열은 `null`). `portionUnit`이 `CUSTOM`이면 `portionLabel` 필수(비어 있으면 422).
+
+`servingGrams`: 영양 4필드가 해당하는 **총 질량(g)**. `portionUnit`이 `GRAM`이면 서버가 `servingGrams = referenceAmount`로 맞춘다. 그 외 단위에서는 클라이언트가 “위 기준 숫자·단위”의 실제 무게(g)를 `servingGrams`로 보낸다.
 
 응답(목록·상세 공통) 필드:
-- `id`, `name`, `memo`, `category`(nullable), `portionUnit`, `portionLabel`(nullable), `servingGrams`, `calories`, `protein`, `fat`, `carbohydrate`, `status`(`active`|`inactive`), `createdAt`
+- `id`, `name`, `memo`, `category`(nullable), `referenceAmount`, `portionUnit`, `portionLabel`(nullable), `servingGrams`, `calories`, `protein`, `fat`, `carbohydrate`, `status`(`active`|`inactive`), `createdAt`
 
 정책:
 - 템플릿 비활성화 후 신규 기록 선택 불가
 - 과거 기록 데이터는 보존
 - `category`는 자유 문자열, 길이 1~50자(빈 문자열은 `null`로 취급)
-- `servingGrams`는 템플릿에 적힌 영양 4필드가 해당하는 **질량(g)**; “1개/1접시” 등은 `portionUnit`+`portionLabel`+`memo`로 표현한다.
+- `referenceAmount`+`portionUnit`이 **기준 분량**을 정의하고, `servingGrams`는 항상 그 기준이 차지하는 **총 질량(g)** (그램 단위일 때는 `referenceAmount`와 동일).
 
 ### Inquiries
 - `GET /admin/inquiries?query=&status=&from=&to=&includeInactive=&page=&size=15`

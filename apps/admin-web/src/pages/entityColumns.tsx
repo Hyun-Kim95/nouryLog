@@ -57,6 +57,27 @@ function formatNumber(v: unknown, fractionDigits = 1): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(fractionDigits);
 }
 
+const PORTION_UNIT_KO: Record<string, string> = {
+  GRAM: 'g',
+  PIECE: '개',
+  PLATE: '접시',
+  BOWL: '공기',
+  CUSTOM: '',
+};
+
+/** 목록용: 기준 숫자 + 기준 단위 */
+function formatFoodBaseline(r: Row): string {
+  const ref = r.referenceAmount;
+  const unit = typeof r.portionUnit === 'string' ? r.portionUnit : '';
+  const label = r.portionLabel != null && String(r.portionLabel).trim() ? String(r.portionLabel).trim() : '';
+  const refStr = formatNumber(ref, 2);
+  if (refStr === '—') return '—';
+  if (unit === 'GRAM') return `${refStr} g`;
+  if (unit === 'CUSTOM' && label) return `${refStr} ${label}`;
+  const u = PORTION_UNIT_KO[unit] || unit;
+  return label ? `${refStr} ${u} (${label})` : `${refStr} ${u}`;
+}
+
 const DEACTIVATION_REASON_LABEL: Record<string, string> = {
   spam: '스팸/광고',
   inactive_long: '장기 미접속',
@@ -143,15 +164,10 @@ export const COLUMNS: Record<Kind, ColumnDef[]> = {
   foods: [
     { key: 'name', label: '이름', render: (r) => formatText(r.name) },
     {
-      key: 'portionUnit',
-      label: '1단위',
-      render: (r) =>
-        formatText(
-          [r.portionUnit, r.portionLabel].filter(Boolean).length
-            ? `${String(r.portionUnit ?? '')}${r.portionLabel ? ` · ${String(r.portionLabel)}` : ''}`
-            : null,
-        ),
-      width: '130px',
+      key: 'baseline',
+      label: '기준 분량',
+      render: (r) => formatText(formatFoodBaseline(r)),
+      width: '140px',
     },
     { key: 'category', label: '카테고리', render: (r) => formatText(r.category), width: '110px' },
     { key: 'status', label: '상태', render: (r) => <StatusBadge value={r.status} />, width: '110px' },

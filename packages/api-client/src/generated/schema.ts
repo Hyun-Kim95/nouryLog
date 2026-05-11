@@ -1190,6 +1190,7 @@ export interface components {
             category?: string | null;
             portionUnit: components["schemas"]["PortionUnit"];
             portionLabel?: string | null;
+            referenceAmount: number;
             servingGrams: number;
             calories: number;
             protein: number;

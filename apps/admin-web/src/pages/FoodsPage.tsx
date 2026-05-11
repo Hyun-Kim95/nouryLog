@@ -9,7 +9,7 @@ import type { Row } from './entityColumns';
 const CATEGORY_OPTIONS = ['한식', '중식', '일식', '양식', '간식', '음료'] as const;
 
 const PORTION_UNIT_OPTIONS = [
-  { value: 'GRAM', label: '그램(g)' },
+  { value: 'GRAM', label: '그램 (g)' },
   { value: 'PIECE', label: '개' },
   { value: 'PLATE', label: '접시' },
   { value: 'BOWL', label: '공기' },
@@ -21,9 +21,12 @@ type FoodForm = {
   name: string;
   memo: string;
   category: string;
+  /** 기준 분량의 숫자(그램이면 g 수, 개·접시면 개수 등) */
+  referenceAmount: string;
   portionUnit: (typeof PORTION_UNIT_OPTIONS)[number]['value'];
+  /** CUSTOM일 때 필수. 그 외에는 표시용 보조(예: 소접시). */
   portionLabel: string;
-  /** 입력값은 빈 문자열 가능. 저장 시 number로 변환·검증한다. */
+  /** 그램이 아닌 단위일 때만: 위 기준이 차지하는 총 질량(g) */
   servingGrams: string;
   calories: string;
   protein: string;
@@ -35,6 +38,7 @@ const EMPTY_FORM: FoodForm = {
   name: '',
   memo: '',
   category: '',
+  referenceAmount: '',
   portionUnit: 'GRAM',
   portionLabel: '',
   servingGrams: '',
@@ -44,15 +48,14 @@ const EMPTY_FORM: FoodForm = {
   carbohydrate: '',
 };
 
-const NUTRITION_FIELDS = [
-  { key: 'servingGrams', label: '기준 분량(g)', max: 5000 },
+const MACRO_FIELDS = [
   { key: 'calories', label: '칼로리(kcal)', max: 10000 },
   { key: 'protein', label: '단백질(g)', max: 1000 },
   { key: 'fat', label: '지방(g)', max: 1000 },
   { key: 'carbohydrate', label: '탄수화물(g)', max: 1000 },
 ] as const;
 
-type NutritionKey = (typeof NUTRITION_FIELDS)[number]['key'];
+type MacroKey = (typeof MACRO_FIELDS)[number]['key'];
 
 type FoodDetail = {
   id: string;
@@ -61,6 +64,7 @@ type FoodDetail = {
   category: string | null;
   portionUnit: string;
   portionLabel: string | null;
+  referenceAmount: number;
   servingGrams: number | null;
   calories: number | null;
   protein: number | null;
@@ -101,16 +105,24 @@ export function FoodsPage() {
     try {
       // 행에 영양값이 비어 있을 수 있어 detail로 한 번 더 가져와 정확히 매핑.
       const detail = await apiFetch<FoodDetail>(`/admin/foods/${id}`, { token });
+      const pu = (PORTION_UNIT_OPTIONS.some((o) => o.value === detail.portionUnit)
+        ? detail.portionUnit
+        : 'GRAM') as FoodForm['portionUnit'];
+      const refAmt =
+        detail.referenceAmount != null && Number.isFinite(detail.referenceAmount)
+          ? detail.referenceAmount
+          : pu === 'GRAM' && detail.servingGrams != null
+            ? detail.servingGrams
+            : 1;
       setForm({
         id: detail.id,
         name: detail.name,
         memo: detail.memo ?? '',
         category: detail.category ?? '',
-        portionUnit: (PORTION_UNIT_OPTIONS.some((o) => o.value === detail.portionUnit)
-          ? detail.portionUnit
-          : 'GRAM') as FoodForm['portionUnit'],
+        referenceAmount: nullableNumberToInput(refAmt),
+        portionUnit: pu,
         portionLabel: detail.portionLabel ?? '',
-        servingGrams: nullableNumberToInput(detail.servingGrams),
+        servingGrams: pu === 'GRAM' ? '' : nullableNumberToInput(detail.servingGrams),
         calories: nullableNumberToInput(detail.calories),
         protein: nullableNumberToInput(detail.protein),
         fat: nullableNumberToInput(detail.fat),
@@ -137,8 +149,49 @@ export function FoodsPage() {
       setMessage('이름을 입력해 주세요.');
       return;
     }
-    const numeric: Partial<Record<NutritionKey, number>> = {};
-    for (const f of NUTRITION_FIELDS) {
+    const refRaw = form.referenceAmount.trim();
+    if (!refRaw) {
+      setMessage('기준 숫자를 입력해 주세요.');
+      return;
+    }
+    const referenceAmount = Number(refRaw.replace(',', '.'));
+    if (!Number.isFinite(referenceAmount) || referenceAmount <= 0) {
+      setMessage('기준 숫자는 0보다 큰 숫자여야 합니다.');
+      return;
+    }
+    if (referenceAmount > 5000) {
+      setMessage('기준 숫자는 5000 이하여야 합니다.');
+      return;
+    }
+
+    let servingGrams: number;
+    if (form.portionUnit === 'GRAM') {
+      servingGrams = referenceAmount;
+    } else {
+      const gRaw = form.servingGrams.trim();
+      if (!gRaw) {
+        setMessage('그램이 아닌 단위일 때는 이 기준의 총 질량(g)을 입력해 주세요.');
+        return;
+      }
+      const g = Number(gRaw.replace(',', '.'));
+      if (!Number.isFinite(g) || g <= 0) {
+        setMessage('총 질량(g)은 0보다 큰 숫자여야 합니다.');
+        return;
+      }
+      if (g > 5000) {
+        setMessage('총 질량(g)은 5000 이하여야 합니다.');
+        return;
+      }
+      servingGrams = g;
+    }
+
+    if (form.portionUnit === 'CUSTOM' && !form.portionLabel.trim()) {
+      setMessage('직접 표기 단위일 때는 단위 이름을 입력해 주세요.');
+      return;
+    }
+
+    const numeric: Partial<Record<MacroKey, number>> = {};
+    for (const f of MACRO_FIELDS) {
       const raw = form[f.key].trim();
       if (!raw) {
         setMessage(`${f.label} 값을 입력해 주세요.`);
@@ -166,9 +219,10 @@ export function FoodsPage() {
         name,
         memo: form.memo.trim() || null,
         category: form.category || null,
+        referenceAmount,
         portionUnit: form.portionUnit,
         portionLabel: form.portionLabel.trim() || null,
-        servingGrams: numeric.servingGrams,
+        servingGrams,
         calories: numeric.calories,
         protein: numeric.protein,
         fat: numeric.fat,
@@ -282,41 +336,70 @@ export function FoodsPage() {
                   ))}
                 </select>
               </label>
+              <p className="form-help" style={{ fontWeight: 600, marginTop: 8 }}>
+                기준 분량
+              </p>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 'var(--ds-space-3)',
+                }}
+              >
+                <label className="form-field">
+                  기준 숫자
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="any"
+                    value={form.referenceAmount}
+                    onChange={(e) => updateField('referenceAmount', e.target.value)}
+                    placeholder={form.portionUnit === 'GRAM' ? '예: 100' : '예: 1'}
+                  />
+                </label>
+                <label className="form-field">
+                  기준 단위
+                  <select
+                    value={form.portionUnit}
+                    onChange={(e) => updateField('portionUnit', e.target.value as FoodForm['portionUnit'])}
+                  >
+                    {PORTION_UNIT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <span className="form-help">
+                {form.portionUnit === 'GRAM'
+                  ? '그램을 고르면 기준 숫자가 곧 g입니다. 아래 영양값은 이 g 기준입니다.'
+                  : '개·접시 등이면 기준 숫자는 “몇 개·몇 접시”이고, 아래에 그만큼의 총 무게(g)를 적어 주세요. 영양 계산은 g로 합니다.'}
+              </span>
+              {form.portionUnit !== 'GRAM' ? (
+                <label className="form-field">
+                  이 기준의 총 질량 (g)
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="any"
+                    value={form.servingGrams}
+                    onChange={(e) => updateField('servingGrams', e.target.value)}
+                    placeholder="예: 50"
+                  />
+                  <span className="form-help">위 기준 숫자·단위가 차지하는 실제 무게입니다.</span>
+                </label>
+              ) : null}
               <label className="form-field">
-                1단위 종류
-                <select
-                  value={form.portionUnit}
-                  onChange={(e) => updateField('portionUnit', e.target.value as FoodForm['portionUnit'])}
-                >
-                  {PORTION_UNIT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <span className="form-help">앱 기록 시 “분량 수” 입력에 쓰는 단위 힌트입니다.</span>
-              </label>
-              <label className="form-field">
-                단위 표시(선택, CUSTOM 시 필수)
+                단위 표시(선택, 직접 표기일 때 필수)
                 <input
                   value={form.portionLabel}
                   onChange={(e) => updateField('portionLabel', e.target.value)}
-                  placeholder={form.portionUnit === 'CUSTOM' ? '예: 컵' : '예: 소접시'}
+                  placeholder={form.portionUnit === 'CUSTOM' ? '예: 컵' : '예: 소접시(선택)'}
                   maxLength={20}
                 />
-              </label>
-              <label className="form-field">
-                기준 분량 (g)
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step="0.1"
-                  value={form.servingGrams}
-                  onChange={(e) => updateField('servingGrams', e.target.value)}
-                  placeholder="예: 100"
-                />
-                <span className="form-help">아래 영양값은 이 분량 기준입니다.</span>
               </label>
               <div
                 style={{

@@ -121,7 +121,9 @@ model FoodTemplate {
   category  String?
   portionUnit  PortionUnit @default(GRAM)
   portionLabel String?
-  /// 기준 분량(g). 신규/수정 시 라우트에서 필수, 기존 행은 NULL 허용.
+  /// 기준 분량의 숫자(예: 100+g, 1개, 1.5접시). 그램 단위일 때는 보통 `servingGrams`와 동일.
+  referenceAmount Float @default(1)
+  /// 영양 4필드가 해당하는 총 질량(g). `portionUnit`이 GRAM이면 `referenceAmount`와 동일하게 맞춘다.
   servingGrams Float?
   /// 기준 분량당 칼로리(kcal). 신규/수정 시 필수, 기존 행 NULL 허용.
   calories     Float?

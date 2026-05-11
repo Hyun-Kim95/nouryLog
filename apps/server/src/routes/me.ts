@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { MealInputMode, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { resolvedReferenceAmount } from '../lib/foodTemplateReference.js';
 import { computeScaledNutritionFromGrams } from '../lib/mealFromTemplate.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
@@ -467,6 +468,7 @@ meRouter.get('/me/food-templates', async (req, res) => {
       category: f.category,
       portionUnit: f.portionUnit,
       portionLabel: f.portionLabel,
+      referenceAmount: resolvedReferenceAmount(f as { referenceAmount?: number | null; portionUnit: string; servingGrams: number | null }),
       servingGrams: f.servingGrams!,
       calories: f.calories!,
       protein: f.protein!,

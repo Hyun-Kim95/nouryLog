@@ -53,7 +53,7 @@ components:
 
     FoodTemplatePublic:
       type: object
-      required: [id, name, portionUnit, servingGrams, calories, protein, fat, carbohydrate]
+      required: [id, name, portionUnit, referenceAmount, servingGrams, calories, protein, fat, carbohydrate]
       properties:
         id: { type: string }
         name: { type: string }
@@ -61,6 +61,7 @@ components:
         category: { type: string, nullable: true }
         portionUnit: { $ref: '#/components/schemas/PortionUnit' }
         portionLabel: { type: string, nullable: true }
+        referenceAmount: { type: number, exclusiveMinimum: 0 }
         servingGrams: { type: number, minimum: 0 }
         calories: { type: number, minimum: 0 }
         protein: { type: number, minimum: 0 }

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { PortionUnit, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { resolvedReferenceAmount } from '../lib/foodTemplateReference.js';
 import { normalizePortionLabel, resolvePortionUnit, validatePortionLabelForUnit } from '../lib/portionUnit.js';
 import { requireAdmin } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
@@ -368,6 +369,8 @@ type FoodTemplateRow = {
   category: string | null;
   portionUnit: PortionUnit;
   portionLabel: string | null;
+  /** 마이그레이션 전 행·구 클라이언트 조회 시 누락될 수 있음 */
+  referenceAmount?: number | null;
   servingGrams: number | null;
   calories: number | null;
   protein: number | null;
@@ -385,6 +388,7 @@ function serializeFood(f: FoodTemplateRow) {
     category: f.category,
     portionUnit: f.portionUnit,
     portionLabel: f.portionLabel,
+    referenceAmount: resolvedReferenceAmount(f),
     servingGrams: f.servingGrams,
     calories: f.calories,
     protein: f.protein,
@@ -405,24 +409,58 @@ function validateCategory(input: unknown): { value: string | null; error?: strin
   return { value: raw };
 }
 
-const FOOD_NUTRITION_FIELDS = [
-  { key: 'servingGrams', max: 5000, label: '기준 분량(g)' },
+const FOOD_MACRO_FIELDS = [
   { key: 'calories', max: 10000, label: '칼로리(kcal)' },
   { key: 'protein', max: 1000, label: '단백질(g)' },
   { key: 'fat', max: 1000, label: '지방(g)' },
   { key: 'carbohydrate', max: 1000, label: '탄수화물(g)' },
 ] as const;
 
-type FoodNutritionKey = (typeof FOOD_NUTRITION_FIELDS)[number]['key'];
+type FoodMacroKey = (typeof FOOD_MACRO_FIELDS)[number]['key'];
 
-type FoodNutritionResult =
-  | { ok: true; values: Record<FoodNutritionKey, number> }
-  | { ok: false; field: FoodNutritionKey; message: string };
+type FoodMacroResult =
+  | { ok: true; values: Record<FoodMacroKey, number> }
+  | { ok: false; field: FoodMacroKey; message: string };
 
-/** 음식 영양 5필드를 모두 검증한다. 신규/수정 모두 동일하게 5개를 요구한다. */
-function validateFoodNutrition(input: Record<string, unknown>): FoodNutritionResult {
-  const values: Partial<Record<FoodNutritionKey, number>> = {};
-  for (const f of FOOD_NUTRITION_FIELDS) {
+const SERVING_GRAMS_MAX = 5000;
+const REFERENCE_AMOUNT_MAX = 5000;
+
+function validateReferenceAmount(input: Record<string, unknown>): { ok: true; value: number } | { ok: false; message: string } {
+  const raw = input.referenceAmount;
+  if (raw === undefined || raw === null || raw === '') {
+    return { ok: false, message: '기준 숫자(referenceAmount)가 필요합니다.' };
+  }
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    return { ok: false, message: '기준 숫자는 0보다 커야 합니다.' };
+  }
+  if (n > REFERENCE_AMOUNT_MAX) {
+    return { ok: false, message: `기준 숫자는 ${REFERENCE_AMOUNT_MAX} 이하여야 합니다.` };
+  }
+  return { ok: true, value: n };
+}
+
+function validateServingGramsField(raw: unknown): { ok: true; value: number } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') {
+    return { ok: false, message: '기준의 총 질량(servingGrams, g)이 필요합니다.' };
+  }
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) {
+    return { ok: false, message: '기준의 총 질량(g)은 숫자여야 합니다.' };
+  }
+  if (n <= 0) {
+    return { ok: false, message: '기준의 총 질량(g)은 0보다 커야 합니다.' };
+  }
+  if (n > SERVING_GRAMS_MAX) {
+    return { ok: false, message: `기준의 총 질량(g)은 ${SERVING_GRAMS_MAX} 이하여야 합니다.` };
+  }
+  return { ok: true, value: n };
+}
+
+/** 칼로리·탄단지 4필드 검증. 신규/수정 모두 동일하게 요구한다. */
+function validateFoodMacros(input: Record<string, unknown>): FoodMacroResult {
+  const values: Partial<Record<FoodMacroKey, number>> = {};
+  for (const f of FOOD_MACRO_FIELDS) {
     const raw = input[f.key];
     if (raw === undefined || raw === null || raw === '') {
       return { ok: false, field: f.key, message: `${f.label} 값이 필요합니다.` };
@@ -439,7 +477,7 @@ function validateFoodNutrition(input: Record<string, unknown>): FoodNutritionRes
     }
     values[f.key] = n;
   }
-  return { ok: true, values: values as Record<FoodNutritionKey, number> };
+  return { ok: true, values: values as Record<FoodMacroKey, number> };
 }
 
 adminRouter.get('/admin/foods', async (req, res) => {
@@ -501,9 +539,9 @@ adminRouter.post('/admin/foods', async (req, res) => {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, category.error);
     return;
   }
-  const nutrition = validateFoodNutrition(b);
-  if (!nutrition.ok) {
-    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, nutrition.message, { field: nutrition.field });
+  const refAmt = validateReferenceAmount(b);
+  if (!refAmt.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, refAmt.message, { field: 'referenceAmount' });
     return;
   }
   const pu = resolvePortionUnit(b.portionUnit);
@@ -517,6 +555,19 @@ adminRouter.post('/admin/foods', async (req, res) => {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, pl.message, { field: pl.field });
     return;
   }
+  const servingGramsResolved =
+    pu.unit === 'GRAM'
+      ? { ok: true as const, value: refAmt.value }
+      : validateServingGramsField(b.servingGrams);
+  if (!servingGramsResolved.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, servingGramsResolved.message, { field: 'servingGrams' });
+    return;
+  }
+  const macros = validateFoodMacros(b);
+  if (!macros.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, macros.message, { field: macros.field });
+    return;
+  }
   const memoRaw = b.memo;
   const f = await prisma.foodTemplate.create({
     data: {
@@ -525,12 +576,13 @@ adminRouter.post('/admin/foods', async (req, res) => {
       category: category.value,
       portionUnit: pu.unit as PortionUnit,
       portionLabel: pl.value,
-      servingGrams: nutrition.values.servingGrams,
-      calories: nutrition.values.calories,
-      protein: nutrition.values.protein,
-      fat: nutrition.values.fat,
-      carbohydrate: nutrition.values.carbohydrate,
-    },
+      referenceAmount: refAmt.value,
+      servingGrams: servingGramsResolved.value,
+      calories: macros.values.calories,
+      protein: macros.values.protein,
+      fat: macros.values.fat,
+      carbohydrate: macros.values.carbohydrate,
+    } as Parameters<typeof prisma.foodTemplate.create>[0]['data'],
   });
   res.status(201).json({ id: f.id });
 });
@@ -552,10 +604,10 @@ adminRouter.put('/admin/foods/:id', async (req, res) => {
     }
     categoryUpdate = { category: category.value };
   }
-  // 수정도 5개 영양값을 모두 요구한다(부분 갱신 없음).
-  const nutrition = validateFoodNutrition(b);
-  if (!nutrition.ok) {
-    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, nutrition.message, { field: nutrition.field });
+  // 수정도 기준·영양값을 모두 요구한다(부분 갱신 없음).
+  const refAmt = validateReferenceAmount(b);
+  if (!refAmt.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, refAmt.message, { field: 'referenceAmount' });
     return;
   }
   const pu = resolvePortionUnit(b.portionUnit);
@@ -569,6 +621,19 @@ adminRouter.put('/admin/foods/:id', async (req, res) => {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, pl.message, { field: pl.field });
     return;
   }
+  const servingGramsResolved =
+    pu.unit === 'GRAM'
+      ? { ok: true as const, value: refAmt.value }
+      : validateServingGramsField(b.servingGrams);
+  if (!servingGramsResolved.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, servingGramsResolved.message, { field: 'servingGrams' });
+    return;
+  }
+  const macros = validateFoodMacros(b);
+  if (!macros.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, macros.message, { field: macros.field });
+    return;
+  }
   await prisma.foodTemplate.update({
     where: { id },
     data: {
@@ -577,12 +642,13 @@ adminRouter.put('/admin/foods/:id', async (req, res) => {
       ...categoryUpdate,
       portionUnit: pu.unit as PortionUnit,
       portionLabel: pl.value,
-      servingGrams: nutrition.values.servingGrams,
-      calories: nutrition.values.calories,
-      protein: nutrition.values.protein,
-      fat: nutrition.values.fat,
-      carbohydrate: nutrition.values.carbohydrate,
-    },
+      referenceAmount: refAmt.value,
+      servingGrams: servingGramsResolved.value,
+      calories: macros.values.calories,
+      protein: macros.values.protein,
+      fat: macros.values.fat,
+      carbohydrate: macros.values.carbohydrate,
+    } as Parameters<typeof prisma.foodTemplate.update>[0]['data'],
   });
   res.json({ ok: true });
 });

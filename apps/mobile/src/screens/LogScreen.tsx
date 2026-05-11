@@ -29,6 +29,7 @@ type FoodTemplateItem = {
   name: string;
   memo: string | null;
   category: string | null;
+  referenceAmount: number;
   portionUnit: string;
   portionLabel: string | null;
   servingGrams: number;
@@ -48,6 +49,11 @@ function unitHint(t: FoodTemplateItem): string {
   if (t.portionUnit === 'PLATE') return '접시';
   if (t.portionUnit === 'BOWL') return '공기';
   return '단위';
+}
+
+function baselineSummary(t: FoodTemplateItem): string {
+  if (t.portionUnit === 'GRAM') return `${t.referenceAmount}g`;
+  return `${t.referenceAmount}${unitHint(t)}`;
 }
 
 export function LogScreen() {
@@ -255,7 +261,8 @@ export function LogScreen() {
           {selectedTpl ? (
             <>
               <Text style={styles.hint}>
-                기준: {selectedTpl.servingGrams}g당 kcal {selectedTpl.calories} · 단위: {unitHint(selectedTpl)}
+                기준 분량: {baselineSummary(selectedTpl)} (영양 기준 {selectedTpl.servingGrams}g) · 기준당 약 {selectedTpl.calories}{' '}
+                kcal
               </Text>
               <View style={styles.rowBtns}>
                 <Pressable
