@@ -7,7 +7,7 @@ import { ThemeProvider } from './src/theme';
 import { DevTogglesProvider } from './src/dev/devToggles';
 import { DevPanel } from './src/dev/DevPanel';
 import { ToastProvider } from './src/toast/ToastProvider';
-import { setupNotifications } from './src/notifications';
+import { setupNotifications } from './src/notifications/setup';
 
 export default function App() {
   const [ready, setReady] = useState(false);

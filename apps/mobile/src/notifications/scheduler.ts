@@ -1,6 +1,6 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { CHANNEL_MEAL, CHANNEL_NUTRITION } from './setup';
+import { isRunningInExpoGo } from 'expo';
+import { CHANNEL_MEAL, CHANNEL_NUTRITION } from './channels';
 import { buildMealContent, buildNutritionContent } from './messages';
 import {
   parseTimeStr,
@@ -13,10 +13,19 @@ import {
 } from '../notifPrefs';
 import { fetchTodayShortfall } from './nutrition';
 
+type NotificationsModule = typeof import('expo-notifications');
+
+async function loadNotifications(): Promise<NotificationsModule | null> {
+  if (isRunningInExpoGo()) return null;
+  return import('expo-notifications');
+}
+
 const MEAL_ID_PREFIX = 'dm-meal-';
 const NUTRITION_ID = 'dm-nutrition';
 
 async function cancel(identifier: string): Promise<void> {
+  const Notifications = await loadNotifications();
+  if (!Notifications) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(identifier);
   } catch {
@@ -31,6 +40,8 @@ async function scheduleDaily(args: {
   body: string;
   time: TimeStr;
 }): Promise<void> {
+  const Notifications = await loadNotifications();
+  if (!Notifications) return;
   await cancel(args.identifier);
   const { hour, minute } = parseTimeStr(args.time);
   await Notifications.scheduleNotificationAsync({
@@ -78,6 +89,8 @@ export async function cancelAllMeals(): Promise<void> {
 /// 권장량 미달 알림 — 동적 본문 (PRD v0.2 §5.3 / §7).
 /// `token`이 없으면 페치를 건너뛰고 정적 본문(폴백) 사용.
 export async function scheduleNutrition(time: TimeStr, token: string | null): Promise<void> {
+  const Notifications = await loadNotifications();
+  if (!Notifications) return;
   await cancel(NUTRITION_ID);
 
   let content: { title: string; body: string } | null = null;
@@ -128,6 +141,7 @@ export async function cancelNutrition(): Promise<void> {
 /// SecureStore 상태 그대로 OS에 동기화. 앱 포그라운드 진입 시 + 권장량/프로필 변경 후 호출.
 /// `token`이 있어야 권장량 미달 알림의 동적 본문이 정확히 갱신된다.
 export async function reconcileScheduledNotifications(token: string | null): Promise<void> {
+  if (isRunningInExpoGo()) return;
   const [mealEnabled, nutritionEnabled] = await Promise.all([
     getMealEnabled(),
     getNutritionEnabled(),
@@ -153,5 +167,6 @@ export async function reconcileScheduledNotifications(token: string | null): Pro
 }
 
 export async function cancelAllScheduled(): Promise<void> {
+  if (isRunningInExpoGo()) return;
   await Promise.all([cancelAllMeals(), cancelNutrition()]);
 }

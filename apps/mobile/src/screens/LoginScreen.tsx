@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { Button, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import {
   getPolicyDocument,
-  loginRequest,
   postConsents,
   socialResolveConflictRequest,
   socialStartRequest,
@@ -26,8 +25,6 @@ WebBrowser.maybeCompleteAuthSession();
 export function LoginScreen({ navigation }: Props) {
   const t = useTheme();
   const toast = useToast();
-  const [email, setEmail] = useState('user@example.com');
-  const [password, setPassword] = useState('user123');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [conflictToken, setConflictToken] = useState<string | null>(null);
@@ -72,23 +69,6 @@ export function LoginScreen({ navigation }: Props) {
     }
     await saveTokens(accessToken, refreshToken);
     await goAfterLogin();
-  };
-
-  const onLogin = async () => {
-    setErr(null);
-    setBusy(true);
-    try {
-      const tokens = await loginRequest(email.trim(), password);
-      await saveTokens(tokens.accessToken, tokens.refreshToken);
-      toast.show({ kind: 'success', message: '로그인했어요.' });
-      await goAfterLogin();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '오류';
-      setErr(msg);
-      toast.show({ kind: 'error', message: msg });
-    } finally {
-      setBusy(false);
-    }
   };
 
   const onSocialLogin = async (provider: SocialProvider) => {
@@ -186,53 +166,9 @@ export function LoginScreen({ navigation }: Props) {
   return (
     <View style={[styles.box, { backgroundColor: t.colors.bg, padding: t.spacing.xl, gap: t.spacing.md }]}>
       <Text style={{ color: t.colors.fg, fontSize: t.fontSize.title, fontWeight: '700' }}>식단 관리</Text>
-      <Text style={{ color: t.colors.fgMuted, marginBottom: t.spacing.sm, fontSize: t.fontSize.body }}>
-        시드: user@example.com / user123
-      </Text>
       {err ? (
         <Text style={{ color: t.colors.danger, fontSize: t.fontSize.body }}>{err}</Text>
       ) : null}
-      <TextInput
-        style={[
-          styles.input,
-          {
-            borderColor: t.colors.border,
-            backgroundColor: t.colors.surface,
-            color: t.colors.fg,
-            borderRadius: t.radius.md,
-            padding: t.spacing.md,
-          },
-        ]}
-        autoCapitalize="none"
-        value={email}
-        onChangeText={setEmail}
-        placeholder="이메일"
-        placeholderTextColor={t.colors.fgSubtle}
-      />
-      <TextInput
-        style={[
-          styles.input,
-          {
-            borderColor: t.colors.border,
-            backgroundColor: t.colors.surface,
-            color: t.colors.fg,
-            borderRadius: t.radius.md,
-            padding: t.spacing.md,
-          },
-        ]}
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        placeholder="비밀번호"
-        placeholderTextColor={t.colors.fgSubtle}
-      />
-      <Button
-        title={busy ? '처리 중...' : '로그인'}
-        onPress={() => void onLogin()}
-        disabled={busy}
-        color={t.colors.primary}
-      />
-      <Button title="회원가입" onPress={() => navigation.navigate('SignUp')} disabled={busy} color={t.colors.primary} />
 
       <Text style={{ marginTop: t.spacing.sm, color: t.colors.fgMuted, textAlign: 'center', fontSize: t.fontSize.body }}>
         또는 SNS로 로그인
@@ -384,7 +320,6 @@ function ConsentRow({
 
 const styles = StyleSheet.create({
   box: { flex: 1, justifyContent: 'center' },
-  input: { borderWidth: 1 },
   socialBtn: { alignItems: 'center' },
   socialText: { color: '#fff', fontWeight: '600' },
   naver: { backgroundColor: '#03c75a' },

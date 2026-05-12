@@ -1,19 +1,19 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import { isRunningInExpoGo } from 'expo';
+import { CHANNEL_MEAL, CHANNEL_NUTRITION } from './channels';
 
-/// PRD §10 N7=a 결정. Android 알림 채널 2개 분리.
-export const CHANNEL_MEAL = 'meal-reminder';
-export const CHANNEL_NUTRITION = 'nutrition-reminder';
+export { CHANNEL_MEAL, CHANNEL_NUTRITION } from './channels';
 
 let didSetup = false;
 
 /// 부팅 시 한 번만 호출. 다중 호출은 no-op.
-/// - 포그라운드 알림 핸들러 (사용자가 앱을 켜고 있어도 배너/소리 노출)
-/// - Android 알림 채널 2개 등록 (PRD §10 N7=a)
+/// Expo Go에서는 `expo-notifications` 네이티브 제한으로 모듈을 로드하지 않는다(SDK 53+ 안내 로그 방지).
 export async function setupNotifications(): Promise<void> {
   if (didSetup) return;
   didSetup = true;
+  if (isRunningInExpoGo()) return;
 
+  const Notifications = await import('expo-notifications');
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowBanner: true,
@@ -44,6 +44,8 @@ export async function setupNotifications(): Promise<void> {
 export type PermissionState = 'granted' | 'denied' | 'undetermined';
 
 export async function getNotifPermissionState(): Promise<PermissionState> {
+  if (isRunningInExpoGo()) return 'denied';
+  const Notifications = await import('expo-notifications');
   const r = await Notifications.getPermissionsAsync();
   if (r.granted) return 'granted';
   if (r.canAskAgain) return 'undetermined';
@@ -51,6 +53,8 @@ export async function getNotifPermissionState(): Promise<PermissionState> {
 }
 
 export async function requestNotifPermission(): Promise<PermissionState> {
+  if (isRunningInExpoGo()) return 'denied';
+  const Notifications = await import('expo-notifications');
   const r = await Notifications.requestPermissionsAsync();
   if (r.granted) return 'granted';
   if (r.canAskAgain) return 'undetermined';

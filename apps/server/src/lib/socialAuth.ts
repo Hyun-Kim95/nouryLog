@@ -83,6 +83,11 @@ export function consumeOAuthState(provider: SocialProvider, state: string): { re
   return { redirectUri: item.redirectUri };
 }
 
+function logSocialTokenDebug(provider: SocialProvider, status: number, bodySnippet: string) {
+  if (process.env.SOCIAL_OAUTH_DEBUG !== '1' && process.env.NODE_ENV === 'production') return;
+  console.warn(`[social-oauth] token exchange failed provider=${provider} status=${status} body=${bodySnippet.slice(0, 400)}`);
+}
+
 async function exchangeCodeForToken(
   provider: SocialProvider,
   code: string,
@@ -94,21 +99,33 @@ async function exchangeCodeForToken(
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: cfg.clientId,
-    client_secret: cfg.clientSecret,
     code,
     redirect_uri: callback,
   });
+  /// 카카오: Client Secret 미사용 앱은 `client_secret`을 넣으면 오류가 난다.
+  if (cfg.clientSecret) body.set('client_secret', cfg.clientSecret);
+  else if (provider !== 'KAKAO') return null;
 
-  if (provider === 'NAVER' && state) body.set('state', state);
+  /// 네이버 접근 토큰 발급 시 state 필수(명세).
+  if (provider === 'NAVER') body.set('state', state ?? '');
 
   const res = await fetch(cfg.tokenUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
     body,
   });
-  if (!res.ok) return null;
-  const json = (await res.json()) as { access_token?: string };
-  if (!json.access_token) return null;
+  const raw = await res.text();
+  let json: { access_token?: string; error?: string; error_description?: string } = {};
+  try {
+    json = JSON.parse(raw) as typeof json;
+  } catch {
+    logSocialTokenDebug(provider, res.status, raw);
+    return null;
+  }
+  if (!res.ok || !json.access_token) {
+    logSocialTokenDebug(provider, res.status, raw);
+    return null;
+  }
   return { accessToken: json.access_token };
 }
 
@@ -126,9 +143,20 @@ async function fetchNaverProfile(accessToken: string): Promise<ProviderProfile |
   const res = await fetch('https://openapi.naver.com/v1/nid/me', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) return null;
-  const json = (await res.json()) as { response?: { id?: string; email?: string; name?: string } };
-  if (!json.response?.id) return null;
+  const raw = await res.text();
+  let json: { resultcode?: string; response?: { id?: string; email?: string; name?: string } };
+  try {
+    json = JSON.parse(raw) as typeof json;
+  } catch {
+    return null;
+  }
+  /// HTTP 200이어도 resultcode가 '00'이 아니면 실패(미동의·API 미설정 등).
+  if (!res.ok || json.resultcode !== '00' || !json.response?.id) {
+    if (process.env.SOCIAL_OAUTH_DEBUG === '1' || process.env.NODE_ENV !== 'production') {
+      console.warn(`[social-oauth] naver profile failed status=${res.status} resultcode=${json.resultcode} snippet=${raw.slice(0, 300)}`);
+    }
+    return null;
+  }
   return { providerUserId: json.response.id, email: json.response.email ?? null, name: json.response.name ?? null };
 }
 
@@ -136,9 +164,19 @@ async function fetchKakaoProfile(accessToken: string): Promise<ProviderProfile |
   const res = await fetch('https://kapi.kakao.com/v2/user/me', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) return null;
-  const json = (await res.json()) as { id?: number; kakao_account?: { email?: string; profile?: { nickname?: string } } };
-  if (!json.id) return null;
+  const raw = await res.text();
+  let json: { id?: number; kakao_account?: { email?: string; profile?: { nickname?: string } } };
+  try {
+    json = JSON.parse(raw) as typeof json;
+  } catch {
+    return null;
+  }
+  if (!res.ok || json.id == null) {
+    if (process.env.SOCIAL_OAUTH_DEBUG === '1' || process.env.NODE_ENV !== 'production') {
+      console.warn(`[social-oauth] kakao profile failed status=${res.status} snippet=${raw.slice(0, 300)}`);
+    }
+    return null;
+  }
   return {
     providerUserId: String(json.id),
     email: json.kakao_account?.email ?? null,
