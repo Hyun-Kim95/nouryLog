@@ -22,6 +22,20 @@ import type { RootStackParamList } from '../navigation';
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 WebBrowser.maybeCompleteAuthSession();
 
+function firstQueryValue(v: unknown): string | undefined {
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) return typeof v[0] === 'string' ? v[0] : undefined;
+  return undefined;
+}
+
+/// 일부 Android + 네이버 흐름에서 `openAuthSessionAsync`가 먼저 cancel/dismiss로 끝나고,
+/// `dietmobile://oauth?...` 는 `Linking` 이벤트로만 전달되는 경우가 있어 보조 캡처한다.
+function isAppOAuthReturnUrl(url: string, redirectBaseNoQuery: string): boolean {
+  if (!url.includes('result=')) return false;
+  const noFrag = url.split('#')[0];
+  return noFrag.startsWith(redirectBaseNoQuery) || noFrag.startsWith('dietmobile://oauth');
+}
+
 export function LoginScreen({ navigation }: Props) {
   const t = useTheme();
   const toast = useToast();
@@ -72,40 +86,78 @@ export function LoginScreen({ navigation }: Props) {
   };
 
   const onSocialLogin = async (provider: SocialProvider) => {
+    if (busy) return;
     setErr(null);
     setConflictToken(null);
     setConflictEmail(null);
     setBusy(true);
     try {
       const redirectUri = AuthSession.makeRedirectUri({ scheme: 'dietmobile', path: 'oauth' });
+      const redirectBaseNoQuery = redirectUri.split('?')[0];
+
+      let deepLinkReturnUrl: string | null = null;
+      const onUrl = ({ url }: { url: string }) => {
+        if (isAppOAuthReturnUrl(url, redirectBaseNoQuery)) deepLinkReturnUrl = url;
+      };
+      const sub = Linking.addEventListener('url', onUrl);
+      void Linking.getInitialURL().then((u) => {
+        if (u) onUrl({ url: u });
+      });
+
       const { authorizationUrl } = await socialStartRequest(provider, redirectUri);
-      const result = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirectUri);
-      if (result.type !== 'success' || !result.url) {
+      let result: Awaited<ReturnType<typeof WebBrowser.openAuthSessionAsync>>;
+      try {
+        result = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirectUri);
+        /// Android: 커스텀 스킴이 브라우저 종료 직후에만 전달되는 경우가 있어 짧게 대기한다.
+        await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      } finally {
+        sub.remove();
+      }
+
+      const pickReturnUrl = (): string | undefined => {
+        if (result.type === 'success' && result.url) {
+          const u = result.url;
+          if (isAppOAuthReturnUrl(u, redirectBaseNoQuery)) return u;
+        }
+        return deepLinkReturnUrl ?? (result.type === 'success' ? result.url : undefined);
+      };
+
+      const returnUrl = pickReturnUrl();
+      if (!returnUrl || !isAppOAuthReturnUrl(returnUrl, redirectBaseNoQuery)) {
         const msg = 'SNS 로그인이 취소되었습니다.';
         setErr(msg);
         toast.show({ kind: 'info', message: msg });
         return;
       }
-      const parsed = Linking.parse(result.url);
-      const query = parsed.queryParams as Record<string, string | undefined>;
-      if (query.result === 'success' && query.accessToken && query.refreshToken) {
+
+      const parsed = Linking.parse(returnUrl);
+      const query = parsed.queryParams ?? {};
+      const resultKind = firstQueryValue(query.result);
+      const accessToken = firstQueryValue(query.accessToken);
+      const refreshToken = firstQueryValue(query.refreshToken);
+      const requiresConsentRaw = firstQueryValue(query.requiresConsent);
+      const oauthConflictToken = firstQueryValue(query.conflictToken);
+      const email = firstQueryValue(query.email);
+      const message = firstQueryValue(query.message);
+
+      if (resultKind === 'success' && accessToken && refreshToken) {
         toast.show({ kind: 'success', message: 'SNS로 로그인했어요.' });
-        await completeTokenLogin(query.accessToken, query.refreshToken, {
-          requiresConsent: query.requiresConsent === 'true',
+        await completeTokenLogin(accessToken, refreshToken, {
+          requiresConsent: requiresConsentRaw === 'true',
           source: `social-signup:${provider}`,
         });
         return;
       }
-      if (query.result === 'conflict' && query.conflictToken) {
-        setConflictToken(query.conflictToken);
-        setConflictEmail(query.email ?? null);
+      if (resultKind === 'conflict' && oauthConflictToken) {
+        setConflictToken(oauthConflictToken);
+        setConflictEmail(email ?? null);
         toast.show({
           kind: 'info',
           message: '기존 계정과 이메일이 충돌해요. 어떻게 처리할지 선택해 주세요.',
         });
         return;
       }
-      const msg = query.message ?? 'SNS 로그인 실패';
+      const msg = message ?? 'SNS 로그인 실패';
       setErr(msg);
       toast.show({ kind: 'error', message: msg });
     } catch (e) {

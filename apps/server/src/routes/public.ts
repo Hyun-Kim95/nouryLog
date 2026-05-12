@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { signAccess, signRefresh, verifyToken } from '../lib/jwt.js';
@@ -232,9 +232,10 @@ publicRouter.post('/auth/social/:provider/start', (req, res) => {
 
 publicRouter.get('/auth/social/:provider/callback', async (req, res) => {
   const provider = parseSocialProvider(String(req.params.provider ?? ''));
-  const state = String(req.query.state ?? '');
-  const code = String(req.query.code ?? '');
-  const oauthError = String(req.query.error ?? '');
+  const state = String(req.query.state ?? '').trim();
+  const code = String(req.query.code ?? '').trim();
+  /// OAuth2 오류 응답은 보통 `code` 없이 `error`만 온다. 일부 클라이언트/프록시가 `error` 키를 붙이는 경우가 있어 `code`가 있으면 성공 플로로 진행한다.
+  const oauthError = String(req.query.error ?? '').trim();
   if (!provider || !state) {
     sendError(res, 400, ErrorCodes.SOCIAL_STATE_INVALID, '유효하지 않은 소셜 상태 값입니다.');
     return;
@@ -246,7 +247,7 @@ publicRouter.get('/auth/social/:provider/callback', async (req, res) => {
     return;
   }
 
-  if (oauthError) {
+  if (oauthError && !code) {
     const redirect = new URL(stateItem.redirectUri);
     redirect.searchParams.set('result', 'error');
     redirect.searchParams.set('code', ErrorCodes.OAUTH_CANCELLED);
@@ -264,91 +265,107 @@ publicRouter.get('/auth/social/:provider/callback', async (req, res) => {
     return;
   }
 
-  const profile = await fetchProviderProfile(provider, code, state);
-  if (!profile) {
-    const redirect = new URL(stateItem.redirectUri);
-    redirect.searchParams.set('result', 'error');
-    redirect.searchParams.set('code', ErrorCodes.OAUTH_PROVIDER_ERROR);
-    redirect.searchParams.set('message', 'SNS 사용자 정보를 확인할 수 없습니다.');
-    res.redirect(redirect.toString());
-    return;
-  }
-
-  const linked = await prisma.socialAccount.findUnique({
-    where: { provider_providerUserId: { provider, providerUserId: profile.providerUserId } },
-    include: { user: true },
-  });
-  if (linked) {
-    if (!linked.user.active) {
+  try {
+    const profile = await fetchProviderProfile(provider, code, state);
+    if (!profile) {
       const redirect = new URL(stateItem.redirectUri);
       redirect.searchParams.set('result', 'error');
-      redirect.searchParams.set('code', ErrorCodes.AUTH_FORBIDDEN);
-      redirect.searchParams.set('message', '비활성화된 계정입니다.');
+      redirect.searchParams.set('code', ErrorCodes.OAUTH_PROVIDER_ERROR);
+      redirect.searchParams.set('message', 'SNS 사용자 정보를 확인할 수 없습니다.');
       res.redirect(redirect.toString());
       return;
     }
-    const role = linked.user.role === 'ADMIN' ? 'ADMIN' : 'USER';
-    await recordLogin(linked.user.id);
-    const redirect = new URL(stateItem.redirectUri);
-    redirect.searchParams.set('result', 'success');
-    redirect.searchParams.set('accessToken', signAccess(linked.user.id, role));
-    redirect.searchParams.set('refreshToken', signRefresh(linked.user.id, role));
-    redirect.searchParams.set('requiresConsent', String(await requiresCurrentConsent(linked.user.id)));
-    res.redirect(redirect.toString());
-    return;
-  }
 
-  const normalizedEmail = profile.email ? profile.email.trim().toLowerCase() : null;
-  const existingByEmail = normalizedEmail
-    ? await prisma.user.findUnique({ where: { email: normalizedEmail } })
-    : null;
-
-  if (existingByEmail) {
-    const conflictToken = createConflictToken({
-      provider,
-      providerUserId: profile.providerUserId,
-      email: normalizedEmail,
-      name: profile.name,
+    const linked = await prisma.socialAccount.findUnique({
+      where: { provider_providerUserId: { provider, providerUserId: profile.providerUserId } },
+      include: { user: true },
     });
-    const redirect = new URL(stateItem.redirectUri);
-    redirect.searchParams.set('result', 'conflict');
-    redirect.searchParams.set('conflictToken', conflictToken);
-    if (normalizedEmail) redirect.searchParams.set('email', normalizedEmail);
-    res.redirect(redirect.toString());
-    return;
-  }
+    if (linked) {
+      if (!linked.user.active) {
+        const redirect = new URL(stateItem.redirectUri);
+        redirect.searchParams.set('result', 'error');
+        redirect.searchParams.set('code', ErrorCodes.AUTH_FORBIDDEN);
+        redirect.searchParams.set('message', '비활성화된 계정입니다.');
+        res.redirect(redirect.toString());
+        return;
+      }
+      const role = linked.user.role === 'ADMIN' ? 'ADMIN' : 'USER';
+      await recordLogin(linked.user.id);
+      const redirect = new URL(stateItem.redirectUri);
+      redirect.searchParams.set('result', 'success');
+      redirect.searchParams.set('accessToken', signAccess(linked.user.id, role));
+      redirect.searchParams.set('refreshToken', signRefresh(linked.user.id, role));
+      redirect.searchParams.set('requiresConsent', String(await requiresCurrentConsent(linked.user.id)));
+      res.redirect(redirect.toString());
+      return;
+    }
 
-  const created = await prisma.user.create({
-    data: {
-      email: normalizedEmail ?? makeFallbackEmail(provider, profile.providerUserId),
-      passwordHash: await hashPassword(crypto.randomUUID()),
-      profile: { create: { gender: 'unspecified', age: 30, heightCm: 170, weightKg: 70 } },
-      billing: { create: {} },
-      socialAccounts: {
-        create: {
-          provider,
-          providerUserId: profile.providerUserId,
-          email: normalizedEmail,
+    const normalizedEmail = profile.email ? profile.email.trim().toLowerCase() : null;
+    /// 가입에 쓸 이메일(실이메일 또는 @social.local). 이미 존재하면 링크 충돌 플로로 보낸다(P2002 방지).
+    const newEmail = (normalizedEmail ?? makeFallbackEmail(provider, profile.providerUserId)).trim().toLowerCase();
+    const existingUser = await prisma.user.findUnique({ where: { email: newEmail } });
+    if (existingUser) {
+      const conflictToken = createConflictToken({
+        provider,
+        providerUserId: profile.providerUserId,
+        email: normalizedEmail ?? newEmail,
+        name: profile.name,
+      });
+      const redirect = new URL(stateItem.redirectUri);
+      redirect.searchParams.set('result', 'conflict');
+      redirect.searchParams.set('conflictToken', conflictToken);
+      redirect.searchParams.set('email', newEmail);
+      res.redirect(redirect.toString());
+      return;
+    }
+
+    const created = await prisma.user.create({
+      data: {
+        email: newEmail,
+        passwordHash: await hashPassword(crypto.randomUUID()),
+        profile: { create: { gender: 'unspecified', age: 30, heightCm: 170, weightKg: 70 } },
+        billing: { create: {} },
+        socialAccounts: {
+          create: {
+            provider,
+            providerUserId: profile.providerUserId,
+            email: normalizedEmail,
+          },
         },
       },
-    },
-  });
-  const tokenPair = await issueTokensForUser(created.id);
-  if (!tokenPair || 'error' in tokenPair) {
+    });
+    const tokenPair = await issueTokensForUser(created.id);
+    if (!tokenPair || 'error' in tokenPair) {
+      const redirect = new URL(stateItem.redirectUri);
+      redirect.searchParams.set('result', 'error');
+      redirect.searchParams.set('code', ErrorCodes.AUTH_FORBIDDEN);
+      redirect.searchParams.set('message', '계정을 사용할 수 없습니다.');
+      res.redirect(redirect.toString());
+      return;
+    }
+    await recordLogin(created.id);
     const redirect = new URL(stateItem.redirectUri);
-    redirect.searchParams.set('result', 'error');
-    redirect.searchParams.set('code', ErrorCodes.AUTH_FORBIDDEN);
-    redirect.searchParams.set('message', '계정을 사용할 수 없습니다.');
+    redirect.searchParams.set('result', 'success');
+    redirect.searchParams.set('accessToken', tokenPair.accessToken);
+    redirect.searchParams.set('refreshToken', tokenPair.refreshToken);
+    redirect.searchParams.set('requiresConsent', 'true');
     res.redirect(redirect.toString());
-    return;
+  } catch (e) {
+    console.error('[auth/social/callback] unhandled', { provider, err: e });
+    const msg =
+      e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'
+        ? '이미 사용 중인 계정 정보입니다. 기존 계정 연결을 선택해 주세요.'
+        : '계정을 만들 수 없습니다. 잠시 후 다시 시도해 주세요.';
+    try {
+      const redirect = new URL(stateItem.redirectUri);
+      redirect.searchParams.set('result', 'error');
+      redirect.searchParams.set('code', ErrorCodes.OAUTH_PROVIDER_ERROR);
+      redirect.searchParams.set('message', msg);
+      res.redirect(redirect.toString());
+    } catch {
+      sendError(res, 500, ErrorCodes.OAUTH_PROVIDER_ERROR, '소셜 콜백 처리 중 오류가 발생했습니다.');
+    }
   }
-  await recordLogin(created.id);
-  const redirect = new URL(stateItem.redirectUri);
-  redirect.searchParams.set('result', 'success');
-  redirect.searchParams.set('accessToken', tokenPair.accessToken);
-  redirect.searchParams.set('refreshToken', tokenPair.refreshToken);
-  redirect.searchParams.set('requiresConsent', 'true');
-  res.redirect(redirect.toString());
 });
 
 publicRouter.post('/auth/social/conflict/resolve', async (req, res) => {
