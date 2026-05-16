@@ -1,15 +1,50 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Text, View } from 'react-native';
 import { apiFetch } from '../api';
 import { getAccessToken } from '../authStorage';
+import { Banner, Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
+import { BILLING_COPY } from '../copy/billing';
 import { useTheme } from '../theme';
+import { useToast } from '../toast/useToast';
+
+type Ent = {
+  ocrQuotaLimit: number;
+  ocrQuotaUsed: number;
+  ocrPaidEnabled: boolean;
+  premiumActive?: boolean;
+};
 
 export function SubscriptionScreen() {
   const t = useTheme();
-  const [msg, setMsg] = useState<string | null>(null);
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [ent, setEnt] = useState<Ent | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error('로그인 필요');
+      const e = await apiFetch<Ent>('/me/billing/entitlements', { token });
+      setEnt(e);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : BILLING_COPY.loadError);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const isPremium = ent?.ocrPaidEnabled === true;
 
   const checkout = async () => {
-    setMsg(null);
+    setBusy(true);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('로그인 필요');
@@ -18,66 +53,90 @@ export function SubscriptionScreen() {
         token,
         body: JSON.stringify({ productType: 'premium_monthly' }),
       });
-      setMsg('checkout 스텁 완료 (OCR 유료 플래그 설정)');
+      toast.show({ kind: 'success', message: BILLING_COPY.subscribeSuccess });
+      await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : '실패');
+      toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });
+    } finally {
+      setBusy(false);
     }
   };
 
   const restore = async () => {
-    setMsg(null);
+    setBusy(true);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('로그인 필요');
       await apiFetch('/me/billing/restore', { method: 'POST', token, body: JSON.stringify({}) });
-      setMsg('복구 호출 완료');
+      toast.show({ kind: 'success', message: BILLING_COPY.restoreSuccess });
+      await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : '실패');
+      toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <View style={[styles.box, { backgroundColor: t.colors.bg, gap: t.spacing.md, padding: t.spacing.lg }]}>
-      <Text style={{ color: t.colors.fg, fontSize: t.fontSize.title, fontWeight: '700' }}>구독 · 복구</Text>
-      {msg ? <Text style={{ color: t.colors.info, fontSize: t.fontSize.body }}>{msg}</Text> : null}
+    <ScreenLayout title={BILLING_COPY.title} loading={loading}>
+      {err ? (
+        <Banner variant="danger" actionLabel="다시 시도" onAction={() => void load()}>
+          {err}
+        </Banner>
+      ) : null}
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => void checkout()}
-        style={({ pressed }) => ({
-          backgroundColor: t.colors.surface2,
-          borderColor: t.colors.border,
-          borderWidth: 1,
-          borderRadius: t.radius.md,
-          paddingVertical: t.spacing.md,
-          alignItems: 'center',
-          opacity: pressed ? 0.85 : 1,
-        })}
-      >
-        <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
-          premium_monthly Checkout (스텁)
+      {ent ? (
+        <View
+          style={{
+            alignSelf: 'flex-start',
+            paddingHorizontal: t.spacing.md,
+            paddingVertical: t.spacing.xs,
+            borderRadius: 999,
+            backgroundColor: isPremium ? t.colors.primary : t.colors.surface2,
+          }}
+        >
+          <Text
+            style={{
+              color: isPremium ? t.colors.primaryFg : t.colors.fgMuted,
+              fontWeight: '700',
+              fontSize: t.fontSize.caption,
+            }}
+          >
+            {isPremium ? BILLING_COPY.premiumBadge : BILLING_COPY.freeBadge}
+          </Text>
+        </View>
+      ) : null}
+
+      <Card>
+        <CardTitle>무료</CardTitle>
+        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>· {BILLING_COPY.freeBenefit1}</Text>
+        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>· {BILLING_COPY.freeBenefit2}</Text>
+        {ent ? (
+          <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
+            OCR {ent.ocrQuotaUsed}/{ent.ocrQuotaLimit}회 사용
+          </Text>
+        ) : null}
+      </Card>
+
+      <Card>
+        <CardTitle>프리미엄</CardTitle>
+        <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
+          {BILLING_COPY.premiumPrice}
         </Text>
-      </Pressable>
+        <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>{BILLING_COPY.skuLabel}</Text>
+        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>· {BILLING_COPY.premiumBenefit1}</Text>
+        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>· {BILLING_COPY.premiumBenefit2}</Text>
+      </Card>
 
-      <Pressable
-        accessibilityRole="button"
+      {!isPremium ? (
+        <PrimaryButton title={BILLING_COPY.subscribeCta} onPress={() => void checkout()} loading={busy} />
+      ) : null}
+      <PrimaryButton
+        title={BILLING_COPY.restoreCta}
         onPress={() => void restore()}
-        style={({ pressed }) => ({
-          backgroundColor: t.colors.surface2,
-          borderColor: t.colors.border,
-          borderWidth: 1,
-          borderRadius: t.radius.md,
-          paddingVertical: t.spacing.md,
-          alignItems: 'center',
-          opacity: pressed ? 0.85 : 1,
-        })}
-      >
-        <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>Restore</Text>
-      </Pressable>
-    </View>
+        loading={busy}
+        variant="secondary"
+      />
+    </ScreenLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  box: { flex: 1 },
-});

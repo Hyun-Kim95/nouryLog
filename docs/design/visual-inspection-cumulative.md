@@ -11,11 +11,11 @@ related:
   - docs/design/mobile-notifications-spec.md
   - docs/design/admin-toast-spec.md
   - docs/design/admin-stitch-gap-2026-05-08.md
-updated_at: 2026-05-10
+updated_at: 2026-05-16
 tags: [qa, visual-inspection, checklist, mobile, admin-web, dark-mode]
 ---
 
-# 시각 점검 누적 체크리스트 v0.7
+# 시각 점검 누적 체크리스트 v0.8
 
 ## 0) 목적
 
@@ -230,7 +230,46 @@ ProfileEditScreen — 권장량 카드 하단 override 영역:
 - [ ] medicalGeneric 행이 `t.colors.warn` 톤으로 라이트/다크 모두 가독. [origin: recommendation-override-spec §8.8]
 - [ ] 스크린리더가 토글 → helper → 입력1 → 입력2 → warning → reset 순서로 읽는다. [origin: recommendation-override-spec §8.9]
 
-## 12) 누적 합산
+## 12) 모바일 — Stitch Track C (홈·통계·기록·로그인·구독) (`diet-management-mockup-b-stitch.md`)
+
+총 18 항목. Track C RN 반영(2026-05-16) 산출. 정적 검증: `npx tsc --noEmit -p apps/mobile` 통과.
+
+### 홈 (`HomeScreen`, Stitch `edd17276…`)
+
+- [ ] 라이트/다크: primary 녹색(`#16a34a`) 톤, legacy 파란 `#2563eb` 잔존 없음. [origin: Track C M1a]
+- [ ] 로딩: 스피너만 표시, 카드 영역 깜빡임 없음. [origin: Track C M1a]
+- [ ] 오류: danger `Banner` + "다시 시도" 동작. [origin: Track C M1a]
+- [ ] 오늘 섭취 카드: kcal + P/C/F 한 줄 요약. [origin: Track C M1a + Phase W]
+- [ ] 목표 달성: `ProgressBar` 2개(칼로리·단백질), v1.4 `warnings` warn 색 1줄. [origin: Track C M1a + Phase W]
+- [ ] OCR 칩 + 4회 사전 배너(`ocr_remaining_1`) / 5회 소진 배너(`ocr_exhausted`) 식별. [origin: Track C M1a]
+- [ ] 광고 카드: 무료 시 "표시 중", 프리미엄 시 "숨겨짐" 카피. [origin: Track C M1a]
+- [ ] 프로필 목표 없음: 빈 카드 + "프로필 편집" CTA → `ProfileEdit` 이동. [origin: Track C M1a]
+
+### 통계 (`StatsScreen`, Stitch `4ed4cdfc…`)
+
+- [ ] `day|week|month` Segmented 전환 시 요약·충족률 갱신. [origin: Track C M1b]
+- [ ] `isStale` 시 warn `Banner` + `aggregatedAt`·timezone 보조 텍스트. [origin: Track C M1b]
+- [ ] 기록 없음: 빈 카드 + 기록 탭 CTA 문구. [origin: Track C M1b]
+- [ ] 충족률 카드: profile goal 대비 칼로리·단백질 `ProgressBar`. [origin: Track C M1b + Phase W]
+
+### 기록·OCR (`LogScreen`, Stitch `07a9c655…`)
+
+- [ ] 상단 OCR primary CTA 강조, 수동/템플릿 Segmented. [origin: Track C M2]
+- [ ] 4회 배너·5회 `PaywallModal` + checkout CTA (`premium_monthly`). [origin: Track C M2]
+- [ ] 최근 기록 카드형 리스트(테이블 아님). [origin: Track C M2]
+
+### 로그인 (`LoginScreen`, Stitch `6bb93f8a…` + Option B)
+
+- [ ] 이메일·비밀번호 + "이메일로 로그인" → Main/Onboarding. [origin: Track C M3]
+- [ ] 구분선 "또는 SNS로 로그인" 아래 네이버/구글/카카오. [origin: Track C M3]
+- [ ] 스크롤 가능(작은 화면), 오류 danger `Banner`. [origin: Track C M3]
+
+### 구독 (`SubscriptionScreen`, Stitch `fbad1cfc…`)
+
+- [ ] 무료 vs 프리미엄 비교 카드 2개 + SKU·가격 카피. [origin: Track C M1c]
+- [ ] 구독/복구 CTA + 토스트 성공·오류. [origin: Track C M1c]
+
+## 13) 누적 합산
 
 | 카테고리 | 항목 수 | 출처 |
 |---|---|---|
@@ -243,13 +282,14 @@ ProfileEditScreen — 권장량 카드 하단 override 영역:
 | 모바일 — 알림 본 기능 | 14 | mobile-notifications-spec §12 (Phase O 신규) |
 | 모바일 — 권장 계산 v1.4 | 14 | recommendation-v14-spec §8 (Phase P 신규) |
 | 모바일 — 권장량 사용자 override | 9 | recommendation-override-spec §8 (Phase T 신규) |
+| 모바일 — Stitch Track C | 18 | diet-management-mockup-b-stitch (Track C 신규) |
 | admin-web — Toast | 11 | admin-toast-spec §11 |
 | admin-web — 5화면 dev smoke | 10 | admin-stitch-gap §시각 점검 |
-| **합계** | **115** | — |
+| **합계** | **133** | — |
 
-> 단, §4의 1 항목(Subscription 탭 "테마 설정" 카드 위치)은 Phase J Settings 탭 이전으로 §6의 동등 항목에 의해 deprecated. §6의 1 항목(알림 슬롯 점선 보더)은 Phase O 본 기능 카드 도입으로 §10에 의해 deprecated. 실효 항목은 113개.
+> 단, §4의 1 항목(Subscription 탭 "테마 설정" 카드 위치)은 Phase J Settings 탭 이전으로 §6의 동등 항목에 의해 deprecated. §6의 1 항목(알림 슬롯 점선 보더)은 Phase O 본 기능 카드 도입으로 §10에 의해 deprecated. 실효 항목은 131개.
 
-## 13) 변경 이력
+## 14) 변경 이력
 
 - 2026-05-09 (v0.1 초안, Phase L t10): 6개 디자인 스펙 + admin-stitch-gap dev smoke § 합산 통합. 기존 직전 보고서 추정치 "47 항목"을 정확한 카운트(68)로 갱신. Phase J 영향으로 deprecated된 항목 1개 표기.
 - 2026-05-09 (v0.2, Phase L t11): MainTabs 탭 아이콘 도입 트랙(t11) 산출 6 항목을 §9에 추가. 합산 68 → 74(실효 73).
@@ -258,3 +298,4 @@ ProfileEditScreen — 권장량 카드 하단 override 영역:
 - 2026-05-10 (v0.5, Phase P): 권장 계산 v1.4 신규(§11 14항). 합산 92 → 106(실효 104, deprecated 누적 2개 그대로).
 - 2026-05-10 (v0.6, Phase S): §11 항목 12를 `t.colors.warn` 정식 적용으로 갱신(항목 수 변동 없음).
 - 2026-05-10 (v0.7, Phase T): 권장량 사용자 override 신규(§11.5 9항). 합산 106 → 115(실효 113, deprecated 누적 2개 그대로).
+- 2026-05-16 (v0.8, Track C): Stitch 모바일 RN 반영 시각 점검 신규(§12 18항). 합산 115 → 133(실효 131, deprecated 누적 2개 그대로).

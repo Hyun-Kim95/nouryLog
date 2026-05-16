@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { MealInputMode, type Prisma } from '@prisma/client';
+import { Router, type Response } from 'express';
+import { MealInputMode, MealSlot, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { resolvedReferenceAmount } from '../lib/foodTemplateReference.js';
 import { computeScaledNutritionFromGrams } from '../lib/mealFromTemplate.js';
@@ -28,6 +28,23 @@ function parseMealInputMode(raw: unknown): MealInputMode | null {
   if (raw === 'PORTION_COUNT') return MealInputMode.PORTION_COUNT;
   if (raw === 'TOTAL_GRAMS') return MealInputMode.TOTAL_GRAMS;
   return null;
+}
+
+function parseMealSlot(raw: unknown): MealSlot | null | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const s = String(raw).toUpperCase();
+  if (s === 'BREAKFAST' || s === 'LUNCH' || s === 'DINNER' || s === 'SNACK') return s as MealSlot;
+  return null;
+}
+
+function assertNonNegativeNutrition(fields: Record<string, number>, res: Response): boolean {
+  for (const [key, val] of Object.entries(fields)) {
+    if (!Number.isFinite(val) || val < 0) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `${key}는 0 이상이어야 합니다.`, { field: key });
+      return false;
+    }
+  }
+  return true;
 }
 
 function isTemplateNutritionComplete(t: {
@@ -486,6 +503,12 @@ meRouter.post('/meals', async (req, res) => {
   }
   const b = req.body as Record<string, unknown>;
   const consumedAt = b.consumedAt ? new Date(String(b.consumedAt)) : new Date();
+  const slotParsed = parseMealSlot(b.mealSlot);
+  if (b.mealSlot != null && b.mealSlot !== '' && slotParsed === null) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'mealSlot이 올바르지 않습니다.', { field: 'mealSlot' });
+    return;
+  }
+  const mealSlot = slotParsed ?? null;
 
   const rawTplId = b.foodTemplateId;
   const templateId = typeof rawTplId === 'string' && rawTplId.trim() ? rawTplId.trim() : null;
@@ -562,6 +585,7 @@ meRouter.post('/meals', async (req, res) => {
         foodTemplateId: templateId,
         mealInputMode: mode,
         portionQuantity,
+        mealSlot,
       },
     });
     res.status(201).json({ mealId: meal.id });
@@ -573,21 +597,28 @@ meRouter.post('/meals', async (req, res) => {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '음식명이 필요합니다.');
     return;
   }
+  const calories = Number(b.calories ?? 0);
+  const carbohydrate = Number(b.carbohydrate ?? 0);
+  const protein = Number(b.protein ?? 0);
+  const fat = Number(b.fat ?? 0);
+  if (!assertNonNegativeNutrition({ calories, carbohydrate, protein, fat }, res)) return;
+
   const meal = await prisma.meal.create({
     data: {
       userId,
       name,
       consumedAt,
       grams: Number(b.grams ?? 100),
-      calories: Number(b.calories ?? 0),
-      carbohydrate: Number(b.carbohydrate ?? 0),
-      protein: Number(b.protein ?? 0),
-      fat: Number(b.fat ?? 0),
+      calories,
+      carbohydrate,
+      protein,
+      fat,
       note: b.note ? String(b.note) : null,
       imageUrl: b.imageUrl ? String(b.imageUrl) : null,
       foodTemplateId: null,
       mealInputMode: null,
       portionQuantity: null,
+      mealSlot,
     },
   });
   res.status(201).json({ mealId: meal.id });
@@ -601,7 +632,36 @@ meRouter.get('/meals', async (req, res) => {
   }
   const page = Math.max(1, Number(req.query.page ?? 1));
   const size = Math.min(100, Math.max(1, Number(req.query.size ?? 15)));
-  const where = { userId, active: true };
+  const fromRaw = req.query.from;
+  const toRaw = req.query.to;
+  const mealSlotFilter = parseMealSlot(req.query.mealSlot);
+  if (req.query.mealSlot != null && req.query.mealSlot !== '' && mealSlotFilter === null) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'mealSlot이 올바르지 않습니다.', { field: 'mealSlot' });
+    return;
+  }
+  const consumedAt: Prisma.DateTimeFilter = {};
+  if (fromRaw) {
+    const from = new Date(String(fromRaw));
+    if (Number.isNaN(from.getTime())) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'from 날짜가 올바르지 않습니다.', { field: 'from' });
+      return;
+    }
+    consumedAt.gte = from;
+  }
+  if (toRaw) {
+    const to = new Date(String(toRaw));
+    if (Number.isNaN(to.getTime())) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'to 날짜가 올바르지 않습니다.', { field: 'to' });
+      return;
+    }
+    consumedAt.lte = to;
+  }
+  const where: Prisma.MealWhereInput = {
+    userId,
+    active: true,
+    ...(mealSlotFilter ? { mealSlot: mealSlotFilter } : {}),
+    ...(Object.keys(consumedAt).length > 0 ? { consumedAt } : {}),
+  };
   const [total, items] = await Promise.all([
     prisma.meal.count({ where }),
     prisma.meal.findMany({
@@ -623,6 +683,7 @@ meRouter.get('/meals', async (req, res) => {
         foodTemplateId: true,
         mealInputMode: true,
         portionQuantity: true,
+        mealSlot: true,
       },
     }),
   ]);
@@ -644,6 +705,7 @@ meRouter.get('/meals', async (req, res) => {
       foodTemplateId: m.foodTemplateId,
       mealInputMode: m.mealInputMode,
       portionQuantity: m.portionQuantity,
+      mealSlot: m.mealSlot,
     })),
   });
 });

@@ -16,6 +16,7 @@ import { useTheme } from '../theme';
 import { Field } from '../components/Field';
 import { Segmented } from '../components/Segmented';
 import { RadioGroup } from '../components/RadioGroup';
+import { Banner } from '../components/ui';
 import {
   ProfileApiError,
   isAuthDenied,
@@ -265,18 +266,7 @@ export function OnboardingScreen({ navigation }: Props) {
           </View>
 
           {banner ? (
-            <View
-              accessibilityLiveRegion="assertive"
-              style={{
-                padding: t.spacing.md,
-                borderRadius: t.radius.md,
-                backgroundColor: t.colors.surface2,
-                borderColor: t.colors.danger,
-                borderWidth: 1,
-              }}
-            >
-              <Text style={{ color: t.colors.danger, fontSize: t.fontSize.body }}>{banner}</Text>
-            </View>
+            <Banner variant="danger">{banner}</Banner>
           ) : null}
 
           <Segmented<Gender>

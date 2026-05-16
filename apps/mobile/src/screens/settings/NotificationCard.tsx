@@ -11,6 +11,7 @@ import {
   View,
   type AppStateStatus,
 } from 'react-native';
+import { Card, CardTitle } from '../../components/ui';
 import { useTheme } from '../../theme';
 import { useToast } from '../../toast/useToast';
 import { getAccessToken } from '../../authStorage';
@@ -230,27 +231,11 @@ export function NotificationCard() {
     setModal(null);
   };
 
-  /// 헤더 — caption 컬러는 fgMuted (스펙 §2.4).
-  const headerStyle = {
-    color: t.colors.fgMuted,
-    fontSize: t.fontSize.caption,
-    fontWeight: '700' as const,
-  };
-
   /// 상태 D — 로딩 (짧음, 50ms 이내 보통). 깜빡 방지 위해 단순 박스만.
   if (permState === 'loading') {
     return (
-      <View
-        style={{
-          padding: t.spacing.md,
-          borderRadius: t.radius.md,
-          borderColor: t.colors.border,
-          borderWidth: 1,
-          backgroundColor: t.colors.surface,
-          gap: t.spacing.sm,
-        }}
-      >
-        <Text style={headerStyle}>알림</Text>
+      <Card>
+        <CardTitle>알림</CardTitle>
         <View
           style={{
             height: 16,
@@ -258,24 +243,15 @@ export function NotificationCard() {
             borderRadius: t.radius.sm,
           }}
         />
-      </View>
+      </Card>
     );
   }
 
   /// 상태 A — 권한 결정 안 됨.
   if (permState === 'undetermined') {
     return (
-      <View
-        style={{
-          padding: t.spacing.md,
-          borderRadius: t.radius.md,
-          borderColor: t.colors.border,
-          borderWidth: 1,
-          backgroundColor: t.colors.surface,
-          gap: t.spacing.sm,
-        }}
-      >
-        <Text style={headerStyle}>알림</Text>
+      <Card>
+        <CardTitle>알림</CardTitle>
         <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
           식사 시간과 권장량 미달을 알려드릴까요?
         </Text>
@@ -295,24 +271,15 @@ export function NotificationCard() {
             알림 켜기
           </Text>
         </Pressable>
-      </View>
+      </Card>
     );
   }
 
   /// 상태 C / E — 권한 거부 (자동 OFF 부수효과는 refresh에서 이미 처리).
   if (permState === 'denied') {
     return (
-      <View
-        style={{
-          padding: t.spacing.md,
-          borderRadius: t.radius.md,
-          borderColor: t.colors.border,
-          borderWidth: 1,
-          backgroundColor: t.colors.surface,
-          gap: t.spacing.sm,
-        }}
-      >
-        <Text style={headerStyle}>알림</Text>
+      <Card>
+        <CardTitle>알림</CardTitle>
         <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
           알림이 꺼져있어요.
         </Text>
@@ -337,24 +304,15 @@ export function NotificationCard() {
             기기 설정 열기
           </Text>
         </Pressable>
-      </View>
+      </Card>
     );
   }
 
   /// 상태 B — 권한 허용.
   return (
-    <View
-      style={{
-        padding: t.spacing.md,
-        borderRadius: t.radius.md,
-        borderColor: t.colors.border,
-        borderWidth: 1,
-        backgroundColor: t.colors.surface,
-        gap: t.spacing.sm,
-      }}
-    >
+    <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={headerStyle}>알림</Text>
+        <CardTitle>알림</CardTitle>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="알림 모두 끄기 (위험)"
@@ -421,7 +379,7 @@ export function NotificationCard() {
           onSave={onSaveTime}
         />
       )}
-    </View>
+    </Card>
   );
 }
 

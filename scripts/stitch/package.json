@@ -1,5 +1,21 @@
 {
   "name": "stitch-scripts",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "generate-missing": "tsx 05-generate-missing-screens.ts",
+    "apply-missing-ds": "tsx 06-apply-missing-ds.ts",
+    "collect-missing": "tsx 07-collect-missing-screens.ts",
+    "missing:all": "npm run generate-missing && npm run apply-missing-ds && npm run collect-missing",
+    "generate-split": "tsx 08-generate-split-screens.ts",
+    "apply-split-ds": "tsx 09-apply-split-ds.ts",
+    "collect-split": "tsx 10-collect-split-screens.ts",
+    "split:all": "npm run generate-split && npm run apply-split-ds && npm run collect-split"
+  },
+  "dependencies": {
+    "@google/stitch-sdk": "^0.2.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
 }

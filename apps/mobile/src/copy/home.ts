@@ -1,0 +1,20 @@
+export const HOME_COPY = {
+  title: '오늘의 식단',
+  subtitle: '오늘 섭취와 목표를 한눈에 확인해요.',
+  intakeTitle: '오늘 섭취',
+  goalsTitle: '목표 달성',
+  calorie: '칼로리',
+  protein: '단백질',
+  carb: '탄수화물',
+  fat: '지방',
+  ocrChip: (used: number, limit: number) => `OCR 무료 ${used}/${limit}회`,
+  ocrBannerRemaining:
+    '무료 OCR가 1회 남았어요. 소진 후에는 프리미엄 구독이 필요합니다.',
+  ocrBannerExhausted: '무료 OCR를 모두 사용했어요. 계속 쓰려면 구독이 필요합니다.',
+  adBanner: '광고가 표시 중이에요. 프리미엄 구독 시 하단 광고가 숨겨집니다.',
+  adHidden: '프리미엄 이용 중이라 광고가 숨겨져 있어요.',
+  emptyGoals: '권장 목표가 없어요. 프로필을 입력하면 달성률을 볼 수 있어요.',
+  profileCta: '프로필 편집',
+  retry: '다시 시도',
+  loadError: '홈 정보를 불러오지 못했어요.',
+} as const;

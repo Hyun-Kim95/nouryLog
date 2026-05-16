@@ -17,6 +17,7 @@ import { useTheme } from '../theme';
 import { Field } from '../components/Field';
 import { Segmented } from '../components/Segmented';
 import { RadioGroup } from '../components/RadioGroup';
+import { Banner, Card, CardTitle } from '../components/ui';
 import {
   ProfileApiError,
   getProfile,
@@ -421,18 +422,7 @@ export function ProfileEditScreen({ navigation }: Props) {
           keyboardShouldPersistTaps="handled"
         >
           {banner ? (
-            <View
-              accessibilityLiveRegion="assertive"
-              style={{
-                padding: t.spacing.md,
-                borderRadius: t.radius.md,
-                backgroundColor: t.colors.surface2,
-                borderColor: t.colors.danger,
-                borderWidth: 1,
-              }}
-            >
-              <Text style={{ color: t.colors.danger, fontSize: t.fontSize.body }}>{banner}</Text>
-            </View>
+            <Banner variant="danger">{banner}</Banner>
           ) : null}
 
           {loading ? (
@@ -514,20 +504,9 @@ export function ProfileEditScreen({ navigation }: Props) {
                 onChange={(v) => setField('goal', v)}
               />
 
-              <View
-                style={{
-                  padding: t.spacing.md,
-                  borderRadius: t.radius.md,
-                  borderColor: t.colors.border,
-                  borderWidth: 1,
-                  backgroundColor: t.colors.surface2,
-                  gap: 4,
-                }}
-              >
+              <Card style={{ backgroundColor: t.colors.surface2 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, fontWeight: '700' }}>
-                    현재 권장량 (자동 계산)
-                  </Text>
+                  <CardTitle>현재 권장량 (자동 계산)</CardTitle>
                   <Text
                     accessibilityLabel={`권장 계산 버전 ${RECOMMENDATION_COPY.versionTag}`}
                     style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}
@@ -647,7 +626,7 @@ export function ProfileEditScreen({ navigation }: Props) {
                     </Pressable>
                   </View>
                 ) : null}
-              </View>
+              </Card>
             </>
           )}
         </ScrollView>

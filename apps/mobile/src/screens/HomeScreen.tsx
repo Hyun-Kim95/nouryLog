@@ -1,82 +1,147 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../themeTokens';
+import { useCallback, useState } from 'react';
+import { Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { apiFetch } from '../api';
 import { getAccessToken } from '../authStorage';
+import { Banner, Card, CardTitle, Chip, PrimaryButton, ProgressBar, ScreenLayout } from '../components/ui';
+import { HOME_COPY } from '../copy/home';
+import { sortedWarnings, WARNING_COPY } from '../copy/recommendation';
+import { useFocusReload } from '../hooks/useFocusReload';
+import { computeFulfillment } from '../lib/goalFulfillment';
+import { fetchTodayGoals, fetchTodayIntake } from '../lib/todayNutrition';
+import type { RootStackParamList } from '../navigation';
+import { useTheme } from '../theme';
 
 type Ent = {
   ocrQuotaLimit: number;
   ocrQuotaUsed: number;
   ocrPaidEnabled: boolean;
-  nextPaywallTrigger: string;
+  nextPaywallTrigger: 'none' | 'ocr_remaining_1' | 'ocr_exhausted';
 };
 
 type Ads = { showBottomBanner: boolean; reason: string };
 
 export function HomeScreen() {
+  const t = useTheme();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [ent, setEnt] = useState<Ent | null>(null);
   const [ads, setAds] = useState<Ads | null>(null);
+  const [intake, setIntake] = useState<Awaited<ReturnType<typeof fetchTodayIntake>> | null>(null);
+  const [goals, setGoals] = useState<Awaited<ReturnType<typeof fetchTodayGoals>> | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent }: { silent: boolean }) => {
+    if (!silent) setLoading(true);
     setErr(null);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('로그인 필요');
-      const [e, a] = await Promise.all([
+      const [e, a, todayIntake, todayGoals] = await Promise.all([
         apiFetch<Ent>('/me/billing/entitlements', { token }),
         apiFetch<Ads>('/me/ads/status', { token }),
+        fetchTodayIntake(token),
+        fetchTodayGoals(token),
       ]);
       setEnt(e);
       setAds(a);
+      setIntake(todayIntake);
+      setGoals(todayGoals);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '오류');
+      setErr(e instanceof Error ? e.message : HOME_COPY.loadError);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusReload(load);
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
+  const warnings = sortedWarnings(goals?.profile.warnings).map((w) => WARNING_COPY[w]);
+  const profile = goals?.profile;
 
   return (
-    <View style={styles.box}>
-      <Text style={styles.title}>홈</Text>
-      {err ? <Text style={styles.err}>{err}</Text> : null}
-      {ent && (
-        <Text style={styles.body}>
-          OCR 무료 {ent.ocrQuotaUsed}/{ent.ocrQuotaLimit} · 유료 OCR {ent.ocrPaidEnabled ? 'ON' : 'OFF'} · 페이월 신호:{' '}
-          {ent.nextPaywallTrigger}
-        </Text>
-      )}
-      {ads && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>
-            광고 배너 {ads.showBottomBanner ? '표시' : '숨김'} ({ads.reason})
-          </Text>
+    <ScreenLayout title={HOME_COPY.title} subtitle={HOME_COPY.subtitle} loading={loading}>
+      {err ? (
+        <Banner variant="danger" actionLabel={HOME_COPY.retry} onAction={() => void load({ silent: false })}>
+          {err}
+        </Banner>
+      ) : null}
+
+      {ent ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm }}>
+          <Chip label={HOME_COPY.ocrChip(ent.ocrQuotaUsed, ent.ocrQuotaLimit)} />
+          {ent.ocrPaidEnabled ? <Chip label="OCR 유료 ON" tone="muted" /> : null}
         </View>
-      )}
-    </View>
+      ) : null}
+
+      {ent?.nextPaywallTrigger === 'ocr_remaining_1' ? (
+        <Banner variant="warn">{HOME_COPY.ocrBannerRemaining}</Banner>
+      ) : null}
+      {ent?.nextPaywallTrigger === 'ocr_exhausted' ? (
+        <Banner variant="warn">{HOME_COPY.ocrBannerExhausted}</Banner>
+      ) : null}
+
+      {intake ? (
+        <Card>
+          <CardTitle>{HOME_COPY.intakeTitle}</CardTitle>
+          <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
+            {intake.calorieKcal} kcal
+          </Text>
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
+            {HOME_COPY.protein} {Math.round(intake.proteinG)}g · {HOME_COPY.carb}{' '}
+            {Math.round(intake.carbohydrateG)}g · {HOME_COPY.fat} {Math.round(intake.fatG)}g
+          </Text>
+        </Card>
+      ) : null}
+
+      {goals?.proteinGoalG != null || goals?.calorieGoalKcal != null ? (
+        <Card>
+          <CardTitle>{HOME_COPY.goalsTitle}</CardTitle>
+          {goals.calorieGoalKcal != null && intake ? (
+            <ProgressBar
+              label={HOME_COPY.calorie}
+              value={Math.round(intake.calorieKcal)}
+              max={goals.calorieGoalKcal}
+              unit=" kcal"
+              fulfillment={computeFulfillment(
+                'calorie',
+                intake.calorieKcal,
+                goals.calorieGoalKcal,
+                profile,
+              )}
+            />
+          ) : null}
+          {goals.proteinGoalG != null && intake ? (
+            <ProgressBar
+              label={HOME_COPY.protein}
+              value={Math.round(intake.proteinG)}
+              max={goals.proteinGoalG}
+              unit="g"
+              fulfillment={computeFulfillment('protein', intake.proteinG, goals.proteinGoalG, profile)}
+            />
+          ) : null}
+          {warnings.map((line) => (
+            <Text key={line} style={{ color: t.colors.warn, fontSize: t.fontSize.caption }}>
+              {line}
+            </Text>
+          ))}
+        </Card>
+      ) : !loading && !err ? (
+        <Card>
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{HOME_COPY.emptyGoals}</Text>
+          <PrimaryButton title={HOME_COPY.profileCta} onPress={() => navigation.navigate('ProfileEdit')} />
+        </Card>
+      ) : null}
+
+      {ads ? (
+        <Card dashed={ads.showBottomBanner}>
+          <CardTitle>광고</CardTitle>
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
+            {ads.showBottomBanner ? HOME_COPY.adBanner : HOME_COPY.adHidden}
+          </Text>
+        </Card>
+      ) : null}
+    </ScreenLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  box: { flex: 1, padding: 16, gap: 12 },
-  title: { fontSize: 20, fontWeight: '700' },
-  body: { fontSize: 15, color: colors.text },
-  err: { color: colors.danger },
-  banner: { padding: 12, backgroundColor: '#eff6ff', borderRadius: 8 },
-  bannerText: { fontSize: 14 },
-});

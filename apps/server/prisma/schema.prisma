@@ -57,6 +57,13 @@ enum MealInputMode {
   TOTAL_GRAMS
 }
 
+enum MealSlot {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
 model SocialAccount {
   id             String         @id @default(cuid())
   provider       SocialProvider
@@ -106,6 +113,8 @@ model Meal {
   mealInputMode   MealInputMode?
   /// `PORTION_COUNT`일 때만 값이 있음. `TOTAL_GRAMS` 모드에서는 null.
   portionQuantity Float?
+  /// 아침/점심/저녁/추가(간식). 레거시 row는 null.
+  mealSlot        MealSlot?
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   foodTemplate FoodTemplate? @relation(fields: [foodTemplateId], references: [id], onDelete: SetNull)

@@ -1,7 +1,16 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Text } from 'react-native';
+import { Segmented } from '../components/Segmented';
+import { Banner, Card, CardTitle, ProgressBar, ScreenLayout } from '../components/ui';
+import { STATS_COPY } from '../copy/stats';
 import { apiFetch } from '../api';
 import { getAccessToken } from '../authStorage';
+import { useFocusReload } from '../hooks/useFocusReload';
+import { computeFulfillment } from '../lib/goalFulfillment';
+import { fetchTodayGoals } from '../lib/todayNutrition';
+import { useTheme } from '../theme';
+
+type StatsRange = 'day' | 'week' | 'month';
 
 type Stats = {
   aggregatedAt: string;
@@ -12,62 +21,125 @@ type Stats = {
 };
 
 export function StatsScreen() {
+  const t = useTheme();
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<Stats | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [range, setRange] = useState<StatsRange>('day');
+  const [data, setData] = useState<Stats | null>(null);
+  const [goals, setGoals] = useState<Awaited<ReturnType<typeof fetchTodayGoals>> | null>(null);
 
-  useEffect(() => {
-    void (async () => {
+  const load = useCallback(
+    async ({ silent }: { silent: boolean }) => {
+      if (!silent) setLoading(true);
+      setErr(null);
       try {
         const token = await getAccessToken();
         if (!token) throw new Error('로그인 필요');
-        const s = await apiFetch<Stats>('/stats?range=day', { token });
+        const [s, g] = await Promise.all([
+          apiFetch<Stats>(`/stats?range=${range}`, { token }),
+          fetchTodayGoals(token),
+        ]);
         setData(s);
+        setGoals(g);
       } catch (e) {
-        setErr(e instanceof Error ? e.message : '오류');
+        setErr(e instanceof Error ? e.message : STATS_COPY.loadError);
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
-    })();
-  }, []);
+    },
+    [range],
+  );
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
+  useFocusReload(load);
+
+  useEffect(() => {
+    void load({ silent: false });
+  }, [range, load]);
+
+  const empty =
+    data &&
+    data.summary.calories === 0 &&
+    data.summary.protein === 0 &&
+    data.summary.carbohydrate === 0 &&
+    data.summary.fat === 0;
+
+  const profile = goals?.profile;
+  const proteinGoalG = goals?.proteinGoalG ?? null;
+  const calorieGoalKcal = goals?.calorieGoalKcal ?? null;
 
   return (
-    <View style={styles.box}>
-      <Text style={styles.title}>통계</Text>
-      {err ? <Text style={styles.err}>{err}</Text> : null}
-      {data?.isStale ? (
-        <View style={styles.warn}>
-          <Text>집계 지연 · staleHours {data.staleHours}</Text>
-        </View>
+    <ScreenLayout title={STATS_COPY.title} loading={loading}>
+      <Segmented<StatsRange>
+        options={[
+          { value: 'day', label: STATS_COPY.rangeDay },
+          { value: 'week', label: STATS_COPY.rangeWeek },
+          { value: 'month', label: STATS_COPY.rangeMonth },
+        ]}
+        value={range}
+        onChange={setRange}
+      />
+
+      {err ? (
+        <Banner variant="danger" actionLabel={STATS_COPY.retry} onAction={() => void load({ silent: false })}>
+          {err}
+        </Banner>
       ) : null}
-      {data && (
+
+      {data?.isStale ? (
+        <Banner variant="warn">{STATS_COPY.staleBanner(data.staleHours)}</Banner>
+      ) : null}
+
+      {data && !empty ? (
         <>
-          <Text style={styles.body}>타임존 {data.timezone}</Text>
-          <Text style={styles.body}>칼로리 합계 {data.summary.calories}</Text>
-          <Text style={styles.body}>
-            단백질 {data.summary.protein} · 탄수 {data.summary.carbohydrate} · 지방 {data.summary.fat}
+          <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
+            {STATS_COPY.aggregatedAt(data.aggregatedAt, data.timezone)}
           </Text>
-          <Text style={styles.muted}>aggregatedAt {data.aggregatedAt}</Text>
+          <Card>
+            <CardTitle>{STATS_COPY.summaryTitle}</CardTitle>
+            <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
+              {data.summary.calories} kcal
+            </Text>
+            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
+              단백질 {data.summary.protein}g · 탄수 {data.summary.carbohydrate}g · 지방 {data.summary.fat}g
+            </Text>
+          </Card>
+          {(proteinGoalG != null || calorieGoalKcal != null) && range === 'day' ? (
+            <Card>
+              <CardTitle>{STATS_COPY.fulfillmentTitle}</CardTitle>
+              {calorieGoalKcal != null ? (
+                <ProgressBar
+                  label="칼로리"
+                  value={data.summary.calories}
+                  max={calorieGoalKcal}
+                  unit=" kcal"
+                  fulfillment={computeFulfillment(
+                    'calorie',
+                    data.summary.calories,
+                    calorieGoalKcal,
+                    profile,
+                  )}
+                />
+              ) : null}
+              {proteinGoalG != null ? (
+                <ProgressBar
+                  label="단백질"
+                  value={data.summary.protein}
+                  max={proteinGoalG}
+                  unit="g"
+                  fulfillment={computeFulfillment('protein', data.summary.protein, proteinGoalG, profile)}
+                />
+              ) : null}
+            </Card>
+          ) : null}
         </>
-      )}
-    </View>
+      ) : null}
+
+      {data && empty && !err ? (
+        <Card>
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{STATS_COPY.empty}</Text>
+          <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>{STATS_COPY.emptyCta}</Text>
+        </Card>
+      ) : null}
+    </ScreenLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  box: { flex: 1, padding: 16, gap: 8 },
-  title: { fontSize: 20, fontWeight: '700' },
-  body: { fontSize: 16 },
-  muted: { fontSize: 12, color: '#666' },
-  err: { color: '#b91c1c' },
-  warn: { padding: 10, backgroundColor: '#fffbeb', borderRadius: 8 },
-});

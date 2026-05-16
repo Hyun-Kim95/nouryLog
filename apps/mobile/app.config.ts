@@ -14,6 +14,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   const plugins: ExpoConfig['plugins'] = [
     'expo-secure-store',
+    [
+      'expo-image-picker',
+      {
+        photosPermission: '식단 사진을 OCR 분석하려면 사진 라이브러리 접근이 필요합니다.',
+        cameraPermission: '식단 사진을 촬영해 OCR 분석하려면 카메라 접근이 필요합니다.',
+      },
+    ],
     ['expo-notifications', { color: '#16a34a' }],
     [
       '@react-native-seoul/naver-login',

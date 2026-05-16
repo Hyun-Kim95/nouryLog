@@ -90,7 +90,7 @@ tags: [api, contract, backend, frontend]
 ### Meals
 - `GET /me/food-templates?query=&category=&page=&size=15` — 활성 음식 템플릿만(일반 사용자). 응답 `items[]`에 `referenceAmount`, `portionUnit`, `portionLabel`, `servingGrams`, `calories`, `protein`, `fat`, `carbohydrate`, `memo`, `category` 포함.
 - `POST /meals`
-- `GET /meals?from=&to=&page=&size=15`
+- `GET /meals?from=&to=&mealSlot=&page=&size=15` — `from`/`to`(ISO8601)로 `consumedAt` 범위 필터. `mealSlot`: `BREAKFAST`|`LUNCH`|`DINNER`|`SNACK`.
 - `PUT /meals/{mealId}`
 - `PATCH /meals/{mealId}/deactivate`
 
@@ -110,7 +110,9 @@ tags: [api, contract, backend, frontend]
 
 **수정 `PUT /meals/{mealId}`**: 위와 동일하게 `foodTemplateId`+`mealInputMode`+수량 필드가 오면 재계산. `foodTemplateId`에 `null`을 명시하면 템플릿 연동을 해제하고 이후 필드는 수동 기록 규칙으로 갱신한다. 그 외 부분 갱신은 기존 필드 단위 규칙을 따른다.
 
-응답 `GET /meals` 항목: 기존 필드에 더해 `foodTemplateId`(nullable), `mealInputMode`(nullable enum), `portionQuantity`(nullable number) 포함.
+응답 `GET /meals` 항목: 기존 필드에 더해 `foodTemplateId`(nullable), `mealInputMode`(nullable enum), `portionQuantity`(nullable number), `mealSlot`(nullable: `BREAKFAST`|`LUNCH`|`DINNER`|`SNACK`) 포함.
+
+**`POST /meals` 공통:** 요청에 `mealSlot`(선택, enum) 포함 가능. 레거시 row는 null.
 
 검증 원칙:
 - 섭취량/영양소 음수 입력 불가 (`422`)

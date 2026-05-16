@@ -10,6 +10,12 @@
 
 export type DeviceType = 'DESKTOP' | 'MOBILE' | 'TABLET' | 'AGNOSTIC';
 
+export type ScreenBriefBase = {
+  title: string;
+  deviceType: DeviceType;
+  prompt: string;
+};
+
 export type ScreenBrief = {
   key: 'ADM_FOODS' | 'ADM_INQUIRIES' | 'ADM_NOTICES' | 'APP_ONBOARD';
   title: string;
