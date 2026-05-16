@@ -16,4 +16,7 @@ export const STATS_COPY = {
   rangeDay: '하루',
   rangeWeek: '주',
   rangeMonth: '월',
+  periodPrev: '이전 기간',
+  periodNext: '다음 기간',
+  periodFutureBlocked: '아직 시작하지 않은 기간이에요.',
 } as const;

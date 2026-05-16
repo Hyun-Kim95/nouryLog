@@ -132,13 +132,24 @@ tags: [api, contract, backend, frontend]
 - `OCR_FREE_QUOTA_EXCEEDED`, `PAYMENT_REQUIRED`
 
 ### Stats
-- `GET /stats?range=meal|day|week|month`
+- `GET /stats?range=meal|day|week|month&anchor=YYYY-MM-DD`
+
+쿼리:
+- `range` (필수): `meal` | `day` | `week` | `month`
+- `anchor` (선택): `YYYY-MM-DD`, **Asia/Seoul** 달력 날짜. 생략 시 KST “오늘”. `day`/`week`/`month`에서 anchor가 속한 달력 기간을 집계한다.
+- `meal`: 최근 24시간 롤링(anchor 무시)
+- `day`: anchor 날짜 하루(00:00~다음날 00:00 KST, `toExclusive` 미포함)
+- `week`: anchor가 포함된 주 **월요일~일요일** (KST)
+- `month`: anchor가 속한 달 **1일~다음달 1일** (KST)
+- 집계: `consumedAt >= period.from` AND `consumedAt < period.toExclusive`
+- 미래 기간: `period.from`이 KST 내일 00:00 이후이면 `422`, `field: anchor`
 
 응답 필수 필드:
 - `aggregatedAt`: 마지막 배치 완료 시각
 - `isStale`: 지연 여부
 - `staleHours`: 지연 시간(시간 단위)
-- `timezone`: 집계 기준 타임존
+- `timezone`: 집계 기준 타임존 (`Asia/Seoul`)
+- `period`: `anchor`, `from`, `toExclusive`(ISO 8601), `label`(KST 기준 표시 문자열)
 - `summary`: `calories`, `carbohydrate`, `protein`, `fat`
 
 ## 4) 관리자 API

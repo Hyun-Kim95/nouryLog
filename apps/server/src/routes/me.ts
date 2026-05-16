@@ -8,6 +8,12 @@ import { sendError, ErrorCodes } from '../lib/errors.js';
 import { OCR_FREE_LIMIT, STATS_STALE_HOURS } from '../lib/config.js';
 import { detectNutrition } from '../services/ocrService.js';
 import { calculateRecommendationFull } from '../lib/recommendation.js';
+import {
+  boundsForRange,
+  isPeriodInFuture,
+  parseAnchorDate,
+  todayAnchorKst,
+} from '../lib/statsPeriod.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
@@ -136,26 +142,10 @@ async function createMissingConsents(
   }
 }
 
-function rangeFrom(range: string): Date {
-  const now = new Date();
-  const from = new Date(now);
-  if (range === 'meal') {
-    from.setTime(now.getTime() - 24 * 60 * 60 * 1000);
-    return from;
-  }
-  if (range === 'day') {
-    from.setHours(0, 0, 0, 0);
-    return from;
-  }
-  if (range === 'week') {
-    from.setDate(from.getDate() - 7);
-    return from;
-  }
-  if (range === 'month') {
-    from.setDate(from.getDate() - 30);
-    return from;
-  }
-  throw new Error('bad_range');
+function mealRollingBounds(now = new Date()) {
+  const toExclusive = now;
+  const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  return { from, toExclusive, anchor: todayAnchorKst(now), label: '최근 24시간' };
 }
 
 meRouter.post('/me/consents', async (req, res) => {
@@ -950,13 +940,40 @@ meRouter.get('/stats', async (req, res) => {
     return;
   }
   const range = String(req.query.range ?? '');
-  let from: Date;
+  const anchorRaw = req.query.anchor;
+  const anchorParsed = parseAnchorDate(anchorRaw);
+  if (anchorRaw !== undefined && anchorRaw !== '' && anchorParsed === null) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'anchor 날짜가 올바르지 않습니다.', { field: 'anchor' });
+    return;
+  }
+
+  const now = new Date();
+  let period: {
+    anchor: string;
+    from: Date;
+    toExclusive: Date;
+    label: string;
+  };
+
   try {
-    from = rangeFrom(range);
+    if (range === 'meal') {
+      period = mealRollingBounds(now);
+    } else if (range === 'day' || range === 'week' || range === 'month') {
+      const anchor = anchorParsed ?? todayAnchorKst(now);
+      const bounds = boundsForRange(range, anchor);
+      if (isPeriodInFuture(bounds.from, todayAnchorKst(now))) {
+        sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '미래 기간은 조회할 수 없습니다.', { field: 'anchor' });
+        return;
+      }
+      period = bounds;
+    } else {
+      throw new Error('bad_range');
+    }
   } catch {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'range 파라미터가 필요합니다.', { field: 'range' });
     return;
   }
+
   const batch = await prisma.statsBatch.findUnique({ where: { id: 'singleton' } });
   const aggregatedAt = batch?.lastRunAt ?? new Date();
   const staleMs = Date.now() - aggregatedAt.getTime();
@@ -964,7 +981,11 @@ meRouter.get('/stats', async (req, res) => {
   const isStale = staleHours > STATS_STALE_HOURS;
 
   const agg = await prisma.meal.aggregate({
-    where: { userId, active: true, consumedAt: { gte: from } },
+    where: {
+      userId,
+      active: true,
+      consumedAt: { gte: period.from, lt: period.toExclusive },
+    },
     _sum: {
       calories: true,
       carbohydrate: true,
@@ -978,6 +999,12 @@ meRouter.get('/stats', async (req, res) => {
     isStale,
     staleHours: Math.round(staleHours * 10) / 10,
     timezone: 'Asia/Seoul',
+    period: {
+      anchor: period.anchor,
+      from: period.from.toISOString(),
+      toExclusive: period.toExclusive.toISOString(),
+      label: period.label,
+    },
     summary: {
       calories: agg._sum.calories ?? 0,
       carbohydrate: agg._sum.carbohydrate ?? 0,
