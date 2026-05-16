@@ -73,16 +73,16 @@ tags: [requirements, prd, mobile-app, admin-web]
 
 ### 6.1.1 사용자 인증 (이메일 + SNS)
 - 모바일 사용자 로그인은 이메일/비밀번호와 SNS 로그인을 함께 지원한다.
-- SNS 지원 대상: `naver`, `google`, `kakao`.
+- SNS 지원 대상: `naver`, `google`, `kakao`. (안드로이드 기준 네이티브 SDK 사용, iOS는 후순위)
 - 관리자 웹은 기존 이메일 로그인만 유지한다.
-- SNS 로그인 완료 시 기존 로그인과 동일하게 `accessToken`/`refreshToken`을 발급한다.
+- 흐름: 모바일이 각 provider 의 **네이티브 SDK** 로 로그인해 provider access token(또는 idToken)을 얻고, `POST /auth/social/:provider/exchange` 로 서버에 전달하면 서버가 provider 프로필을 검증해 우리 서비스의 `accessToken`/`refreshToken` 을 발급한다. 기존 Chrome Custom Tab + 서버 OAuth(`/start`·`/callback`) 흐름은 단종됐다.
 - 계정 충돌 정책:
   - SNS 제공 이메일이 기존 이메일 계정과 충돌하면 자동 연결하지 않는다.
   - 사용자에게 `기존 계정 연결` / `새 SNS 계정 생성` / `취소`를 명시적으로 선택하게 한다.
   - 선택 결과에 따라 서버는 계정 연결 또는 분리 계정 생성을 수행한다.
 - 취소/예외 처리:
-  - 사용자가 OAuth 인증 창에서 취소하면 로그인 화면에 취소 안내를 노출하고 기존 상태를 유지한다.
-  - 외부 인증 서버 오류/네트워크 오류 시 재시도 버튼을 제공한다.
+  - 사용자가 SDK 화면에서 취소하면 로그인 화면에 취소 안내(info 토스트)를 노출하고 기존 상태를 유지한다.
+  - SDK/네트워크 오류 시 재시도 버튼을 제공한다.
   - SNS 제공자가 이메일을 제공하지 않으면 분리 계정(시스템 생성 이메일)으로 가입 처리한다.
 
 ### 6.2 자동 입력(OCR)

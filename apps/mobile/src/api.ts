@@ -77,10 +77,32 @@ export async function postConsents(
 
 export type SocialProvider = 'naver' | 'google' | 'kakao';
 
-export async function socialStartRequest(provider: SocialProvider, redirectUri: string): Promise<{ authorizationUrl: string }> {
-  return apiFetch<{ authorizationUrl: string }>(`/auth/social/${provider}/start`, {
+export type SocialExchangeRequest = {
+  providerAccessToken?: string;
+  idToken?: string;
+  source?: string;
+};
+
+export type SocialExchangeSuccess = {
+  result: 'success';
+  accessToken: string;
+  refreshToken: string;
+  requiresConsent: boolean;
+};
+export type SocialExchangeConflict = {
+  result: 'conflict';
+  conflictToken: string;
+  email: string;
+};
+export type SocialExchangeResponse = SocialExchangeSuccess | SocialExchangeConflict;
+
+export async function socialExchangeRequest(
+  provider: SocialProvider,
+  body: SocialExchangeRequest,
+): Promise<SocialExchangeResponse> {
+  return apiFetch<SocialExchangeResponse>(`/auth/social/${provider}/exchange`, {
     method: 'POST',
-    body: JSON.stringify({ redirectUri }),
+    body: JSON.stringify(body),
   });
 }
 

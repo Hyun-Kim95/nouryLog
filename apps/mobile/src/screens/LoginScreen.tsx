@@ -1,40 +1,23 @@
 import { useState } from 'react';
 import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import * as AuthSession from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 import {
   getPolicyDocument,
   postConsents,
+  socialExchangeRequest,
   socialResolveConflictRequest,
-  socialStartRequest,
   type ConsentVersions,
   type PolicyDocument,
   type PolicyKind,
   type SocialProvider,
 } from '../api';
+import { socialAdapter } from '../social';
 import { getOnboardingDone, saveTokens } from '../authStorage';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
-WebBrowser.maybeCompleteAuthSession();
-
-function firstQueryValue(v: unknown): string | undefined {
-  if (typeof v === 'string') return v;
-  if (Array.isArray(v)) return typeof v[0] === 'string' ? v[0] : undefined;
-  return undefined;
-}
-
-/// 일부 Android + 네이버 흐름에서 `openAuthSessionAsync`가 먼저 cancel/dismiss로 끝나고,
-/// `dietmobile://oauth?...` 는 `Linking` 이벤트로만 전달되는 경우가 있어 보조 캡처한다.
-function isAppOAuthReturnUrl(url: string, redirectBaseNoQuery: string): boolean {
-  if (!url.includes('result=')) return false;
-  const noFrag = url.split('#')[0];
-  return noFrag.startsWith(redirectBaseNoQuery) || noFrag.startsWith('dietmobile://oauth');
-}
 
 export function LoginScreen({ navigation }: Props) {
   const t = useTheme();
@@ -92,76 +75,52 @@ export function LoginScreen({ navigation }: Props) {
     setConflictEmail(null);
     setBusy(true);
     try {
-      const redirectUri = AuthSession.makeRedirectUri({ scheme: 'dietmobile', path: 'oauth' });
-      const redirectBaseNoQuery = redirectUri.split('?')[0];
-
-      let deepLinkReturnUrl: string | null = null;
-      const onUrl = ({ url }: { url: string }) => {
-        if (isAppOAuthReturnUrl(url, redirectBaseNoQuery)) deepLinkReturnUrl = url;
-      };
-      const sub = Linking.addEventListener('url', onUrl);
-      void Linking.getInitialURL().then((u) => {
-        if (u) onUrl({ url: u });
-      });
-
-      const { authorizationUrl } = await socialStartRequest(provider, redirectUri);
-      let result: Awaited<ReturnType<typeof WebBrowser.openAuthSessionAsync>>;
-      try {
-        result = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirectUri);
-        /// Android: 커스텀 스킴이 브라우저 종료 직후에만 전달되는 경우가 있어 짧게 대기한다.
-        await new Promise<void>((resolve) => setTimeout(resolve, 250));
-      } finally {
-        sub.remove();
-      }
-
-      const pickReturnUrl = (): string | undefined => {
-        if (result.type === 'success' && result.url) {
-          const u = result.url;
-          if (isAppOAuthReturnUrl(u, redirectBaseNoQuery)) return u;
-        }
-        return deepLinkReturnUrl ?? (result.type === 'success' ? result.url : undefined);
-      };
-
-      const returnUrl = pickReturnUrl();
-      if (!returnUrl || !isAppOAuthReturnUrl(returnUrl, redirectBaseNoQuery)) {
+      const adapter = socialAdapter(provider);
+      const sdkResult = await adapter.login();
+      if (sdkResult.kind === 'cancelled') {
         const msg = 'SNS 로그인이 취소되었습니다.';
         setErr(msg);
         toast.show({ kind: 'info', message: msg });
         return;
       }
+      if (sdkResult.kind === 'error') {
+        console.warn('[social-sdk]', 'sdk_error', { provider, message: sdkResult.message });
+        setErr(sdkResult.message);
+        toast.show({ kind: 'error', message: sdkResult.message });
+        return;
+      }
 
-      const parsed = Linking.parse(returnUrl);
-      const query = parsed.queryParams ?? {};
-      const resultKind = firstQueryValue(query.result);
-      const accessToken = firstQueryValue(query.accessToken);
-      const refreshToken = firstQueryValue(query.refreshToken);
-      const requiresConsentRaw = firstQueryValue(query.requiresConsent);
-      const oauthConflictToken = firstQueryValue(query.conflictToken);
-      const email = firstQueryValue(query.email);
-      const message = firstQueryValue(query.message);
+      const response = await socialExchangeRequest(provider, {
+        providerAccessToken: sdkResult.providerAccessToken,
+        idToken: sdkResult.idToken,
+        source: `social-sdk:${provider}`,
+      });
 
-      if (resultKind === 'success' && accessToken && refreshToken) {
+      if (response.result === 'success') {
         toast.show({ kind: 'success', message: 'SNS로 로그인했어요.' });
-        await completeTokenLogin(accessToken, refreshToken, {
-          requiresConsent: requiresConsentRaw === 'true',
+        await completeTokenLogin(response.accessToken, response.refreshToken, {
+          requiresConsent: response.requiresConsent === true,
           source: `social-signup:${provider}`,
         });
         return;
       }
-      if (resultKind === 'conflict' && oauthConflictToken) {
-        setConflictToken(oauthConflictToken);
-        setConflictEmail(email ?? null);
+      if (response.result === 'conflict') {
+        console.warn('[social-sdk]', 'account_conflict', { provider, email: response.email });
+        setConflictToken(response.conflictToken);
+        setConflictEmail(response.email);
         toast.show({
           kind: 'info',
           message: '기존 계정과 이메일이 충돌해요. 어떻게 처리할지 선택해 주세요.',
         });
         return;
       }
-      const msg = message ?? 'SNS 로그인 실패';
-      setErr(msg);
-      toast.show({ kind: 'error', message: msg });
+      const unknownMsg = 'SNS 로그인 응답이 예상과 다릅니다.';
+      console.warn('[social-sdk]', 'unknown_exchange_result', { provider, response });
+      setErr(unknownMsg);
+      toast.show({ kind: 'error', message: unknownMsg });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'SNS 로그인 실패';
+      console.warn('[social-sdk]', 'exception', { provider, message: msg, err: e });
       setErr(msg);
       toast.show({ kind: 'error', message: msg });
     } finally {

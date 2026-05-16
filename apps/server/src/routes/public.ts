@@ -6,10 +6,8 @@ import { hashPassword, verifyPassword } from '../lib/password.js';
 import { signAccess, signRefresh, verifyToken } from '../lib/jwt.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
 import {
-  createAuthorizationUrl,
   createConflictToken,
-  consumeOAuthState,
-  fetchProviderProfile,
+  fetchProviderProfileFromTokens,
   parseSocialProvider,
   verifyConflictToken,
 } from '../lib/socialAuth.js';
@@ -215,93 +213,73 @@ publicRouter.post('/auth/refresh', async (req, res) => {
   }
 });
 
-publicRouter.post('/auth/social/:provider/start', (req, res) => {
+/**
+ * 네이티브 SDK(naver/kakao/google) 로그인 결과 토큰 검증 엔드포인트.
+ * 클라이언트가 SDK에서 받은 access token(또는 id_token)을 전달하면 서버가 provider 프로필을 확인해
+ * 우리 서비스의 access/refresh 토큰을 JSON으로 돌려준다.
+ */
+publicRouter.post('/auth/social/:provider/exchange', async (req, res) => {
   const provider = parseSocialProvider(String(req.params.provider ?? ''));
-  const redirectUri = String((req.body as { redirectUri?: string })?.redirectUri ?? '');
-  if (!provider || !redirectUri) {
-    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'provider와 redirectUri가 필요합니다.');
-    return;
-  }
-  const authorizationUrl = createAuthorizationUrl(provider, redirectUri);
-  if (!authorizationUrl) {
-    sendError(res, 503, ErrorCodes.DEPENDENCY_UNAVAILABLE, '소셜 로그인 설정이 누락되었습니다.');
-    return;
-  }
-  res.json({ authorizationUrl });
-});
-
-publicRouter.get('/auth/social/:provider/callback', async (req, res) => {
-  const provider = parseSocialProvider(String(req.params.provider ?? ''));
-  const state = String(req.query.state ?? '').trim();
-  const code = String(req.query.code ?? '').trim();
-  /// OAuth2 오류 응답은 보통 `code` 없이 `error`만 온다. 일부 클라이언트/프록시가 `error` 키를 붙이는 경우가 있어 `code`가 있으면 성공 플로로 진행한다.
-  const oauthError = String(req.query.error ?? '').trim();
-  if (!provider || !state) {
-    sendError(res, 400, ErrorCodes.SOCIAL_STATE_INVALID, '유효하지 않은 소셜 상태 값입니다.');
+  if (!provider) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'provider가 유효하지 않습니다.');
     return;
   }
 
-  const stateItem = consumeOAuthState(provider, state);
-  if (!stateItem) {
-    sendError(res, 400, ErrorCodes.SOCIAL_STATE_INVALID, '소셜 로그인 상태가 만료되었거나 유효하지 않습니다.');
+  const body = (req.body ?? {}) as {
+    providerAccessToken?: unknown;
+    idToken?: unknown;
+    source?: unknown;
+  };
+  const providerAccessToken = typeof body.providerAccessToken === 'string' ? body.providerAccessToken.trim() : '';
+  const idToken = typeof body.idToken === 'string' ? body.idToken.trim() : '';
+  if (!providerAccessToken && !idToken) {
+    sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_FAILED,
+      'providerAccessToken 또는 idToken이 필요합니다.',
+    );
     return;
   }
 
-  if (oauthError && !code) {
-    const redirect = new URL(stateItem.redirectUri);
-    redirect.searchParams.set('result', 'error');
-    redirect.searchParams.set('code', ErrorCodes.OAUTH_CANCELLED);
-    redirect.searchParams.set('message', 'SNS 로그인이 취소되었습니다.');
-    res.redirect(redirect.toString());
+  let profile;
+  try {
+    profile = await fetchProviderProfileFromTokens(provider, {
+      accessToken: providerAccessToken || undefined,
+      idToken: idToken || undefined,
+    });
+  } catch (e) {
+    console.error('[auth/social/exchange] provider profile error', { provider, err: e });
+    sendError(res, 502, ErrorCodes.OAUTH_PROVIDER_ERROR, 'SNS 토큰 검증에 실패했습니다.');
     return;
   }
-
-  if (!code) {
-    const redirect = new URL(stateItem.redirectUri);
-    redirect.searchParams.set('result', 'error');
-    redirect.searchParams.set('code', ErrorCodes.OAUTH_PROVIDER_ERROR);
-    redirect.searchParams.set('message', '인증 코드가 없습니다.');
-    res.redirect(redirect.toString());
+  if (!profile) {
+    sendError(res, 401, ErrorCodes.OAUTH_PROVIDER_ERROR, 'SNS 사용자 정보를 확인할 수 없습니다.');
     return;
   }
 
   try {
-    const profile = await fetchProviderProfile(provider, code, state);
-    if (!profile) {
-      const redirect = new URL(stateItem.redirectUri);
-      redirect.searchParams.set('result', 'error');
-      redirect.searchParams.set('code', ErrorCodes.OAUTH_PROVIDER_ERROR);
-      redirect.searchParams.set('message', 'SNS 사용자 정보를 확인할 수 없습니다.');
-      res.redirect(redirect.toString());
-      return;
-    }
-
     const linked = await prisma.socialAccount.findUnique({
       where: { provider_providerUserId: { provider, providerUserId: profile.providerUserId } },
       include: { user: true },
     });
     if (linked) {
       if (!linked.user.active) {
-        const redirect = new URL(stateItem.redirectUri);
-        redirect.searchParams.set('result', 'error');
-        redirect.searchParams.set('code', ErrorCodes.AUTH_FORBIDDEN);
-        redirect.searchParams.set('message', '비활성화된 계정입니다.');
-        res.redirect(redirect.toString());
+        sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '비활성화된 계정입니다.');
         return;
       }
       const role = linked.user.role === 'ADMIN' ? 'ADMIN' : 'USER';
       await recordLogin(linked.user.id);
-      const redirect = new URL(stateItem.redirectUri);
-      redirect.searchParams.set('result', 'success');
-      redirect.searchParams.set('accessToken', signAccess(linked.user.id, role));
-      redirect.searchParams.set('refreshToken', signRefresh(linked.user.id, role));
-      redirect.searchParams.set('requiresConsent', String(await requiresCurrentConsent(linked.user.id)));
-      res.redirect(redirect.toString());
+      res.json({
+        result: 'success',
+        accessToken: signAccess(linked.user.id, role),
+        refreshToken: signRefresh(linked.user.id, role),
+        requiresConsent: await requiresCurrentConsent(linked.user.id),
+      });
       return;
     }
 
     const normalizedEmail = profile.email ? profile.email.trim().toLowerCase() : null;
-    /// 가입에 쓸 이메일(실이메일 또는 @social.local). 이미 존재하면 링크 충돌 플로로 보낸다(P2002 방지).
     const newEmail = (normalizedEmail ?? makeFallbackEmail(provider, profile.providerUserId)).trim().toLowerCase();
     const existingUser = await prisma.user.findUnique({ where: { email: newEmail } });
     if (existingUser) {
@@ -311,11 +289,7 @@ publicRouter.get('/auth/social/:provider/callback', async (req, res) => {
         email: normalizedEmail ?? newEmail,
         name: profile.name,
       });
-      const redirect = new URL(stateItem.redirectUri);
-      redirect.searchParams.set('result', 'conflict');
-      redirect.searchParams.set('conflictToken', conflictToken);
-      redirect.searchParams.set('email', newEmail);
-      res.redirect(redirect.toString());
+      res.json({ result: 'conflict', conflictToken, email: newEmail });
       return;
     }
 
@@ -336,35 +310,23 @@ publicRouter.get('/auth/social/:provider/callback', async (req, res) => {
     });
     const tokenPair = await issueTokensForUser(created.id);
     if (!tokenPair || 'error' in tokenPair) {
-      const redirect = new URL(stateItem.redirectUri);
-      redirect.searchParams.set('result', 'error');
-      redirect.searchParams.set('code', ErrorCodes.AUTH_FORBIDDEN);
-      redirect.searchParams.set('message', '계정을 사용할 수 없습니다.');
-      res.redirect(redirect.toString());
+      sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '계정을 사용할 수 없습니다.');
       return;
     }
     await recordLogin(created.id);
-    const redirect = new URL(stateItem.redirectUri);
-    redirect.searchParams.set('result', 'success');
-    redirect.searchParams.set('accessToken', tokenPair.accessToken);
-    redirect.searchParams.set('refreshToken', tokenPair.refreshToken);
-    redirect.searchParams.set('requiresConsent', 'true');
-    res.redirect(redirect.toString());
+    res.json({
+      result: 'success',
+      accessToken: tokenPair.accessToken,
+      refreshToken: tokenPair.refreshToken,
+      requiresConsent: true,
+    });
   } catch (e) {
-    console.error('[auth/social/callback] unhandled', { provider, err: e });
+    console.error('[auth/social/exchange] unhandled', { provider, err: e });
     const msg =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'
         ? '이미 사용 중인 계정 정보입니다. 기존 계정 연결을 선택해 주세요.'
         : '계정을 만들 수 없습니다. 잠시 후 다시 시도해 주세요.';
-    try {
-      const redirect = new URL(stateItem.redirectUri);
-      redirect.searchParams.set('result', 'error');
-      redirect.searchParams.set('code', ErrorCodes.OAUTH_PROVIDER_ERROR);
-      redirect.searchParams.set('message', msg);
-      res.redirect(redirect.toString());
-    } catch {
-      sendError(res, 500, ErrorCodes.OAUTH_PROVIDER_ERROR, '소셜 콜백 처리 중 오류가 발생했습니다.');
-    }
+    sendError(res, 500, ErrorCodes.OAUTH_PROVIDER_ERROR, msg);
   }
 });
 

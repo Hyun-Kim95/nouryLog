@@ -1,7 +1,6 @@
-import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import type { SocialProvider } from '@prisma/client';
-import { OAUTH_SERVER_BASE_URL, OAUTH_STATE_SECRET, socialProviderConfig } from './socialConfig.js';
+import { OAUTH_STATE_SECRET } from './socialConfig.js';
 
 type ProviderProfile = {
   providerUserId: string;
@@ -19,20 +18,7 @@ type ConflictPayload = {
   exp?: number;
 };
 
-const STATE_TTL_SECONDS = 10 * 60;
 const CONFLICT_TTL_SECONDS = 10 * 60;
-const stateStore = new Map<string, { provider: SocialProvider; redirectUri: string; createdAt: number }>();
-
-function now() {
-  return Date.now();
-}
-
-function cleanupStateStore() {
-  const expires = now() - STATE_TTL_SECONDS * 1000;
-  for (const [key, value] of stateStore.entries()) {
-    if (value.createdAt < expires) stateStore.delete(key);
-  }
-}
 
 function mapProvider(provider: string): SocialProvider | null {
   if (provider === 'naver') return 'NAVER';
@@ -41,92 +27,8 @@ function mapProvider(provider: string): SocialProvider | null {
   return null;
 }
 
-function providerLabel(provider: SocialProvider): 'naver' | 'google' | 'kakao' {
-  if (provider === 'NAVER') return 'naver';
-  if (provider === 'GOOGLE') return 'google';
-  return 'kakao';
-}
-
-function createCallbackUrl(provider: SocialProvider) {
-  return `${OAUTH_SERVER_BASE_URL}/auth/social/${providerLabel(provider)}/callback`;
-}
-
 export function parseSocialProvider(provider: string): SocialProvider | null {
   return mapProvider(provider);
-}
-
-export function createAuthorizationUrl(provider: SocialProvider, redirectUri: string): string | null {
-  const cfg = socialProviderConfig(provider);
-  if (!cfg) return null;
-  cleanupStateStore();
-  const state = crypto.randomBytes(24).toString('hex');
-  stateStore.set(state, { provider, redirectUri, createdAt: now() });
-  const callback = createCallbackUrl(provider);
-
-  if (provider === 'GOOGLE') {
-    const scope = encodeURIComponent('openid email profile');
-    return `${cfg.authorizeUrl}?response_type=code&client_id=${encodeURIComponent(cfg.clientId)}&redirect_uri=${encodeURIComponent(callback)}&scope=${scope}&state=${encodeURIComponent(state)}&prompt=select_account`;
-  }
-
-  if (provider === 'NAVER') {
-    return `${cfg.authorizeUrl}?response_type=code&client_id=${encodeURIComponent(cfg.clientId)}&redirect_uri=${encodeURIComponent(callback)}&state=${encodeURIComponent(state)}`;
-  }
-
-  return `${cfg.authorizeUrl}?response_type=code&client_id=${encodeURIComponent(cfg.clientId)}&redirect_uri=${encodeURIComponent(callback)}&state=${encodeURIComponent(state)}`;
-}
-
-export function consumeOAuthState(provider: SocialProvider, state: string): { redirectUri: string } | null {
-  cleanupStateStore();
-  const item = stateStore.get(state);
-  if (!item || item.provider !== provider) return null;
-  stateStore.delete(state);
-  return { redirectUri: item.redirectUri };
-}
-
-function logSocialTokenDebug(provider: SocialProvider, status: number, bodySnippet: string) {
-  if (process.env.SOCIAL_OAUTH_DEBUG !== '1' && process.env.NODE_ENV === 'production') return;
-  console.warn(`[social-oauth] token exchange failed provider=${provider} status=${status} body=${bodySnippet.slice(0, 400)}`);
-}
-
-async function exchangeCodeForToken(
-  provider: SocialProvider,
-  code: string,
-  state?: string,
-): Promise<{ accessToken: string } | null> {
-  const cfg = socialProviderConfig(provider);
-  if (!cfg) return null;
-  const callback = createCallbackUrl(provider);
-  const body = new URLSearchParams({
-    grant_type: 'authorization_code',
-    client_id: cfg.clientId,
-    code,
-    redirect_uri: callback,
-  });
-  /// 카카오: Client Secret 미사용 앱은 `client_secret`을 넣으면 오류가 난다.
-  if (cfg.clientSecret) body.set('client_secret', cfg.clientSecret);
-  else if (provider !== 'KAKAO') return null;
-
-  /// 네이버 접근 토큰 발급 시 state 필수(명세).
-  if (provider === 'NAVER') body.set('state', state ?? '');
-
-  const res = await fetch(cfg.tokenUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-    body,
-  });
-  const raw = await res.text();
-  let json: { access_token?: string; error?: string; error_description?: string } = {};
-  try {
-    json = JSON.parse(raw) as typeof json;
-  } catch {
-    logSocialTokenDebug(provider, res.status, raw);
-    return null;
-  }
-  if (!res.ok || !json.access_token) {
-    logSocialTokenDebug(provider, res.status, raw);
-    return null;
-  }
-  return { accessToken: json.access_token };
 }
 
 async function fetchGoogleProfile(accessToken: string): Promise<ProviderProfile | null> {
@@ -184,16 +86,53 @@ async function fetchKakaoProfile(accessToken: string): Promise<ProviderProfile |
   };
 }
 
-export async function fetchProviderProfile(
+/// 구글 id_token(JWT) 을 Google tokeninfo 엔드포인트로 검증해 프로필을 얻는다.
+/// 클라이언트 SDK(GoogleSignin)가 idToken 만 돌려주는 케이스에 대응한다.
+async function verifyGoogleIdToken(idToken: string): Promise<ProviderProfile | null> {
+  const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const json = (await res.json()) as {
+    sub?: string;
+    aud?: string;
+    email?: string;
+    name?: string;
+    email_verified?: string | boolean;
+  };
+  if (!json.sub) return null;
+  const allowedAud = (process.env.GOOGLE_ALLOWED_AUDIENCES ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  /// 환경 변수가 비어 있으면 aud 검증을 건너뛰지만(로컬 개발 편의) 운영에선 반드시 등록.
+  if (allowedAud.length > 0 && json.aud && !allowedAud.includes(json.aud)) {
+    if (process.env.SOCIAL_OAUTH_DEBUG === '1' || process.env.NODE_ENV !== 'production') {
+      console.warn(`[social-oauth] google idToken aud mismatch aud=${json.aud}`);
+    }
+    return null;
+  }
+  return { providerUserId: json.sub, email: json.email ?? null, name: json.name ?? null };
+}
+
+/// 클라이언트(SDK)가 가지고 있는 provider 토큰으로 직접 프로필을 조회한다.
+/// 네이티브 SDK 흐름(POST /auth/social/:provider/exchange) 전용.
+export async function fetchProviderProfileFromTokens(
   provider: SocialProvider,
-  code: string,
-  state?: string,
+  tokens: { accessToken?: string; idToken?: string },
 ): Promise<ProviderProfile | null> {
-  const token = await exchangeCodeForToken(provider, code, state);
-  if (!token) return null;
-  if (provider === 'GOOGLE') return fetchGoogleProfile(token.accessToken);
-  if (provider === 'NAVER') return fetchNaverProfile(token.accessToken);
-  return fetchKakaoProfile(token.accessToken);
+  const accessToken = tokens.accessToken?.trim();
+  const idToken = tokens.idToken?.trim();
+  if (provider === 'GOOGLE') {
+    if (idToken) {
+      const fromId = await verifyGoogleIdToken(idToken);
+      if (fromId) return fromId;
+    }
+    if (accessToken) return fetchGoogleProfile(accessToken);
+    return null;
+  }
+  if (!accessToken) return null;
+  if (provider === 'NAVER') return fetchNaverProfile(accessToken);
+  return fetchKakaoProfile(accessToken);
 }
 
 export function createConflictToken(payload: Omit<ConflictPayload, 'typ'>): string {
