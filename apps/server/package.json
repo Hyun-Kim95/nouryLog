@@ -11,7 +11,7 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
-    "test": "node --import tsx --test ./src/config.test.ts ./src/lib/mealFromTemplate.test.ts ./src/lib/statsPeriod.test.ts"
+    "test": "node --import tsx --test ./src/config.test.ts ./src/lib/mealFromTemplate.test.ts ./src/lib/statsPeriod.test.ts ./src/lib/recommendation.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
