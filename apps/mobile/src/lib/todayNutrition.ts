@@ -20,6 +20,10 @@ export type TodayIntake = {
 export type TodayGoals = {
   proteinGoalG: number | null;
   calorieGoalKcal: number | null;
+  proteinGoalMinG: number | null;
+  proteinGoalMaxG: number | null;
+  calorieGoalMinKcal: number | null;
+  calorieGoalMaxKcal: number | null;
   profile: ProfileGetResponse;
 };
 
@@ -63,6 +67,10 @@ export async function fetchTodayGoals(token: string): Promise<TodayGoals> {
   return {
     proteinGoalG: profile.proteinGoalG ?? null,
     calorieGoalKcal: profile.calorieGoalKcal ?? null,
+    proteinGoalMinG: profile.proteinGoalMinG ?? null,
+    proteinGoalMaxG: profile.proteinGoalMaxG ?? null,
+    calorieGoalMinKcal: profile.calorieGoalMinKcal ?? null,
+    calorieGoalMaxKcal: profile.calorieGoalMaxKcal ?? null,
     profile,
   };
 }

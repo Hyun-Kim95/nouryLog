@@ -1,16 +1,26 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { apiFetch, isAuthDenied } from '../api';
+import {
+  createMeal,
+  deactivateMeal,
+  listMeals,
+  updateMeal,
+  type FoodTemplateItem,
+  type MealRow,
+  type TemplateInputMode,
+} from '../api/meals';
 import { ensureAccessToken } from '../authSession';
 import { getAccessToken } from '../authStorage';
+import { LabeledField } from '../components/LabeledField';
 import { Segmented } from '../components/Segmented';
 import {
   Banner,
@@ -25,6 +35,7 @@ import {
 import { BILLING_COPY } from '../copy/billing';
 import { LOG_COPY } from '../copy/log';
 import { useFocusReload } from '../hooks/useFocusReload';
+import { formatMacroLine } from '../lib/formatNutrition';
 import { parseManualNutrition } from '../lib/manualNutrition';
 import {
   defaultMealSlotForNow,
@@ -35,44 +46,12 @@ import {
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 
-type MealRow = {
-  mealId: string;
-  name: string;
-  calories: number;
-  protein: number;
-  carbohydrate: number;
-  fat: number;
-  consumedAt: string;
-  foodTemplateId?: string | null;
-  mealInputMode?: string | null;
-  portionQuantity?: number | null;
-  mealSlot?: MealSlot | null;
-};
-
-type FoodTemplateItem = {
-  id: string;
-  name: string;
-  memo: string | null;
-  category: string | null;
-  referenceAmount: number;
-  portionUnit: string;
-  portionLabel: string | null;
-  servingGrams: number;
-  calories: number;
-  protein: number;
-  fat: number;
-  carbohydrate: number;
-};
-
 type Ent = {
   ocrQuotaLimit: number;
   ocrQuotaUsed: number;
   ocrPaidEnabled: boolean;
   nextPaywallTrigger: 'none' | 'ocr_remaining_1' | 'ocr_exhausted';
 };
-
-type EntryMode = 'manual' | 'template';
-type TemplateInputMode = 'PORTION_COUNT' | 'TOTAL_GRAMS';
 
 type OcrReview = {
   calories: number;
@@ -97,6 +76,19 @@ function baselineSummary(tpl: FoodTemplateItem): string {
   return `${tpl.referenceAmount}${unitHint(tpl)}`;
 }
 
+const EMPTY_FORM = {
+  name: '',
+  calories: '',
+  protein: '',
+  carbohydrate: '',
+  fat: '',
+  mealSlot: defaultMealSlotForNow() as MealSlot,
+  selectedTpl: null as FoodTemplateItem | null,
+  mealInputMode: 'PORTION_COUNT' as TemplateInputMode,
+  tplAmount: '1',
+  consumedAt: new Date().toISOString(),
+};
+
 export function LogScreen() {
   const t = useTheme();
   const toast = useToast();
@@ -108,6 +100,7 @@ export function LogScreen() {
   const [carbohydrate, setCarbohydrate] = useState('');
   const [fat, setFat] = useState('');
   const [mealSlot, setMealSlot] = useState<MealSlot>(() => defaultMealSlotForNow());
+  const [consumedAt, setConsumedAt] = useState(EMPTY_FORM.consumedAt);
   const [ent, setEnt] = useState<Ent | null>(null);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
@@ -115,12 +108,27 @@ export function LogScreen() {
   const [saveBusy, setSaveBusy] = useState(false);
   const [ocrReview, setOcrReview] = useState<OcrReview | null>(null);
 
-  const [entryMode, setEntryMode] = useState<EntryMode>('manual');
   const [templates, setTemplates] = useState<FoodTemplateItem[]>([]);
   const [tplLoading, setTplLoading] = useState(false);
   const [selectedTpl, setSelectedTpl] = useState<FoodTemplateItem | null>(null);
   const [mealInputMode, setMealInputMode] = useState<TemplateInputMode>('PORTION_COUNT');
   const [tplAmount, setTplAmount] = useState('1');
+  const [editingMealId, setEditingMealId] = useState<string | null>(null);
+
+  const resetForm = useCallback(() => {
+    setEditingMealId(null);
+    setName(EMPTY_FORM.name);
+    setCalories(EMPTY_FORM.calories);
+    setProtein(EMPTY_FORM.protein);
+    setCarbohydrate(EMPTY_FORM.carbohydrate);
+    setFat(EMPTY_FORM.fat);
+    setMealSlot(defaultMealSlotForNow());
+    setConsumedAt(new Date().toISOString());
+    setSelectedTpl(null);
+    setMealInputMode('PORTION_COUNT');
+    setTplAmount('1');
+    setOcrReview(null);
+  }, []);
 
   const loadEntitlements = useCallback(async () => {
     const token = await getAccessToken();
@@ -130,30 +138,6 @@ export function LogScreen() {
       setEnt(e);
     } catch {
       setEnt(null);
-    }
-  }, []);
-
-  const load = useCallback(async () => {
-    const token = await ensureAccessToken();
-    if (!token) return;
-    try {
-      const res = await apiFetch<{ items: MealRow[] }>('/meals?page=1&size=15', { token });
-      setItems(res.items);
-      const recent = await apiFetch<{ items: MealRow[] }>('/meals?page=1&size=20', { token });
-      const seen = new Set<string>();
-      const deduped: MealRow[] = [];
-      for (const m of recent.items ?? []) {
-        const key = `${m.name}|${m.calories}|${m.protein}|${m.carbohydrate}|${m.fat}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(m);
-        if (deduped.length >= 12) break;
-      }
-      setRecentMeals(deduped);
-    } catch (e) {
-      if (isAuthDenied(e)) return;
-      setItems([]);
-      setRecentMeals([]);
     }
   }, []);
 
@@ -173,127 +157,130 @@ export function LogScreen() {
     }
   }, []);
 
+  const load = useCallback(async () => {
+    const token = await ensureAccessToken();
+    if (!token) return;
+    try {
+      const res = await listMeals(token, { page: 1, size: 15 });
+      setItems(res.items);
+      const recent = await listMeals(token, { page: 1, size: 20 });
+      const seen = new Set<string>();
+      const deduped: MealRow[] = [];
+      for (const m of recent.items ?? []) {
+        const key = `${m.name}|${m.calories}|${m.protein}|${m.carbohydrate}|${m.fat}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(m);
+        if (deduped.length >= 12) break;
+      }
+      setRecentMeals(deduped);
+    } catch (e) {
+      if (isAuthDenied(e)) return;
+      setItems([]);
+      setRecentMeals([]);
+    }
+  }, []);
+
   useFocusReload(
     useCallback(
       async ({ silent }: { silent: boolean }) => {
         await load();
         await loadEntitlements();
-        if (!silent && entryMode === 'template') {
-          await loadTemplates();
-        }
+        await loadTemplates();
       },
-      [load, loadEntitlements, entryMode, loadTemplates],
+      [load, loadEntitlements, loadTemplates],
     ),
   );
 
-  useEffect(() => {
-    if (entryMode === 'template') {
-      void loadTemplates();
-    }
-  }, [entryMode, loadTemplates]);
-
-  const inputStyle = {
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    borderRadius: t.radius.md,
-    padding: t.spacing.md,
-    color: t.colors.fg,
-    backgroundColor: t.colors.surface,
-    fontSize: t.fontSize.body,
-  };
-
-  const applyManualFromMeal = (m: MealRow) => {
-    setEntryMode('manual');
-    setOcrReview(null);
-    setName(m.name);
-    setCalories(String(Math.round(m.calories)));
-    setProtein(String(Math.round(m.protein)));
-    setCarbohydrate(String(Math.round(m.carbohydrate)));
-    setFat(String(Math.round(m.fat)));
-    if (m.mealSlot) setMealSlot(m.mealSlot);
-    toast.show({ kind: 'info', message: '입력란에 불러왔어요. 확인 후 저장해 주세요.' });
-  };
-
-  const applyRecentMeal = (m: MealRow) => {
-    if (m.foodTemplateId) {
-      const tpl = templates.find((x) => x.id === m.foodTemplateId);
-      if (tpl) {
-        setEntryMode('template');
-        setSelectedTpl(tpl);
-        setMealInputMode(
-          m.mealInputMode === 'TOTAL_GRAMS' ? 'TOTAL_GRAMS' : 'PORTION_COUNT',
-        );
-        setTplAmount(
-          m.mealInputMode === 'PORTION_COUNT' && m.portionQuantity != null
-            ? String(m.portionQuantity)
-            : '1',
-        );
-        if (m.mealSlot) setMealSlot(m.mealSlot);
-        setOcrReview(null);
-        toast.show({ kind: 'info', message: '템플릿으로 불러왔어요.' });
-        return;
-      }
-    }
-    applyManualFromMeal(m);
-  };
-
-  const postMealBody = (
-    base: Record<string, unknown>,
-  ): Record<string, unknown> => ({
-    ...base,
+  const mealBodyBase = (): Record<string, unknown> => ({
     mealSlot,
-    consumedAt: new Date().toISOString(),
+    consumedAt,
   });
 
-  const addMeal = async () => {
+  const buildTemplateBody = (): Record<string, unknown> => {
+    if (!selectedTpl) throw new Error('음식 템플릿을 선택해 주세요.');
+    const amt = Number(String(tplAmount).replace(',', '.'));
+    if (!Number.isFinite(amt) || amt <= 0) throw new Error('수량을 올바르게 입력해 주세요.');
+    const body: Record<string, unknown> = {
+      ...mealBodyBase(),
+      foodTemplateId: selectedTpl.id,
+      mealInputMode,
+    };
+    if (mealInputMode === 'PORTION_COUNT') {
+      body.portionQuantity = amt;
+    } else {
+      body.totalGrams = amt;
+    }
+    return body;
+  };
+
+  const saveMeal = async () => {
     setSaveBusy(true);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('로그인 필요');
 
-      if (entryMode === 'template') {
-        if (!selectedTpl) throw new Error('음식 템플릿을 선택해 주세요.');
-        const amt = Number(String(tplAmount).replace(',', '.'));
-        if (!Number.isFinite(amt) || amt <= 0) throw new Error('수량을 올바르게 입력해 주세요.');
-
-        const body: Record<string, unknown> = {
-          foodTemplateId: selectedTpl.id,
-          mealInputMode,
-        };
-        if (mealInputMode === 'PORTION_COUNT') {
-          body.portionQuantity = amt;
+      if (selectedTpl) {
+        const body = buildTemplateBody();
+        if (editingMealId) {
+          await updateMeal(token, editingMealId, body);
         } else {
-          body.totalGrams = amt;
+          await createMeal(token, body);
         }
-
-        await apiFetch('/meals', {
-          method: 'POST',
-          token,
-          body: JSON.stringify(postMealBody(body)),
-        });
       } else {
         const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
         if (!name.trim()) throw new Error('음식명을 입력해 주세요.');
-        await apiFetch('/meals', {
-          method: 'POST',
-          token,
-          body: JSON.stringify(
-            postMealBody({
-              name: name.trim(),
-              calories: nutrition.calories,
-              protein: nutrition.protein,
-              carbohydrate: nutrition.carbohydrate,
-              fat: nutrition.fat,
-            }),
-          ),
-        });
+        const body = {
+          ...mealBodyBase(),
+          name: name.trim(),
+          ...nutrition,
+        };
+        if (editingMealId) {
+          await updateMeal(token, editingMealId, body);
+        } else {
+          await createMeal(token, body);
+        }
       }
-      setOcrReview(null);
-      toast.show({ kind: 'success', message: LOG_COPY.saveSuccess });
+
+      toast.show({
+        kind: 'success',
+        message: editingMealId ? LOG_COPY.editSuccess : LOG_COPY.saveSuccess,
+      });
+      resetForm();
       await load();
     } catch (e) {
       if (isAuthDenied(e)) return;
       toast.show({ kind: 'error', message: e instanceof Error ? e.message : '저장 실패' });
+    } finally {
+      setSaveBusy(false);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (!editingMealId) return;
+    Alert.alert(LOG_COPY.deleteConfirmTitle, LOG_COPY.deleteConfirmBody, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => void deleteMeal(),
+      },
+    ]);
+  };
+
+  const deleteMeal = async () => {
+    if (!editingMealId) return;
+    setSaveBusy(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error('로그인 필요');
+      await deactivateMeal(token, editingMealId);
+      toast.show({ kind: 'success', message: LOG_COPY.deleteSuccess });
+      resetForm();
+      await load();
+    } catch (e) {
+      if (isAuthDenied(e)) return;
+      toast.show({ kind: 'error', message: e instanceof Error ? e.message : '삭제 실패' });
     } finally {
       setSaveBusy(false);
     }
@@ -306,16 +293,13 @@ export function LogScreen() {
       if (!token) throw new Error('로그인 필요');
       const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
       const mealName = name.trim() || '식사';
-      await apiFetch('/meals', {
-        method: 'POST',
+      await createMeal(
         token,
-        body: JSON.stringify(
-          postMealBody({
-            name: mealName,
-            ...nutrition,
-          }),
-        ),
-      });
+        postMealBody({
+          name: mealName,
+          ...nutrition,
+        }),
+      );
       setOcrReview(null);
       toast.show({ kind: 'success', message: LOG_COPY.saveSuccess });
       await load();
@@ -326,6 +310,12 @@ export function LogScreen() {
       setSaveBusy(false);
     }
   };
+
+  const postMealBody = (base: Record<string, unknown>): Record<string, unknown> => ({
+    ...base,
+    mealSlot,
+    consumedAt: new Date().toISOString(),
+  });
 
   const runOcrWithBase64 = async (imageBase64: string) => {
     const token = await getAccessToken();
@@ -351,7 +341,7 @@ export function LogScreen() {
       confidence: res.confidence,
       missingFields: res.missingFields ?? [],
     });
-    setEntryMode('manual');
+    setSelectedTpl(null);
     setName((prev) => prev.trim() || '식사');
     setCalories(String(Math.round(res.calories)));
     setProtein(String(Math.round(res.protein)));
@@ -435,6 +425,87 @@ export function LogScreen() {
     }
   };
 
+  const applyManualFromMeal = (m: MealRow) => {
+    setSelectedTpl(null);
+    setOcrReview(null);
+    setName(m.name);
+    setCalories(String(Math.round(m.calories)));
+    setProtein(String(Math.round(m.protein)));
+    setCarbohydrate(String(Math.round(m.carbohydrate)));
+    setFat(String(Math.round(m.fat)));
+    if (m.mealSlot) setMealSlot(m.mealSlot);
+    toast.show({ kind: 'info', message: '입력란에 불러왔어요. 확인 후 저장해 주세요.' });
+  };
+
+  const applyRecentMeal = (m: MealRow) => {
+    if (m.foodTemplateId) {
+      const tpl = templates.find((x) => x.id === m.foodTemplateId);
+      if (tpl) {
+        setSelectedTpl(tpl);
+        setMealInputMode(m.mealInputMode === 'TOTAL_GRAMS' ? 'TOTAL_GRAMS' : 'PORTION_COUNT');
+        setTplAmount(
+          m.mealInputMode === 'PORTION_COUNT' && m.portionQuantity != null
+            ? String(m.portionQuantity)
+            : '1',
+        );
+        setName('');
+        setCalories('');
+        setProtein('');
+        setCarbohydrate('');
+        setFat('');
+        if (m.mealSlot) setMealSlot(m.mealSlot);
+        setOcrReview(null);
+        toast.show({ kind: 'info', message: '템플릿으로 불러왔어요.' });
+        return;
+      }
+    }
+    applyManualFromMeal(m);
+  };
+
+  const startEditMeal = (item: MealRow) => {
+    setEditingMealId(item.mealId);
+    setConsumedAt(item.consumedAt);
+    if (item.mealSlot) setMealSlot(item.mealSlot);
+    setOcrReview(null);
+
+    if (item.foodTemplateId) {
+      const tpl = templates.find((x) => x.id === item.foodTemplateId);
+      if (tpl) {
+        setSelectedTpl(tpl);
+        setMealInputMode(item.mealInputMode === 'TOTAL_GRAMS' ? 'TOTAL_GRAMS' : 'PORTION_COUNT');
+        setTplAmount(
+          item.mealInputMode === 'PORTION_COUNT' && item.portionQuantity != null
+            ? String(item.portionQuantity)
+            : '1',
+        );
+        setName('');
+        setCalories('');
+        setProtein('');
+        setCarbohydrate('');
+        setFat('');
+        return;
+      }
+    }
+
+    setSelectedTpl(null);
+    setName(item.name);
+    setCalories(String(Math.round(item.calories)));
+    setProtein(String(Math.round(item.protein)));
+    setCarbohydrate(String(Math.round(item.carbohydrate)));
+    setFat(String(Math.round(item.fat)));
+  };
+
+  const selectTemplate = (item: FoodTemplateItem) => {
+    setSelectedTpl(item);
+    setTplAmount('1');
+    setMealInputMode('PORTION_COUNT');
+    setName('');
+    setCalories('');
+    setProtein('');
+    setCarbohydrate('');
+    setFat('');
+  };
+
   const previewKcal =
     selectedTpl && Number.isFinite(Number(tplAmount))
       ? (() => {
@@ -448,46 +519,67 @@ export function LogScreen() {
 
   const macroFields = (
     <View style={{ gap: t.spacing.sm }}>
-      <TextInput
-        style={inputStyle}
-        value={name}
-        onChangeText={setName}
-        placeholder="음식명"
-        placeholderTextColor={t.colors.fgSubtle}
-      />
-      <TextInput
-        style={inputStyle}
+      <LabeledField label="음식명" value={name} onChangeText={setName} placeholder="예: 닭가슴살 샐러드" />
+      <LabeledField
+        label="칼로리 (kcal)"
         value={calories}
         onChangeText={setCalories}
         keyboardType="numeric"
-        placeholder={LOG_COPY.calories}
-        placeholderTextColor={t.colors.fgSubtle}
+        placeholder="0"
       />
-      <TextInput
-        style={inputStyle}
+      <LabeledField
+        label="단백질 (g)"
         value={protein}
         onChangeText={setProtein}
         keyboardType="numeric"
-        placeholder={LOG_COPY.protein}
-        placeholderTextColor={t.colors.fgSubtle}
+        placeholder="0"
       />
-      <TextInput
-        style={inputStyle}
+      <LabeledField
+        label="탄수화물 (g)"
         value={carbohydrate}
         onChangeText={setCarbohydrate}
         keyboardType="numeric"
-        placeholder={LOG_COPY.carb}
-        placeholderTextColor={t.colors.fgSubtle}
+        placeholder="0"
       />
-      <TextInput
-        style={inputStyle}
-        value={fat}
-        onChangeText={setFat}
-        keyboardType="numeric"
-        placeholder={LOG_COPY.fat}
-        placeholderTextColor={t.colors.fgSubtle}
-      />
+      <LabeledField label="지방 (g)" value={fat} onChangeText={setFat} keyboardType="numeric" placeholder="0" />
     </View>
+  );
+
+  const templateChips = (
+    <Card>
+      <CardTitle>{LOG_COPY.sectionTemplates}</CardTitle>
+      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>{LOG_COPY.templatesHint}</Text>
+      {tplLoading ? (
+        <ActivityIndicator color={t.colors.primary} />
+      ) : templates.length === 0 ? (
+        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
+          등록된 템플릿이 없거나 불러오지 못했습니다.
+        </Text>
+      ) : (
+        <FlatList
+          horizontal
+          data={templates}
+          keyExtractor={(it) => it.id}
+          style={{ maxHeight: 44 }}
+          contentContainerStyle={{ gap: t.spacing.sm }}
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => selectTemplate(item)}
+              style={{
+                paddingHorizontal: t.spacing.md,
+                paddingVertical: t.spacing.sm,
+                borderRadius: t.radius.md,
+                borderWidth: 1,
+                borderColor: selectedTpl?.id === item.id ? t.colors.primary : t.colors.border,
+                backgroundColor: selectedTpl?.id === item.id ? t.colors.surface2 : t.colors.surface,
+              }}
+            >
+              <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>{item.name}</Text>
+            </Pressable>
+          )}
+        />
+      )}
+    </Card>
   );
 
   return (
@@ -520,6 +612,8 @@ export function LogScreen() {
           </View>
         </View>
 
+        {templateChips}
+
         {recentMeals.length > 0 ? (
           <Card>
             <CardTitle>{LOG_COPY.sectionRecent}</CardTitle>
@@ -528,7 +622,7 @@ export function LogScreen() {
               horizontal
               data={recentMeals}
               keyExtractor={(it) => it.mealId}
-              style={{ maxHeight: 56 }}
+              style={{ maxHeight: 72 }}
               contentContainerStyle={{ gap: t.spacing.sm }}
               renderItem={({ item }) => (
                 <Pressable
@@ -540,7 +634,7 @@ export function LogScreen() {
                     borderWidth: 1,
                     borderColor: t.colors.border,
                     backgroundColor: t.colors.surface,
-                    maxWidth: 160,
+                    maxWidth: 180,
                   }}
                 >
                   <Text numberOfLines={1} style={{ color: t.colors.fg, fontWeight: '600', fontSize: t.fontSize.body }}>
@@ -548,6 +642,9 @@ export function LogScreen() {
                   </Text>
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                     {Math.round(item.calories)} kcal
+                  </Text>
+                  <Text numberOfLines={1} style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
+                    {formatMacroLine(item)}
                   </Text>
                 </Pressable>
               )}
@@ -557,11 +654,7 @@ export function LogScreen() {
 
         <Card>
           <CardTitle>{LOG_COPY.sectionSlot}</CardTitle>
-          <Segmented<MealSlot>
-            options={MEAL_SLOT_OPTIONS}
-            value={mealSlot}
-            onChange={setMealSlot}
-          />
+          <Segmented<MealSlot> options={MEAL_SLOT_OPTIONS} value={mealSlot} onChange={setMealSlot} />
         </Card>
 
         {ocrReview ? (
@@ -578,86 +671,63 @@ export function LogScreen() {
         ) : null}
 
         <Card>
-          <CardTitle>{LOG_COPY.sectionEntry}</CardTitle>
-          <Segmented<EntryMode>
-            options={[
-              { value: 'manual', label: LOG_COPY.entryManual },
-              { value: 'template', label: LOG_COPY.entryTemplate },
-            ]}
-            value={entryMode}
-            onChange={setEntryMode}
-          />
+          {editingMealId ? (
+            <Banner variant="info">{LOG_COPY.editBanner(name.trim() || selectedTpl?.name || '식사')}</Banner>
+          ) : null}
 
-          {entryMode === 'manual' ? (
-            macroFields
-          ) : (
-            <View style={{ gap: t.spacing.sm }}>
-              {tplLoading ? (
-                <ActivityIndicator color={t.colors.primary} />
-              ) : templates.length === 0 ? (
-                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
-                  등록된 템플릿이 없거나 불러오지 못했습니다.
+          {selectedTpl ? (
+            <View style={{ gap: t.spacing.sm, marginBottom: t.spacing.sm }}>
+              <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
+                {selectedTpl.name}
+              </Text>
+              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                기준 분량: {baselineSummary(selectedTpl)} (영양 기준 {selectedTpl.servingGrams}g) · 기준당 약{' '}
+                {selectedTpl.calories} kcal
+              </Text>
+              <Segmented<TemplateInputMode>
+                options={[
+                  { value: 'PORTION_COUNT', label: '분량 수' },
+                  { value: 'TOTAL_GRAMS', label: '총 g' },
+                ]}
+                value={mealInputMode}
+                onChange={setMealInputMode}
+              />
+              <LabeledField
+                label={mealInputMode === 'PORTION_COUNT' ? `분량 (${unitHint(selectedTpl)})` : '총 중량 (g)'}
+                value={tplAmount}
+                onChangeText={setTplAmount}
+                keyboardType="decimal-pad"
+                placeholder={mealInputMode === 'PORTION_COUNT' ? `몇 ${unitHint(selectedTpl)}?` : '총 몇 g?'}
+              />
+              {previewKcal != null ? (
+                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                  예상 칼로리 약 {previewKcal} kcal
                 </Text>
-              ) : (
-                <FlatList
-                  horizontal
-                  data={templates}
-                  keyExtractor={(it) => it.id}
-                  style={{ maxHeight: 44 }}
-                  contentContainerStyle={{ gap: t.spacing.sm }}
-                  renderItem={({ item }) => (
-                    <Pressable
-                      onPress={() => setSelectedTpl(item)}
-                      style={{
-                        paddingHorizontal: t.spacing.md,
-                        paddingVertical: t.spacing.sm,
-                        borderRadius: t.radius.md,
-                        borderWidth: 1,
-                        borderColor: selectedTpl?.id === item.id ? t.colors.primary : t.colors.border,
-                        backgroundColor:
-                          selectedTpl?.id === item.id ? t.colors.surface2 : t.colors.surface,
-                      }}
-                    >
-                      <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>{item.name}</Text>
-                    </Pressable>
-                  )}
-                />
-              )}
-              {selectedTpl ? (
-                <>
-                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                    기준 분량: {baselineSummary(selectedTpl)} (영양 기준 {selectedTpl.servingGrams}g) · 기준당 약{' '}
-                    {selectedTpl.calories} kcal
-                  </Text>
-                  <Segmented<TemplateInputMode>
-                    options={[
-                      { value: 'PORTION_COUNT', label: '분량 수' },
-                      { value: 'TOTAL_GRAMS', label: '총 g' },
-                    ]}
-                    value={mealInputMode}
-                    onChange={setMealInputMode}
-                  />
-                  <TextInput
-                    style={inputStyle}
-                    value={tplAmount}
-                    onChangeText={setTplAmount}
-                    keyboardType="decimal-pad"
-                    placeholder={
-                      mealInputMode === 'PORTION_COUNT' ? `몇 ${unitHint(selectedTpl)}?` : '총 몇 g?'
-                    }
-                    placeholderTextColor={t.colors.fgSubtle}
-                  />
-                  {previewKcal != null ? (
-                    <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                      예상 칼로리 약 {previewKcal} kcal
-                    </Text>
-                  ) : null}
-                </>
               ) : null}
+              <TextButton title="직접 입력으로 전환" onPress={() => setSelectedTpl(null)} />
             </View>
+          ) : (
+            macroFields
           )}
 
-          <PrimaryButton title={LOG_COPY.addMeal} onPress={() => void addMeal()} loading={saveBusy} />
+          <View style={{ gap: t.spacing.sm, marginTop: t.spacing.sm }}>
+            <PrimaryButton
+              title={editingMealId ? LOG_COPY.saveEdit : LOG_COPY.addMeal}
+              onPress={() => void saveMeal()}
+              loading={saveBusy}
+            />
+            {editingMealId ? (
+              <>
+                <PrimaryButton
+                  title={LOG_COPY.deleteMeal}
+                  onPress={confirmDelete}
+                  variant="secondary"
+                  loading={saveBusy}
+                />
+                <TextButton title={LOG_COPY.cancelEdit} onPress={resetForm} />
+              </>
+            ) : null}
+          </View>
         </Card>
 
         <Card>
@@ -666,8 +736,9 @@ export function LogScreen() {
             <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{LOG_COPY.listEmpty}</Text>
           ) : (
             items.map((item) => (
-              <View
+              <Pressable
                 key={item.mealId}
+                onPress={() => startEditMeal(item)}
                 style={{
                   paddingVertical: t.spacing.sm,
                   borderBottomWidth: 1,
@@ -678,10 +749,9 @@ export function LogScreen() {
                   {mealSlotLabel(item.mealSlot)} · {item.name}
                 </Text>
                 <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                  {item.calories} kcal · P {Math.round(item.protein)} · C {Math.round(item.carbohydrate)} · F{' '}
-                  {Math.round(item.fat)} · {item.consumedAt.slice(0, 10)}
+                  {item.calories} kcal · {formatMacroLine(item)} · {item.consumedAt.slice(0, 10)}
                 </Text>
-              </View>
+              </Pressable>
             ))
           )}
         </Card>

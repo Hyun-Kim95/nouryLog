@@ -7,7 +7,12 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
 import { OCR_FREE_LIMIT, STATS_STALE_HOURS } from '../lib/config.js';
 import { detectNutrition } from '../services/ocrService.js';
-import { calculateRecommendationFull } from '../lib/recommendation.js';
+import {
+  calculateRecommendationFull,
+  computeGoalRanges,
+  resolveProfileGoalRanges,
+  safeGoal,
+} from '../lib/recommendation.js';
 import {
   boundsForRange,
   isPeriodInFuture,
@@ -203,6 +208,7 @@ meRouter.get('/me/profile', async (req, res) => {
     activityLevel: p.activityLevel,
     goal: p.goal,
   });
+  const ranges = resolveProfileGoalRanges(p.proteinGoalG, p.calorieGoalKcal, p.goal, p);
   res.json({
     gender: p.gender,
     age: p.age,
@@ -212,6 +218,10 @@ meRouter.get('/me/profile', async (req, res) => {
     goal: p.goal ?? null,
     proteinGoalG: p.proteinGoalG ?? undefined,
     calorieGoalKcal: p.calorieGoalKcal ?? undefined,
+    proteinGoalMinG: ranges?.proteinGoalMinG,
+    proteinGoalMaxG: ranges?.proteinGoalMaxG,
+    calorieGoalMinKcal: ranges?.calorieGoalMinKcal,
+    calorieGoalMaxKcal: ranges?.calorieGoalMaxKcal,
     recommendationVersion: full.recommendationVersion,
     policy: full.policy,
     warnings: full.warnings,
@@ -375,6 +385,16 @@ meRouter.put('/me/profile', async (req, res) => {
     return;
   }
 
+  const existing = await prisma.profile.findUnique({ where: { userId } });
+  const mergedGoal = goal.value !== undefined ? goal.value : (existing?.goal ?? null);
+  const mergedProtein = protein.value !== undefined ? protein.value : existing?.proteinGoalG;
+  const mergedCalorie = calorie.value !== undefined ? calorie.value : existing?.calorieGoalKcal;
+
+  let rangeData: ReturnType<typeof computeGoalRanges> | undefined;
+  if (mergedProtein != null && mergedCalorie != null) {
+    rangeData = computeGoalRanges(mergedProtein, mergedCalorie, safeGoal(mergedGoal));
+  }
+
   await prisma.profile.upsert({
     where: { userId },
     create: {
@@ -387,6 +407,7 @@ meRouter.put('/me/profile', async (req, res) => {
       goal: goal.value ?? null,
       proteinGoalG: protein.value,
       calorieGoalKcal: calorie.value,
+      ...(rangeData ?? {}),
     },
     update: {
       ...(gender.value !== undefined ? { gender: gender.value } : {}),
@@ -397,6 +418,7 @@ meRouter.put('/me/profile', async (req, res) => {
       ...(goal.value !== undefined ? { goal: goal.value } : {}),
       ...(protein.value !== undefined ? { proteinGoalG: protein.value } : {}),
       ...(calorie.value !== undefined ? { calorieGoalKcal: calorie.value } : {}),
+      ...(rangeData ?? {}),
     },
   });
   res.json({ ok: true });
@@ -421,13 +443,19 @@ meRouter.post('/me/recommendation/recalculate', async (req, res) => {
     activityLevel: p.activityLevel,
     goal: p.goal,
   });
+  const ranges = computeGoalRanges(full.proteinGoalG, full.calorieGoalKcal, safeGoal(p.goal));
   await prisma.profile.update({
     where: { userId },
-    data: { proteinGoalG: full.proteinGoalG, calorieGoalKcal: full.calorieGoalKcal },
+    data: {
+      proteinGoalG: full.proteinGoalG,
+      calorieGoalKcal: full.calorieGoalKcal,
+      ...ranges,
+    },
   });
   res.json({
     proteinGoalG: full.proteinGoalG,
     calorieGoalKcal: full.calorieGoalKcal,
+    ...ranges,
     recommendationVersion: full.recommendationVersion,
     policy: full.policy,
     warnings: full.warnings,
@@ -926,6 +954,32 @@ meRouter.post('/nutrition/ocr', async (req, res) => {
     }
     if (message.includes('ocr_parse_failed')) {
       sendError(res, 422, ErrorCodes.OCR_PARSE_FAILED, 'OCR 결과에서 영양 정보를 파싱하지 못했습니다.');
+      return;
+    }
+    if (
+      message.includes('API_KEY_INVALID') ||
+      message.toLowerCase().includes('api key not valid')
+    ) {
+      sendError(
+        res,
+        503,
+        ErrorCodes.OCR_PROVIDER_UNAVAILABLE,
+        'OCR API 키가 올바르지 않습니다. Railway의 OCR_API_KEY가 로컬 .env와 동일한지 확인해 주세요.',
+      );
+      return;
+    }
+    if (
+      message.includes('PERMISSION_DENIED') ||
+      message.includes('http_403') ||
+      message.toLowerCase().includes('api key not enabled') ||
+      message.toLowerCase().includes('access denied')
+    ) {
+      sendError(
+        res,
+        503,
+        ErrorCodes.OCR_PROVIDER_UNAVAILABLE,
+        'Google Vision API 접근이 거부되었습니다. Cloud Vision API 활성화와 API 키의 앱 제한(Android/iOS 전용) 해제를 확인해 주세요.',
+      );
       return;
     }
     sendError(res, 503, ErrorCodes.OCR_PROVIDER_UNAVAILABLE, 'OCR 제공자 호출에 실패했습니다.');

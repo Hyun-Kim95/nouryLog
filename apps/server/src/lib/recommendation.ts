@@ -109,6 +109,49 @@ export type RecommendationResult = {
 
 export type RecommendationFull = RecommendationResult & RecommendationMeta;
 
+export type GoalRange = {
+  proteinGoalMinG: number;
+  proteinGoalMaxG: number;
+  calorieGoalMinKcal: number;
+  calorieGoalMaxKcal: number;
+};
+
+const GOAL_CLAMP_MIN = 0;
+const GOAL_CLAMP_MAX = 10000;
+
+/**
+ * 중심값·목표 유형으로 일일 권장 범위 산출 (mobile-log-ux PRD §6).
+ */
+export function computeGoalRanges(
+  centerProteinG: number,
+  centerCalorieKcal: number,
+  goal: Goal,
+): GoalRange {
+  const proteinDelta = Math.max(5, Math.round(centerProteinG * 0.05));
+  const proteinGoalMinG = Math.max(GOAL_CLAMP_MIN, centerProteinG - proteinDelta);
+  const proteinGoalMaxG = Math.min(GOAL_CLAMP_MAX, centerProteinG + proteinDelta);
+
+  let calorieGoalMinKcal: number;
+  let calorieGoalMaxKcal: number;
+  if (goal === 'lose') {
+    calorieGoalMinKcal = Math.round(centerCalorieKcal * 0.9);
+    calorieGoalMaxKcal = centerCalorieKcal;
+  } else if (goal === 'gain') {
+    calorieGoalMinKcal = centerCalorieKcal;
+    calorieGoalMaxKcal = Math.round(centerCalorieKcal * 1.1);
+  } else {
+    calorieGoalMinKcal = Math.round(centerCalorieKcal * 0.9);
+    calorieGoalMaxKcal = Math.round(centerCalorieKcal * 1.1);
+  }
+
+  return {
+    proteinGoalMinG,
+    proteinGoalMaxG,
+    calorieGoalMinKcal: Math.max(GOAL_CLAMP_MIN, calorieGoalMinKcal),
+    calorieGoalMaxKcal: Math.min(GOAL_CLAMP_MAX, calorieGoalMaxKcal),
+  };
+}
+
 function bmr(gender: string, weightKg: number, heightCm: number, age: number): number {
   const base = 10 * weightKg + 6.25 * heightCm - 5 * age;
   if (gender === 'male') return base + 5;
@@ -121,9 +164,39 @@ function safeActivity(activityLevel: string | null | undefined): ActivityLevel {
   return DEFAULT_ACTIVITY;
 }
 
-function safeGoal(goal: string | null | undefined): Goal {
+export function safeGoal(goal: string | null | undefined): Goal {
   if (goal && goal in GOAL_CALORIE_FACTOR) return goal as Goal;
   return DEFAULT_GOAL;
+}
+
+type StoredGoalRange = {
+  proteinGoalMinG?: number | null;
+  proteinGoalMaxG?: number | null;
+  calorieGoalMinKcal?: number | null;
+  calorieGoalMaxKcal?: number | null;
+};
+
+export function resolveProfileGoalRanges(
+  proteinGoalG: number | null | undefined,
+  calorieGoalKcal: number | null | undefined,
+  goal: string | null | undefined,
+  stored: StoredGoalRange | null | undefined,
+): GoalRange | null {
+  if (proteinGoalG == null || calorieGoalKcal == null) return null;
+  if (
+    stored?.proteinGoalMinG != null &&
+    stored?.proteinGoalMaxG != null &&
+    stored?.calorieGoalMinKcal != null &&
+    stored?.calorieGoalMaxKcal != null
+  ) {
+    return {
+      proteinGoalMinG: stored.proteinGoalMinG,
+      proteinGoalMaxG: stored.proteinGoalMaxG,
+      calorieGoalMinKcal: stored.calorieGoalMinKcal,
+      calorieGoalMaxKcal: stored.calorieGoalMaxKcal,
+    };
+  }
+  return computeGoalRanges(proteinGoalG, calorieGoalKcal, safeGoal(goal));
 }
 
 function ageBandOf(age: number): AgeBand {

@@ -40,6 +40,13 @@ export type RecommendationMeta = {
   warnings?: WarningCode[];
 };
 
+export type GoalRangeFields = {
+  proteinGoalMinG?: number;
+  proteinGoalMaxG?: number;
+  calorieGoalMinKcal?: number;
+  calorieGoalMaxKcal?: number;
+};
+
 export type ProfileGetResponse = {
   gender: Gender;
   age: number;
@@ -49,12 +56,14 @@ export type ProfileGetResponse = {
   goal: Goal | null;
   proteinGoalG?: number;
   calorieGoalKcal?: number;
-} & RecommendationMeta;
+} & GoalRangeFields &
+  RecommendationMeta;
 
 export type RecommendationResult = {
   proteinGoalG: number;
   calorieGoalKcal: number;
-} & RecommendationMeta;
+} & GoalRangeFields &
+  RecommendationMeta;
 
 export type ApiErrorBody = {
   code?: string;

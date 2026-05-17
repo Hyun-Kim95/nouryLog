@@ -18,8 +18,10 @@ export async function fetchTodayShortfall(token: string): Promise<{
 } | null> {
   const profile = await getProfile(token);
   const proteinGoalG = profile.proteinGoalG ?? null;
+  const proteinThreshold = profile.proteinGoalMinG ?? proteinGoalG;
   const calorieGoalKcal = profile.calorieGoalKcal ?? null;
-  if (!proteinGoalG || !calorieGoalKcal) {
+  const calorieThreshold = profile.calorieGoalMinKcal ?? calorieGoalKcal;
+  if (!proteinThreshold || !calorieThreshold) {
     return { proteinShortfallG: 0, calorieShortfallKcal: 0, proteinGoalG, calorieGoalKcal };
   }
 
@@ -41,8 +43,8 @@ export async function fetchTodayShortfall(token: string): Promise<{
   }
 
   return {
-    proteinShortfallG: Math.max(0, proteinGoalG - proteinSum),
-    calorieShortfallKcal: Math.max(0, calorieGoalKcal - calorieSum),
+    proteinShortfallG: Math.max(0, proteinThreshold - proteinSum),
+    calorieShortfallKcal: Math.max(0, calorieThreshold - calorieSum),
     proteinGoalG,
     calorieGoalKcal,
   };

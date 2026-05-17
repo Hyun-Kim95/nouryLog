@@ -111,6 +111,10 @@ export function ProfileEditScreen({ navigation }: Props) {
   const [recommendation, setRecommendation] = useState<{
     proteinGoalG?: number;
     calorieGoalKcal?: number;
+    proteinGoalMinG?: number;
+    proteinGoalMaxG?: number;
+    calorieGoalMinKcal?: number;
+    calorieGoalMaxKcal?: number;
     warnings?: WarningCode[];
     recommendationVersion?: string;
   }>({});
@@ -151,6 +155,10 @@ export function ProfileEditScreen({ navigation }: Props) {
         setRecommendation({
           proteinGoalG: me.proteinGoalG,
           calorieGoalKcal: me.calorieGoalKcal,
+          proteinGoalMinG: me.proteinGoalMinG,
+          proteinGoalMaxG: me.proteinGoalMaxG,
+          calorieGoalMinKcal: me.calorieGoalMinKcal,
+          calorieGoalMaxKcal: me.calorieGoalMaxKcal,
           warnings: me.warnings,
           recommendationVersion: me.recommendationVersion,
         });
@@ -270,6 +278,10 @@ export function ProfileEditScreen({ navigation }: Props) {
       setRecommendation({
         proteinGoalG: r.proteinGoalG,
         calorieGoalKcal: r.calorieGoalKcal,
+        proteinGoalMinG: r.proteinGoalMinG,
+        proteinGoalMaxG: r.proteinGoalMaxG,
+        calorieGoalMinKcal: r.calorieGoalMinKcal,
+        calorieGoalMaxKcal: r.calorieGoalMaxKcal,
         warnings: r.warnings,
         recommendationVersion: r.recommendationVersion,
       });
@@ -325,12 +337,17 @@ export function ProfileEditScreen({ navigation }: Props) {
       await saveProfile(token, diff, { __forceFail: dev.force5xx });
 
       if (overrideValues) {
-        // override 저장: 자동 recalc은 호출하지 않는다. 카드 수치는 입력값으로 즉시 갱신.
-        setRecommendation((prev) => ({
-          ...prev,
-          proteinGoalG: overrideValues!.proteinGoalG,
-          calorieGoalKcal: overrideValues!.calorieGoalKcal,
-        }));
+        const me = await getProfile(token);
+        setRecommendation({
+          proteinGoalG: me.proteinGoalG,
+          calorieGoalKcal: me.calorieGoalKcal,
+          proteinGoalMinG: me.proteinGoalMinG,
+          proteinGoalMaxG: me.proteinGoalMaxG,
+          calorieGoalMinKcal: me.calorieGoalMinKcal,
+          calorieGoalMaxKcal: me.calorieGoalMaxKcal,
+          warnings: me.warnings,
+          recommendationVersion: me.recommendationVersion,
+        });
         toast.show({ kind: 'success', message: OVERRIDE_COPY.saveSuccess });
       } else {
         try {
@@ -338,6 +355,10 @@ export function ProfileEditScreen({ navigation }: Props) {
           setRecommendation({
             proteinGoalG: r.proteinGoalG,
             calorieGoalKcal: r.calorieGoalKcal,
+            proteinGoalMinG: r.proteinGoalMinG,
+            proteinGoalMaxG: r.proteinGoalMaxG,
+            calorieGoalMinKcal: r.calorieGoalMinKcal,
+            calorieGoalMaxKcal: r.calorieGoalMaxKcal,
             warnings: r.warnings,
             recommendationVersion: r.recommendationVersion,
           });
@@ -515,8 +536,15 @@ export function ProfileEditScreen({ navigation }: Props) {
                   </Text>
                 </View>
                 <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
-                  단백질 {recommendation.proteinGoalG ?? '—'} g · 칼로리{' '}
-                  {recommendation.calorieGoalKcal ?? '—'} kcal
+                  단백질{' '}
+                  {recommendation.proteinGoalMinG != null && recommendation.proteinGoalMaxG != null
+                    ? `${recommendation.proteinGoalMinG}–${recommendation.proteinGoalMaxG}`
+                    : (recommendation.proteinGoalG ?? '—')}{' '}
+                  g · 칼로리{' '}
+                  {recommendation.calorieGoalMinKcal != null && recommendation.calorieGoalMaxKcal != null
+                    ? `${recommendation.calorieGoalMinKcal.toLocaleString()}–${recommendation.calorieGoalMaxKcal.toLocaleString()}`
+                    : (recommendation.calorieGoalKcal?.toLocaleString() ?? '—')}{' '}
+                  kcal
                 </Text>
                 <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
                   저장 시 자동으로 다시 계산됩니다.

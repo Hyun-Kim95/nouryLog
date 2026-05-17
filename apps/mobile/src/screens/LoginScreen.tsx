@@ -4,7 +4,6 @@ import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   getPolicyDocument,
-  loginRequest,
   postConsents,
   socialExchangeRequest,
   socialResolveConflictRequest,
@@ -13,8 +12,7 @@ import {
   type PolicyKind,
   type SocialProvider,
 } from '../api';
-import { Field } from '../components/Field';
-import { Banner, PrimaryButton, ScreenLayout } from '../components/ui';
+import { Banner, ScreenLayout } from '../components/ui';
 import { socialAdapter } from '../social';
 import { consumeLoginNotice } from '../authSession';
 import { getOnboardingDone, saveTokens } from '../authStorage';
@@ -44,10 +42,6 @@ export function LoginScreen({ navigation }: Props) {
     terms: null,
     privacy: null,
   });
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [emailBusy, setEmailBusy] = useState(false);
-
   useFocusEffect(() => {
     const notice = consumeLoginNotice();
     if (notice) setSessionNotice(notice);
@@ -80,26 +74,6 @@ export function LoginScreen({ navigation }: Props) {
     }
     await saveTokens(accessToken, refreshToken);
     await goAfterLogin();
-  };
-
-  const onEmailLogin = async () => {
-    if (busy || emailBusy) return;
-    setErr(null);
-    setEmailBusy(true);
-    try {
-      const trimmed = email.trim();
-      if (!trimmed || !password) throw new Error('이메일과 비밀번호를 입력해 주세요.');
-      const tokens = await loginRequest(trimmed, password);
-      await saveTokens(tokens.accessToken, tokens.refreshToken);
-      toast.show({ kind: 'success', message: '이메일로 로그인했어요.' });
-      await goAfterLogin();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '로그인 실패';
-      setErr(msg);
-      toast.show({ kind: 'error', message: msg });
-    } finally {
-      setEmailBusy(false);
-    }
   };
 
   const onSocialLogin = async (provider: SocialProvider) => {
@@ -209,45 +183,10 @@ export function LoginScreen({ navigation }: Props) {
   };
 
   return (
-    <ScreenLayout title="식단 관리" subtitle="이메일 또는 SNS로 로그인해요.">
+    <ScreenLayout title="식단 관리" subtitle="SNS로 로그인해요.">
       {sessionNotice ? <Banner variant="warn">{sessionNotice}</Banner> : null}
       {err ? <Banner variant="danger">{err}</Banner> : null}
 
-      <View style={{ gap: t.spacing.md }}>
-        <Field
-          label="이메일"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          autoComplete="email"
-          editable={!busy && !emailBusy}
-        />
-        <Field
-          label="비밀번호"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          textContentType="password"
-          autoComplete="password"
-          editable={!busy && !emailBusy}
-        />
-        <PrimaryButton title="이메일로 로그인" onPress={() => void onEmailLogin()} loading={emailBusy} />
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => navigation.navigate('SignUp')}
-          disabled={busy || emailBusy}
-        >
-          <Text style={{ color: t.colors.info, fontSize: t.fontSize.body, textAlign: 'center', fontWeight: '600' }}>
-            회원가입
-          </Text>
-        </Pressable>
-      </View>
-
-      <Text style={{ color: t.colors.fgSubtle, textAlign: 'center', fontSize: t.fontSize.caption }}>
-        또는 SNS로 로그인
-      </Text>
       <Pressable
         style={[styles.socialBtn, { borderRadius: t.radius.md, padding: t.spacing.md }, styles.naver]}
         onPress={() => void onSocialLogin('naver')}

@@ -71,10 +71,11 @@ tags: [requirements, prd, mobile-app, admin-web]
   - 섭취량/영양소 값은 0 미만 입력 불가.
   - 비정상적으로 큰 값(예: 단일 끼니 10,000kcal 초과)은 저장 전 확인 경고를 노출한다.
 
-### 6.1.1 사용자 인증 (이메일 + SNS)
-- 모바일 사용자 로그인은 이메일/비밀번호와 SNS 로그인을 함께 지원한다.
+### 6.1.1 사용자 인증 (모바일 SNS / 관리자 이메일)
+- **모바일** 사용자 로그인·가입 진입은 **SNS 전용**(`naver`, `google`, `kakao`)이다. 앱 UI에 이메일/비밀번호 로그인·이메일 회원가입 화면은 노출하지 않는다.
 - SNS 지원 대상: `naver`, `google`, `kakao`. (안드로이드 기준 네이티브 SDK 사용, iOS는 후순위)
-- 관리자 웹은 기존 이메일 로그인만 유지한다.
+- **관리자 웹**은 이메일/비밀번호 로그인만 유지한다.
+- 서버 `POST /auth/login`, `POST /auth/signup` API는 유지할 수 있으나 모바일 클라이언트에서는 호출하지 않는다.
 - 흐름: 모바일이 각 provider 의 **네이티브 SDK** 로 로그인해 provider access token(또는 idToken)을 얻고, `POST /auth/social/:provider/exchange` 로 서버에 전달하면 서버가 provider 프로필을 검증해 우리 서비스의 `accessToken`/`refreshToken` 을 발급한다. 기존 Chrome Custom Tab + 서버 OAuth(`/start`·`/callback`) 흐름은 단종됐다.
 - 계정 충돌 정책:
   - SNS 제공 이메일이 기존 이메일 계정과 충돌하면 자동 연결하지 않는다.

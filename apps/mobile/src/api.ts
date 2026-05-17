@@ -31,21 +31,6 @@ export async function apiFetch<T>(path: string, init: RequestInit & { token?: st
   return json as T;
 }
 
-export async function loginRequest(
-  email: string,
-  password: string,
-): Promise<{ accessToken: string; refreshToken: string }> {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  const data = (await res.json()) as { accessToken?: string; refreshToken?: string; message?: string };
-  if (!res.ok) throw new Error(data.message ?? '로그인 실패');
-  if (!data.accessToken || !data.refreshToken) throw new Error('토큰 응답 없음');
-  return { accessToken: data.accessToken, refreshToken: data.refreshToken };
-}
-
 export type PolicyKind = 'terms' | 'privacy';
 export type PolicyDocument = {
   kind: PolicyKind;
@@ -55,18 +40,6 @@ export type PolicyDocument = {
   updatedAt: string;
 };
 export type ConsentVersions = Record<PolicyKind, { version: number }>;
-
-export async function signupRequest(body: {
-  email: string;
-  password: string;
-  ageConfirmed: boolean;
-  consents: ConsentVersions;
-}): Promise<{ ok: boolean }> {
-  return apiFetch<{ ok: boolean }>('/auth/signup', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
 
 export async function getPolicyDocument(kind: PolicyKind): Promise<PolicyDocument> {
   return apiFetch<PolicyDocument>(`/public/policies/${kind}`);

@@ -88,8 +88,12 @@ model Profile {
   activityLevel   String?
   /// `lose` / `maintain` / `gain`. NULL이면 권장 계산 시 임시 기본값 `maintain` 적용.
   goal            String?
-  proteinGoalG    Int?
-  calorieGoalKcal Int?
+  proteinGoalG         Int?
+  calorieGoalKcal      Int?
+  proteinGoalMinG      Int?
+  proteinGoalMaxG      Int?
+  calorieGoalMinKcal   Int?
+  calorieGoalMaxKcal   Int?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

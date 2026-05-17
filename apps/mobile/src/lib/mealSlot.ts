@@ -4,7 +4,7 @@ export const MEAL_SLOT_OPTIONS: { value: MealSlot; label: string }[] = [
   { value: 'BREAKFAST', label: '아침' },
   { value: 'LUNCH', label: '점심' },
   { value: 'DINNER', label: '저녁' },
-  { value: 'SNACK', label: '추가' },
+  { value: 'SNACK', label: '간식' },
 ];
 
 export function defaultMealSlotForNow(date = new Date()): MealSlot {

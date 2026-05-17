@@ -30,10 +30,36 @@ async function fetchGoogleVisionText(input: OcrInput): Promise<string> {
     body: JSON.stringify(body),
   });
 
+  const rawBody = await res.text();
   if (res.status === 429) throw new Error('ocr_rate_limit');
-  if (!res.ok) throw new Error(`ocr_provider_unavailable:${res.status}`);
+  if (!res.ok) {
+    let reason = `http_${res.status}`;
+    try {
+      const errJson = JSON.parse(rawBody) as {
+        error?: {
+          message?: string;
+          status?: string;
+          details?: Array<{ reason?: string }>;
+        };
+      };
+      const detailReason = errJson.error?.details?.find((d) => d.reason)?.reason;
+      reason = detailReason ?? errJson.error?.status ?? errJson.error?.message ?? reason;
+      if (process.env.OCR_DEBUG === '1') {
+        console.warn('[ocr] vision request failed', {
+          httpStatus: res.status,
+          reason,
+          message: errJson.error?.message,
+        });
+      }
+    } catch {
+      if (process.env.OCR_DEBUG === '1') {
+        console.warn('[ocr] vision request failed', { httpStatus: res.status, bodyPreview: rawBody.slice(0, 200) });
+      }
+    }
+    throw new Error(`ocr_provider_unavailable:${reason}`);
+  }
 
-  const data = (await res.json()) as {
+  const data = JSON.parse(rawBody) as {
     responses?: Array<{ fullTextAnnotation?: { text?: string }; error?: { message?: string } }>;
   };
   const first = data.responses?.[0];

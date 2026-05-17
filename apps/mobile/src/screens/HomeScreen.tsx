@@ -103,13 +103,17 @@ export function HomeScreen() {
             <ProgressBar
               label={HOME_COPY.calorie}
               value={Math.round(intake.calorieKcal)}
-              max={goals.calorieGoalKcal}
+              max={goals.calorieGoalMaxKcal ?? goals.calorieGoalKcal}
               unit=" kcal"
               fulfillment={computeFulfillment(
                 'calorie',
                 intake.calorieKcal,
                 goals.calorieGoalKcal,
                 profile,
+                {
+                  min: goals.calorieGoalMinKcal,
+                  max: goals.calorieGoalMaxKcal,
+                },
               )}
             />
           ) : null}
@@ -117,9 +121,12 @@ export function HomeScreen() {
             <ProgressBar
               label={HOME_COPY.protein}
               value={Math.round(intake.proteinG)}
-              max={goals.proteinGoalG}
+              max={goals.proteinGoalMaxG ?? goals.proteinGoalG}
               unit="g"
-              fulfillment={computeFulfillment('protein', intake.proteinG, goals.proteinGoalG, profile)}
+              fulfillment={computeFulfillment('protein', intake.proteinG, goals.proteinGoalG, profile, {
+                min: goals.proteinGoalMinG,
+                max: goals.proteinGoalMaxG,
+              })}
             />
           ) : null}
           {warnings.map((line) => (

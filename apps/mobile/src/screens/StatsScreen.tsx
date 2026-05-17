@@ -126,13 +126,17 @@ export function StatsScreen() {
                 <ProgressBar
                   label="칼로리"
                   value={data.summary.calories}
-                  max={calorieGoalKcal}
+                  max={goals?.calorieGoalMaxKcal ?? calorieGoalKcal}
                   unit=" kcal"
                   fulfillment={computeFulfillment(
                     'calorie',
                     data.summary.calories,
                     calorieGoalKcal,
                     profile,
+                    {
+                      min: goals?.calorieGoalMinKcal ?? null,
+                      max: goals?.calorieGoalMaxKcal ?? null,
+                    },
                   )}
                 />
               ) : null}
@@ -140,9 +144,12 @@ export function StatsScreen() {
                 <ProgressBar
                   label="단백질"
                   value={data.summary.protein}
-                  max={proteinGoalG}
+                  max={goals?.proteinGoalMaxG ?? proteinGoalG}
                   unit="g"
-                  fulfillment={computeFulfillment('protein', data.summary.protein, proteinGoalG, profile)}
+                  fulfillment={computeFulfillment('protein', data.summary.protein, proteinGoalG, profile, {
+                    min: goals?.proteinGoalMinG ?? null,
+                    max: goals?.proteinGoalMaxG ?? null,
+                  })}
                 />
               ) : null}
             </Card>
