@@ -13,6 +13,10 @@ export const HOME_COPY = {
   ocrBannerExhausted: '무료 사진 분석을 모두 사용했어요. 계속 쓰려면 구독이 필요합니다.',
   adBanner: '광고가 표시 중이에요. 프리미엄 구독 시 하단 광고가 숨겨집니다.',
   adHidden: '프리미엄 이용 중이라 광고가 숨겨져 있어요.',
+  mealsBySlotTitle: '오늘의 끼니',
+  mealSlotEmpty: '기록 없음',
+  mealSlotLine: (label: string, kcal: number, proteinG: number) =>
+    `${label} · ${kcal} kcal · 단백질 ${proteinG}g`,
   emptyGoals: '권장 목표가 없어요. 프로필을 입력하면 달성률을 볼 수 있어요.',
   profileCta: '프로필 편집',
   retry: '다시 시도',

@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "SnackPlacement" AS ENUM ('BEFORE_BREAKFAST', 'BETWEEN_BREAKFAST_LUNCH', 'BETWEEN_LUNCH_DINNER', 'AFTER_DINNER');
+
+-- AlterTable
+ALTER TABLE "Meal" ADD COLUMN IF NOT EXISTS "snackPlacement" "SnackPlacement";

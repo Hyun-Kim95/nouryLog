@@ -20,6 +20,13 @@ import {
   todayAnchorKst,
 } from '../lib/statsPeriod.js';
 import { mealSlotPatchFromBody, parseMealSlot } from '../lib/mealSlot.js';
+import {
+  parseSnackPlacement,
+  snackPlacementPatchFromBody,
+  validateMealSlotSnackCombo,
+} from '../lib/snackPlacement.js';
+import { buildByMealSlotForPeriod, buildStatsExtras } from '../lib/statsAggregate.js';
+import type { MealSlot, SnackPlacement } from '@prisma/client';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
@@ -40,6 +47,17 @@ function parseMealInputMode(raw: unknown): MealInputMode | null {
   if (raw === 'PORTION_COUNT') return MealInputMode.PORTION_COUNT;
   if (raw === 'TOTAL_GRAMS') return MealInputMode.TOTAL_GRAMS;
   return null;
+}
+
+function snackPlacementForCreate(
+  mealSlot: MealSlot | null,
+  raw: unknown,
+): SnackPlacement | null | 'invalid' {
+  if (mealSlot !== 'SNACK') return null;
+  const parsed = parseSnackPlacement(raw);
+  if (raw != null && raw !== '' && parsed === null) return 'invalid';
+  if (parsed === undefined) return null;
+  return parsed;
 }
 
 function assertNonNegativeNutrition(fields: Record<string, number>, res: Response): boolean {
@@ -521,6 +539,18 @@ meRouter.post('/meals', async (req, res) => {
     return;
   }
   const mealSlot = slotParsed ?? null;
+  const snackForCreate = snackPlacementForCreate(mealSlot, b.snackPlacement);
+  if (snackForCreate === 'invalid') {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'snackPlacement이 올바르지 않습니다.', {
+      field: 'snackPlacement',
+    });
+    return;
+  }
+  const snackCombo = validateMealSlotSnackCombo(mealSlot, snackForCreate);
+  if (!snackCombo.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, snackCombo.message, { field: snackCombo.field });
+    return;
+  }
 
   const rawTplId = b.foodTemplateId;
   const templateId = typeof rawTplId === 'string' && rawTplId.trim() ? rawTplId.trim() : null;
@@ -598,6 +628,7 @@ meRouter.post('/meals', async (req, res) => {
         mealInputMode: mode,
         portionQuantity,
         mealSlot,
+        snackPlacement: snackForCreate,
       },
     });
     res.status(201).json({ mealId: meal.id });
@@ -631,6 +662,7 @@ meRouter.post('/meals', async (req, res) => {
       mealInputMode: null,
       portionQuantity: null,
       mealSlot,
+      snackPlacement: snackForCreate,
     },
   });
   res.status(201).json({ mealId: meal.id });
@@ -696,6 +728,7 @@ meRouter.get('/meals', async (req, res) => {
         mealInputMode: true,
         portionQuantity: true,
         mealSlot: true,
+        snackPlacement: true,
       },
     }),
   ]);
@@ -718,6 +751,7 @@ meRouter.get('/meals', async (req, res) => {
       mealInputMode: m.mealInputMode,
       portionQuantity: m.portionQuantity,
       mealSlot: m.mealSlot,
+      snackPlacement: m.snackPlacement,
     })),
   });
 });
@@ -743,6 +777,29 @@ meRouter.put('/meals/:mealId', async (req, res) => {
   }
   const slotData = slotPatchResult.data;
 
+  const snackPatchResult = snackPlacementPatchFromBody(b);
+  if (!snackPatchResult.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'snackPlacement이 올바르지 않습니다.', {
+      field: 'snackPlacement',
+    });
+    return;
+  }
+  const snackData = snackPatchResult.data;
+  const effectiveSlot =
+    slotData.mealSlot !== undefined ? slotData.mealSlot : meal.mealSlot;
+  let effectiveSnack =
+    snackData.snackPlacement !== undefined ? snackData.snackPlacement : meal.snackPlacement;
+  if (effectiveSlot !== 'SNACK') effectiveSnack = null;
+  const snackComboPut = validateMealSlotSnackCombo(effectiveSlot, effectiveSnack);
+  if (!snackComboPut.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, snackComboPut.message, { field: snackComboPut.field });
+    return;
+  }
+  const snackPatchResolved =
+    effectiveSlot === 'SNACK'
+      ? { snackPlacement: effectiveSnack }
+      : { snackPlacement: null as SnackPlacement | null };
+
   const hasTplKey = Object.prototype.hasOwnProperty.call(b, 'foodTemplateId');
   if (hasTplKey && (b.foodTemplateId === null || b.foodTemplateId === '')) {
     const nextName = b.name !== undefined ? String(b.name).trim() : meal.name;
@@ -766,6 +823,7 @@ meRouter.put('/meals/:mealId', async (req, res) => {
         ...(b.note !== undefined ? { note: b.note ? String(b.note) : null } : {}),
         ...(b.imageUrl !== undefined ? { imageUrl: b.imageUrl ? String(b.imageUrl) : null } : {}),
         ...slotData,
+        ...snackPatchResolved,
       },
     });
     res.json({ ok: true });
@@ -845,6 +903,7 @@ meRouter.put('/meals/:mealId', async (req, res) => {
         mealInputMode: mode,
         portionQuantity,
         ...slotData,
+        ...snackPatchResolved,
       },
     });
     res.json({ ok: true });
@@ -875,6 +934,7 @@ meRouter.put('/meals/:mealId', async (req, res) => {
       ...(legacy.note !== undefined ? { note: legacy.note ? String(legacy.note) : null } : {}),
       ...(legacy.imageUrl !== undefined ? { imageUrl: legacy.imageUrl ? String(legacy.imageUrl) : null } : {}),
       ...slotData,
+      ...snackPatchResolved,
     },
   });
   res.json({ ok: true });
@@ -1052,6 +1112,26 @@ meRouter.get('/stats', async (req, res) => {
     },
   });
 
+  const profile = await prisma.profile.findUnique({ where: { userId } });
+  const profileGoals = profile
+    ? {
+        goal: profile.goal,
+        proteinGoalG: profile.proteinGoalG,
+        calorieGoalKcal: profile.calorieGoalKcal,
+        proteinGoalMinG: profile.proteinGoalMinG,
+        proteinGoalMaxG: profile.proteinGoalMaxG,
+        calorieGoalMinKcal: profile.calorieGoalMinKcal,
+        calorieGoalMaxKcal: profile.calorieGoalMaxKcal,
+      }
+    : null;
+
+  const byMealSlot = await buildByMealSlotForPeriod(userId, period);
+  const statsRange = range === 'day' || range === 'week' || range === 'month' ? range : null;
+  const extras =
+    statsRange === 'week' || statsRange === 'month'
+      ? await buildStatsExtras(userId, period, profileGoals, statsRange)
+      : null;
+
   res.json({
     aggregatedAt: aggregatedAt.toISOString(),
     isStale,
@@ -1069,6 +1149,10 @@ meRouter.get('/stats', async (req, res) => {
       protein: agg._sum.protein ?? 0,
       fat: agg._sum.fat ?? 0,
     },
+    byMealSlot,
+    ...(extras
+      ? { daily: extras.daily, goalAchievement: extras.goalAchievement }
+      : {}),
   });
 });
 

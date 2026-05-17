@@ -19,4 +19,17 @@ export const STATS_COPY = {
   periodPrev: '이전 기간',
   periodNext: '다음 기간',
   periodFutureBlocked: '아직 시작하지 않은 기간이에요.',
+  bySlotTitle: '끼니별 합계',
+  slotLine: (label: string, kcal: number, proteinG: number) => `${label} · ${kcal} kcal · 단백질 ${proteinG}g`,
+  goalDaysTitle: '목표 달성 일수',
+  calorieGoalDays: (met: number, counted: number, pct: number) =>
+    `칼로리 · ${met}/${counted}일 달성 (${pct}%)`,
+  proteinGoalDays: (met: number, counted: number, pct: number) =>
+    `단백질 · ${met}/${counted}일 달성 (${pct}%)`,
+  dailyChartTitle: '일별 달성',
+  dailyChartCalorie: '칼로리',
+  dailyChartProtein: '단백질',
+  dailyMet: '달성',
+  dailyNotMet: '미달성',
+  dailyNoRecord: '기록 없음',
 } as const;

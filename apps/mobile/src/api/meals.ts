@@ -1,5 +1,5 @@
 import { apiFetch } from '../api';
-import type { MealSlot } from '../lib/mealSlot';
+import type { MealSlot, SnackPlacement } from '../lib/mealSlot';
 
 export type FoodTemplateItem = {
   id: string;
@@ -28,6 +28,7 @@ export type MealRow = {
   mealInputMode?: string | null;
   portionQuantity?: number | null;
   mealSlot?: MealSlot | null;
+  snackPlacement?: SnackPlacement | null;
 };
 
 export type TemplateInputMode = 'PORTION_COUNT' | 'TOTAL_GRAMS';
@@ -39,6 +40,7 @@ export type CreateMealManualBody = {
   carbohydrate: number;
   fat: number;
   mealSlot?: MealSlot;
+  snackPlacement?: SnackPlacement;
   consumedAt?: string;
 };
 
@@ -48,6 +50,7 @@ export type CreateMealTemplateBody = {
   portionQuantity?: number;
   totalGrams?: number;
   mealSlot?: MealSlot;
+  snackPlacement?: SnackPlacement;
   consumedAt?: string;
 };
 

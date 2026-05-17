@@ -64,6 +64,13 @@ enum MealSlot {
   SNACK
 }
 
+enum SnackPlacement {
+  BEFORE_BREAKFAST
+  BETWEEN_BREAKFAST_LUNCH
+  BETWEEN_LUNCH_DINNER
+  AFTER_DINNER
+}
+
 model SocialAccount {
   id             String         @id @default(cuid())
   provider       SocialProvider
@@ -119,6 +126,8 @@ model Meal {
   portionQuantity Float?
   /// 아침/점심/저녁/추가(간식). 레거시 row는 null.
   mealSlot        MealSlot?
+  /// `mealSlot === SNACK`일 때만 사용. 끼니 사이 위치.
+  snackPlacement  SnackPlacement?
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   foodTemplate FoodTemplate? @relation(fields: [foodTemplateId], references: [id], onDelete: SetNull)

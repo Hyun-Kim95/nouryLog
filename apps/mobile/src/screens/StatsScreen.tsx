@@ -2,29 +2,20 @@ import { useCallback, useEffect, useState } from 'react';
 import { Text } from 'react-native';
 import { Segmented } from '../components/Segmented';
 import { StatsPeriodNavigator } from '../components/StatsPeriodNavigator';
+import { DailyGoalChart } from '../components/DailyGoalChart';
 import { Banner, Card, CardTitle, ProgressBar, ScreenLayout } from '../components/ui';
 import { STATS_COPY } from '../copy/stats';
-import { apiFetch, isAuthDenied } from '../api';
+import { fetchStats, type StatsResponse } from '../api/stats';
+import { isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { computeFulfillment } from '../lib/goalFulfillment';
+import { mealSlotLabel, type MealSlot } from '../lib/mealSlot';
 import { shiftAnchor, todayAnchorKst, type StatsRange } from '../lib/statsPeriod';
 import { fetchTodayGoals } from '../lib/todayNutrition';
 import { useTheme } from '../theme';
 
-type Stats = {
-  aggregatedAt: string;
-  isStale: boolean;
-  staleHours: number;
-  timezone: string;
-  period: {
-    anchor: string;
-    from: string;
-    toExclusive: string;
-    label: string;
-  };
-  summary: { calories: number; protein: number; carbohydrate: number; fat: number };
-};
+const SLOT_ORDER: Array<MealSlot | 'UNSPECIFIED'> = ['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK', 'UNSPECIFIED'];
 
 export function StatsScreen() {
   const t = useTheme();
@@ -32,7 +23,7 @@ export function StatsScreen() {
   const [err, setErr] = useState<string | null>(null);
   const [range, setRange] = useState<StatsRange>('day');
   const [periodOffset, setPeriodOffset] = useState(0);
-  const [data, setData] = useState<Stats | null>(null);
+  const [data, setData] = useState<StatsResponse | null>(null);
   const [goals, setGoals] = useState<Awaited<ReturnType<typeof fetchTodayGoals>> | null>(null);
 
   const load = useCallback(
@@ -43,10 +34,7 @@ export function StatsScreen() {
         const token = await ensureAccessToken();
         if (!token) return;
         const anchor = shiftAnchor(todayAnchorKst(), range, periodOffset);
-        const [s, g] = await Promise.all([
-          apiFetch<Stats>(`/stats?range=${range}&anchor=${encodeURIComponent(anchor)}`, { token }),
-          fetchTodayGoals(token),
-        ]);
+        const [s, g] = await Promise.all([fetchStats(token, range, anchor), fetchTodayGoals(token)]);
         setData(s);
         setGoals(g);
       } catch (e) {
@@ -93,6 +81,16 @@ export function StatsScreen() {
   const periodLabel = data?.period.label ?? '…';
   const canGoNext = periodOffset < 0;
 
+  const bySlotRows =
+    data?.byMealSlot &&
+    SLOT_ORDER.map((slot) => {
+      const key = slot;
+      const sum = data.byMealSlot![key];
+      if (!sum || (sum.calories === 0 && sum.protein === 0)) return null;
+      const label = slot === 'UNSPECIFIED' ? '미분류' : mealSlotLabel(slot);
+      return { key, label, sum };
+    }).filter(Boolean) as Array<{ key: string; label: string; sum: { calories: number; protein: number } }>;
+
   const statsBody = (
     <>
       {err ? (
@@ -119,6 +117,21 @@ export function StatsScreen() {
               단백질 {data.summary.protein}g · 탄수 {data.summary.carbohydrate}g · 지방 {data.summary.fat}g
             </Text>
           </Card>
+
+          {bySlotRows && bySlotRows.length > 0 ? (
+            <Card>
+              <CardTitle>{STATS_COPY.bySlotTitle}</CardTitle>
+              {bySlotRows.map((row) => (
+                <Text
+                  key={row.key}
+                  style={{ color: t.colors.fg, fontSize: t.fontSize.body, marginBottom: t.spacing.xs }}
+                >
+                  {STATS_COPY.slotLine(row.label, Math.round(row.sum.calories), Math.round(row.sum.protein))}
+                </Text>
+              ))}
+            </Card>
+          ) : null}
+
           {(proteinGoalG != null || calorieGoalKcal != null) && range === 'day' ? (
             <Card>
               <CardTitle>{STATS_COPY.fulfillmentTitle}</CardTitle>
@@ -152,6 +165,31 @@ export function StatsScreen() {
                   })}
                 />
               ) : null}
+            </Card>
+          ) : null}
+
+          {(range === 'week' || range === 'month') && data.goalAchievement ? (
+            <Card>
+              <CardTitle>{STATS_COPY.goalDaysTitle}</CardTitle>
+              {calorieGoalKcal != null ? (
+                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, marginBottom: t.spacing.xs }}>
+                  {STATS_COPY.calorieGoalDays(
+                    data.goalAchievement.calorie.metDays,
+                    data.goalAchievement.calorie.countedDays,
+                    data.goalAchievement.calorie.pct,
+                  )}
+                </Text>
+              ) : null}
+              {proteinGoalG != null ? (
+                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
+                  {STATS_COPY.proteinGoalDays(
+                    data.goalAchievement.protein.metDays,
+                    data.goalAchievement.protein.countedDays,
+                    data.goalAchievement.protein.pct,
+                  )}
+                </Text>
+              ) : null}
+              {data.daily && data.daily.length > 0 ? <DailyGoalChart daily={data.daily} /> : null}
             </Card>
           ) : null}
         </>

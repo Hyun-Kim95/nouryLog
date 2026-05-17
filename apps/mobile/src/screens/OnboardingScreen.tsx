@@ -29,6 +29,7 @@ import {
 import {
   clearTokens,
   getAccessToken,
+  parseUserIdFromAccessToken,
   setOnboardingDone,
 } from '../authStorage';
 import { useDevToggles } from '../dev/devToggles';
@@ -195,7 +196,8 @@ export function OnboardingScreen({ navigation }: Props) {
         toast.show({ kind: 'info', message: '권장량을 다시 계산하지 못했어요. 잠시 후 다시 시도하세요.' });
         if (__DEV__) console.warn('recalc failed', recalcErr);
       }
-      await setOnboardingDone(true);
+      const userId = token ? parseUserIdFromAccessToken(token) : null;
+      await setOnboardingDone(true, userId ?? undefined);
       setTimeout(() => goMain(), 600);
     } catch (e) {
       if (e instanceof ProfileApiError) {

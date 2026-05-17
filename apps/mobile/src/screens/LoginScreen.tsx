@@ -15,7 +15,8 @@ import {
 import { Banner, ScreenLayout } from '../components/ui';
 import { socialAdapter } from '../social';
 import { consumeLoginNotice } from '../authSession';
-import { getOnboardingDone, saveTokens } from '../authStorage';
+import { saveTokens } from '../authStorage';
+import { resolveOnboardingComplete } from '../lib/onboardingGate';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 import type { RootStackParamList } from '../navigation';
@@ -47,8 +48,8 @@ export function LoginScreen({ navigation }: Props) {
     if (notice) setSessionNotice(notice);
   });
 
-  const goAfterLogin = async () => {
-    const done = await getOnboardingDone();
+  const goAfterLogin = async (accessToken: string) => {
+    const done = await resolveOnboardingComplete(accessToken);
     navigation.reset({ index: 0, routes: [{ name: done ? 'Main' : 'Onboarding' }] });
   };
 
@@ -73,7 +74,7 @@ export function LoginScreen({ navigation }: Props) {
       return;
     }
     await saveTokens(accessToken, refreshToken);
-    await goAfterLogin();
+    await goAfterLogin(accessToken);
   };
 
   const onSocialLogin = async (provider: SocialProvider) => {
@@ -172,7 +173,7 @@ export function LoginScreen({ navigation }: Props) {
       });
       await saveTokens(pendingSocial.accessToken, pendingSocial.refreshToken);
       toast.show({ kind: 'success', message: '약관 동의를 저장했어요.' });
-      await goAfterLogin();
+      await goAfterLogin(pendingSocial.accessToken);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '동의 저장 실패';
       setErr(msg);

@@ -3,7 +3,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { navigationRef } from './src/authSession';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator, type InitialRoute } from './src/navigation';
-import { getAccessToken, getOnboardingDone } from './src/authStorage';
+import { getAccessToken } from './src/authStorage';
+import { resolveOnboardingComplete } from './src/lib/onboardingGate';
 import { ThemeProvider } from './src/theme';
 import { DevTogglesProvider } from './src/dev/devToggles';
 import { DevPanel } from './src/dev/DevPanel';
@@ -21,7 +22,7 @@ export default function App() {
       if (!token) {
         setInitialRoute('Login');
       } else {
-        const done = await getOnboardingDone();
+        const done = await resolveOnboardingComplete(token);
         setInitialRoute(done ? 'Main' : 'Onboarding');
       }
       setReady(true);

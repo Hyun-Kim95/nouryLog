@@ -21,6 +21,7 @@ import {
 import { ensureAccessToken } from '../authSession';
 import { getAccessToken } from '../authStorage';
 import { LabeledField } from '../components/LabeledField';
+import { RadioGroup } from '../components/RadioGroup';
 import { Segmented } from '../components/Segmented';
 import {
   Banner,
@@ -38,10 +39,17 @@ import { useFocusReload } from '../hooks/useFocusReload';
 import { formatMacroLine } from '../lib/formatNutrition';
 import { parseManualNutrition } from '../lib/manualNutrition';
 import {
+  filterOlderThanToday,
+  groupMealsForTodayTimeline,
+  mealRowSubtitle,
+} from '../lib/mealTimeline';
+import {
   defaultMealSlotForNow,
-  mealSlotLabel,
+  defaultSnackPlacementForNow,
   MEAL_SLOT_OPTIONS,
+  SNACK_PLACEMENT_OPTIONS,
   type MealSlot,
+  type SnackPlacement,
 } from '../lib/mealSlot';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
@@ -95,6 +103,7 @@ export function LogScreen() {
   const [carbohydrate, setCarbohydrate] = useState('');
   const [fat, setFat] = useState('');
   const [mealSlot, setMealSlot] = useState<MealSlot>(() => defaultMealSlotForNow());
+  const [snackPlacement, setSnackPlacement] = useState<SnackPlacement>(() => defaultSnackPlacementForNow());
   const [consumedAt, setConsumedAt] = useState(EMPTY_FORM.consumedAt);
   const [ent, setEnt] = useState<Ent | null>(null);
   const [paywallOpen, setPaywallOpen] = useState(false);
@@ -118,6 +127,7 @@ export function LogScreen() {
     setCarbohydrate(EMPTY_FORM.carbohydrate);
     setFat(EMPTY_FORM.fat);
     setMealSlot(defaultMealSlotForNow());
+    setSnackPlacement(defaultSnackPlacementForNow());
     setConsumedAt(new Date().toISOString());
     setSelectedTpl(null);
     setMealInputMode('PORTION_COUNT');
@@ -156,8 +166,8 @@ export function LogScreen() {
     const token = await ensureAccessToken();
     if (!token) return;
     try {
-      const res = await listMeals(token, { page: 1, size: 15 });
-      setItems(res.items);
+      const all = await listMeals(token, { page: 1, size: 100 });
+      setItems(all.items ?? []);
       const recent = await listMeals(token, { page: 1, size: 20 });
       const seen = new Set<string>();
       const deduped: MealRow[] = [];
@@ -187,10 +197,18 @@ export function LogScreen() {
     ),
   );
 
-  const mealBodyBase = (): Record<string, unknown> => ({
-    mealSlot,
-    consumedAt: editingMealId ? consumedAt : new Date().toISOString(),
-  });
+  const mealBodyBase = (): Record<string, unknown> => {
+    const base: Record<string, unknown> = {
+      mealSlot,
+      consumedAt: editingMealId ? consumedAt : new Date().toISOString(),
+    };
+    if (mealSlot === 'SNACK') {
+      base.snackPlacement = snackPlacement;
+    } else {
+      base.snackPlacement = null;
+    }
+    return base;
+  };
 
   const buildTemplateBody = (): Record<string, unknown> => {
     if (!selectedTpl) throw new Error('음식 템플릿을 선택해 주세요.');
@@ -214,6 +232,9 @@ export function LogScreen() {
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('로그인 필요');
+      if (mealSlot === 'SNACK' && !snackPlacement) {
+        throw new Error(LOG_COPY.snackPlacementRequired);
+      }
 
       if (selectedTpl) {
         const body = buildTemplateBody();
@@ -392,6 +413,7 @@ export function LogScreen() {
     setCarbohydrate(String(Math.round(m.carbohydrate)));
     setFat(String(Math.round(m.fat)));
     if (m.mealSlot) setMealSlot(m.mealSlot);
+    if (m.snackPlacement) setSnackPlacement(m.snackPlacement);
     toast.show({ kind: 'info', message: '입력란에 불러왔어요. 확인 후 저장해 주세요.' });
   };
 
@@ -412,6 +434,7 @@ export function LogScreen() {
         setCarbohydrate('');
         setFat('');
         if (m.mealSlot) setMealSlot(m.mealSlot);
+        if (m.snackPlacement) setSnackPlacement(m.snackPlacement);
         setLastOcrMeta(null);
         toast.show({ kind: 'info', message: '템플릿으로 불러왔어요.' });
         return;
@@ -424,6 +447,8 @@ export function LogScreen() {
     setEditingMealId(item.mealId);
     setConsumedAt(item.consumedAt);
     if (item.mealSlot) setMealSlot(item.mealSlot);
+    if (item.snackPlacement) setSnackPlacement(item.snackPlacement);
+    else if (item.mealSlot === 'SNACK') setSnackPlacement(defaultSnackPlacementForNow());
     setLastOcrMeta(null);
 
     if (item.foodTemplateId) {
@@ -623,7 +648,28 @@ export function LogScreen() {
               {LOG_COPY.slotEditHint}
             </Text>
           ) : null}
-          <Segmented<MealSlot> options={MEAL_SLOT_OPTIONS} value={mealSlot} onChange={setMealSlot} />
+          <Segmented<MealSlot>
+            options={MEAL_SLOT_OPTIONS}
+            value={mealSlot}
+            onChange={(next) => {
+              setMealSlot(next);
+              if (next === 'SNACK' && !snackPlacement) setSnackPlacement(defaultSnackPlacementForNow());
+            }}
+          />
+          {mealSlot === 'SNACK' ? (
+            <View style={{ marginTop: t.spacing.md, gap: t.spacing.sm }}>
+              <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
+                {LOG_COPY.sectionSnackWhen}
+              </Text>
+              <RadioGroup
+                options={SNACK_PLACEMENT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                value={snackPlacement}
+                onChange={(v) => {
+                  if (v) setSnackPlacement(v);
+                }}
+              />
+            </View>
+          ) : null}
         </Card>
 
         <Card>
@@ -689,31 +735,79 @@ export function LogScreen() {
           </View>
         </Card>
 
-        <Card>
-          <CardTitle>{LOG_COPY.listTitle}</CardTitle>
-          {items.length === 0 ? (
-            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{LOG_COPY.listEmpty}</Text>
-          ) : (
-            items.map((item) => (
-              <Pressable
-                key={item.mealId}
-                onPress={() => startEditMeal(item)}
-                style={{
-                  paddingVertical: t.spacing.sm,
-                  borderBottomWidth: 1,
-                  borderBottomColor: t.colors.border,
-                }}
-              >
-                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
-                  {mealSlotLabel(item.mealSlot)} · {item.name}
-                </Text>
-                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                  {item.calories} kcal · {formatMacroLine(item)} · {item.consumedAt.slice(0, 10)}
-                </Text>
-              </Pressable>
-            ))
-          )}
-        </Card>
+        {(() => {
+          const timeline = groupMealsForTodayTimeline(items);
+          const hasToday = timeline.some((s) => s.items.length > 0);
+          const pastItems = filterOlderThanToday(items).slice(0, 20);
+          return (
+            <>
+              <Card>
+                <CardTitle>{LOG_COPY.todayTitle}</CardTitle>
+                {!hasToday ? (
+                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{LOG_COPY.todayEmpty}</Text>
+                ) : (
+                  timeline.map((section) =>
+                    section.items.length === 0 ? null : (
+                      <View key={section.kind} style={{ marginBottom: t.spacing.md }}>
+                        <Text
+                          style={{
+                            color: t.colors.fg,
+                            fontSize: t.fontSize.body,
+                            fontWeight: '700',
+                            marginBottom: t.spacing.xs,
+                          }}
+                        >
+                          {section.title} · {section.summaryKcal} kcal
+                        </Text>
+                        {section.items.map((item) => (
+                          <Pressable
+                            key={item.mealId}
+                            onPress={() => startEditMeal(item)}
+                            style={{
+                              paddingVertical: t.spacing.sm,
+                              borderBottomWidth: 1,
+                              borderBottomColor: t.colors.border,
+                            }}
+                          >
+                            <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
+                              {mealRowSubtitle(item)}
+                            </Text>
+                            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                              {item.calories} kcal · {formatMacroLine(item)}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ),
+                  )
+                )}
+              </Card>
+              {pastItems.length > 0 ? (
+                <Card>
+                  <CardTitle>{LOG_COPY.pastTitle}</CardTitle>
+                  {pastItems.map((item) => (
+                    <Pressable
+                      key={item.mealId}
+                      onPress={() => startEditMeal(item)}
+                      style={{
+                        paddingVertical: t.spacing.sm,
+                        borderBottomWidth: 1,
+                        borderBottomColor: t.colors.border,
+                      }}
+                    >
+                      <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
+                        {mealRowSubtitle(item)}
+                      </Text>
+                      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                        {item.calories} kcal · {formatMacroLine(item)} · {item.consumedAt.slice(0, 10)}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </Card>
+              ) : null}
+            </>
+          );
+        })()}
       </ScreenLayout>
 
       <PaywallModal

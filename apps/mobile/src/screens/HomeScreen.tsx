@@ -9,7 +9,10 @@ import { HOME_COPY } from '../copy/home';
 import { sortedWarnings, WARNING_COPY } from '../copy/recommendation';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { computeFulfillment } from '../lib/goalFulfillment';
+import { listMeals, type MealRow } from '../api/meals';
+import { summarizeByMealSlot } from '../lib/mealTimeline';
 import { fetchTodayGoals, fetchTodayIntake } from '../lib/todayNutrition';
+import { localDayBounds } from '../lib/dateRange';
 import type { RootStackParamList } from '../navigation';
 import { useTheme } from '../theme';
 
@@ -31,6 +34,7 @@ export function HomeScreen() {
   const [ads, setAds] = useState<Ads | null>(null);
   const [intake, setIntake] = useState<Awaited<ReturnType<typeof fetchTodayIntake>> | null>(null);
   const [goals, setGoals] = useState<Awaited<ReturnType<typeof fetchTodayGoals>> | null>(null);
+  const [todayMeals, setTodayMeals] = useState<MealRow[]>([]);
 
   const load = useCallback(async ({ silent }: { silent: boolean }) => {
     if (!silent) setLoading(true);
@@ -38,16 +42,19 @@ export function HomeScreen() {
     try {
       const token = await ensureAccessToken();
       if (!token) return;
-      const [e, a, todayIntake, todayGoals] = await Promise.all([
+      const { from, to } = localDayBounds();
+      const [e, a, todayIntake, todayGoals, mealsRes] = await Promise.all([
         apiFetch<Ent>('/me/billing/entitlements', { token }),
         apiFetch<Ads>('/me/ads/status', { token }),
         fetchTodayIntake(token),
         fetchTodayGoals(token),
+        listMeals(token, { page: 1, size: 100, from, to }),
       ]);
       setEnt(e);
       setAds(a);
       setIntake(todayIntake);
       setGoals(todayGoals);
+      setTodayMeals(mealsRes.items ?? []);
     } catch (e) {
       if (isAuthDenied(e)) return;
       setErr(e instanceof Error ? e.message : HOME_COPY.loadError);
@@ -60,6 +67,10 @@ export function HomeScreen() {
 
   const warnings = sortedWarnings(goals?.profile.warnings).map((w) => WARNING_COPY[w]);
   const profile = goals?.profile;
+  const slotSummaries = summarizeByMealSlot(todayMeals).filter(
+    (s) => s.slot !== 'SNACK' && s.slot !== 'UNSPECIFIED',
+  );
+  const snackSummary = summarizeByMealSlot(todayMeals).find((s) => s.slot === 'SNACK');
 
   return (
     <ScreenLayout title={HOME_COPY.title} subtitle={HOME_COPY.subtitle} loading={loading}>
@@ -95,6 +106,36 @@ export function HomeScreen() {
           </Text>
         </Card>
       ) : null}
+
+      <Card>
+        <CardTitle>{HOME_COPY.mealsBySlotTitle}</CardTitle>
+        {slotSummaries.map((s) => (
+          <Text
+            key={s.slot}
+            style={{
+              color: s.count > 0 ? t.colors.fg : t.colors.fgMuted,
+              fontSize: t.fontSize.body,
+              marginBottom: t.spacing.xs,
+            }}
+          >
+            {s.count > 0
+              ? HOME_COPY.mealSlotLine(s.label, s.summaryKcal, s.summaryProteinG)
+              : `${s.label} · ${HOME_COPY.mealSlotEmpty}`}
+          </Text>
+        ))}
+        {snackSummary ? (
+          <Text
+            style={{
+              color: snackSummary.count > 0 ? t.colors.fg : t.colors.fgMuted,
+              fontSize: t.fontSize.body,
+            }}
+          >
+            {snackSummary.count > 0
+              ? HOME_COPY.mealSlotLine(snackSummary.label, snackSummary.summaryKcal, snackSummary.summaryProteinG)
+              : `${snackSummary.label} · ${HOME_COPY.mealSlotEmpty}`}
+          </Text>
+        ) : null}
+      </Card>
 
       {goals?.proteinGoalG != null || goals?.calorieGoalKcal != null ? (
         <Card>
