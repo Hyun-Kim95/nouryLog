@@ -66,7 +66,40 @@ async function main() {
           carbohydrate: 2.4,
           active: true,
         },
+        {
+          name: '김',
+          memo: '구운 김 1장 기준',
+          category: '한식',
+          portionUnit: PortionUnit.PIECE,
+          portionLabel: '장',
+          referenceAmount: 1,
+          servingGrams: 2,
+          calories: 5,
+          protein: 0.4,
+          fat: 0.1,
+          carbohydrate: 0.3,
+          active: true,
+        },
       ],
+    });
+  }
+
+  if (!(await prisma.foodTemplate.findFirst({ where: { name: '김' } }))) {
+    await prisma.foodTemplate.create({
+      data: {
+        name: '김',
+        memo: '구운 김 1장 기준',
+        category: '한식',
+        portionUnit: PortionUnit.PIECE,
+        portionLabel: '장',
+        referenceAmount: 1,
+        servingGrams: 2,
+        calories: 5,
+        protein: 0.4,
+        fat: 0.1,
+        carbohydrate: 0.3,
+        active: true,
+      },
     });
   }
 
