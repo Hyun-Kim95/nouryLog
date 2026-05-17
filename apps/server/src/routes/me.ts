@@ -1,5 +1,5 @@
 import { Router, type Response } from 'express';
-import { MealInputMode, MealSlot, type Prisma } from '@prisma/client';
+import { MealInputMode, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { resolvedReferenceAmount } from '../lib/foodTemplateReference.js';
 import { computeScaledNutritionFromGrams } from '../lib/mealFromTemplate.js';
@@ -19,6 +19,7 @@ import {
   parseAnchorDate,
   todayAnchorKst,
 } from '../lib/statsPeriod.js';
+import { mealSlotPatchFromBody, parseMealSlot } from '../lib/mealSlot.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
@@ -38,13 +39,6 @@ function parseMealInputMode(raw: unknown): MealInputMode | null {
   if (raw === MealInputMode.PORTION_COUNT || raw === MealInputMode.TOTAL_GRAMS) return raw;
   if (raw === 'PORTION_COUNT') return MealInputMode.PORTION_COUNT;
   if (raw === 'TOTAL_GRAMS') return MealInputMode.TOTAL_GRAMS;
-  return null;
-}
-
-function parseMealSlot(raw: unknown): MealSlot | null | undefined {
-  if (raw === undefined || raw === null || raw === '') return undefined;
-  const s = String(raw).toUpperCase();
-  if (s === 'BREAKFAST' || s === 'LUNCH' || s === 'DINNER' || s === 'SNACK') return s as MealSlot;
   return null;
 }
 
@@ -742,6 +736,13 @@ meRouter.put('/meals/:mealId', async (req, res) => {
   }
   const b = req.body as Record<string, unknown>;
 
+  const slotPatchResult = mealSlotPatchFromBody(b);
+  if (!slotPatchResult.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'mealSlot이 올바르지 않습니다.', { field: 'mealSlot' });
+    return;
+  }
+  const slotData = slotPatchResult.data;
+
   const hasTplKey = Object.prototype.hasOwnProperty.call(b, 'foodTemplateId');
   if (hasTplKey && (b.foodTemplateId === null || b.foodTemplateId === '')) {
     const nextName = b.name !== undefined ? String(b.name).trim() : meal.name;
@@ -764,6 +765,7 @@ meRouter.put('/meals/:mealId', async (req, res) => {
         ...(b.fat !== undefined ? { fat: Number(b.fat) } : {}),
         ...(b.note !== undefined ? { note: b.note ? String(b.note) : null } : {}),
         ...(b.imageUrl !== undefined ? { imageUrl: b.imageUrl ? String(b.imageUrl) : null } : {}),
+        ...slotData,
       },
     });
     res.json({ ok: true });
@@ -842,6 +844,7 @@ meRouter.put('/meals/:mealId', async (req, res) => {
         foodTemplateId: templateId,
         mealInputMode: mode,
         portionQuantity,
+        ...slotData,
       },
     });
     res.json({ ok: true });
@@ -871,6 +874,7 @@ meRouter.put('/meals/:mealId', async (req, res) => {
       ...(legacy.fat !== undefined ? { fat: Number(legacy.fat) } : {}),
       ...(legacy.note !== undefined ? { note: legacy.note ? String(legacy.note) : null } : {}),
       ...(legacy.imageUrl !== undefined ? { imageUrl: legacy.imageUrl ? String(legacy.imageUrl) : null } : {}),
+      ...slotData,
     },
   });
   res.json({ ok: true });

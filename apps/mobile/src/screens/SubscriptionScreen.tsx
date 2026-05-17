@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Text, View } from 'react-native';
 import { apiFetch, isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
 import { Banner, Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
 import { BILLING_COPY } from '../copy/billing';
+import { useFocusReload } from '../hooks/useFocusReload';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 
@@ -22,8 +23,8 @@ export function SubscriptionScreen() {
   const [ent, setEnt] = useState<Ent | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent }: { silent: boolean }) => {
+    if (!silent) setLoading(true);
     setErr(null);
     try {
       const token = await ensureAccessToken();
@@ -34,13 +35,11 @@ export function SubscriptionScreen() {
       if (isAuthDenied(e)) return;
       setErr(e instanceof Error ? e.message : BILLING_COPY.loadError);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusReload(load);
 
   const isPremium = ent?.ocrPaidEnabled === true;
 
@@ -55,7 +54,7 @@ export function SubscriptionScreen() {
         body: JSON.stringify({ productType: 'premium_monthly' }),
       });
       toast.show({ kind: 'success', message: BILLING_COPY.subscribeSuccess });
-      await load();
+      await load({ silent: true });
     } catch (e) {
       if (isAuthDenied(e)) return;
       toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });
@@ -71,7 +70,7 @@ export function SubscriptionScreen() {
       if (!token) return;
       await apiFetch('/me/billing/restore', { method: 'POST', token, body: JSON.stringify({}) });
       toast.show({ kind: 'success', message: BILLING_COPY.restoreSuccess });
-      await load();
+      await load({ silent: true });
     } catch (e) {
       if (isAuthDenied(e)) return;
       toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });
@@ -83,7 +82,7 @@ export function SubscriptionScreen() {
   return (
     <ScreenLayout title={BILLING_COPY.title} loading={loading}>
       {err ? (
-        <Banner variant="danger" actionLabel="다시 시도" onAction={() => void load()}>
+        <Banner variant="danger" actionLabel="다시 시도" onAction={() => void load({ silent: false })}>
           {err}
         </Banner>
       ) : null}
@@ -116,7 +115,7 @@ export function SubscriptionScreen() {
         <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>· {BILLING_COPY.freeBenefit2}</Text>
         {ent ? (
           <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
-            OCR {ent.ocrQuotaUsed}/{ent.ocrQuotaLimit}회 사용
+            {BILLING_COPY.photoAnalysisUsage(ent.ocrQuotaUsed, ent.ocrQuotaLimit)}
           </Text>
         ) : null}
       </Card>

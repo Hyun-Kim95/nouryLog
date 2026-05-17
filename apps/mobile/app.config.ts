@@ -17,8 +17,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     [
       'expo-image-picker',
       {
-        photosPermission: '식단 사진을 OCR 분석하려면 사진 라이브러리 접근이 필요합니다.',
-        cameraPermission: '식단 사진을 촬영해 OCR 분석하려면 카메라 접근이 필요합니다.',
+        photosPermission: '영양성분표 사진을 분석하려면 사진 라이브러리 접근이 필요합니다.',
+        cameraPermission: '영양성분표를 촬영해 분석하려면 카메라 접근이 필요합니다.',
       },
     ],
     ['expo-notifications', { color: '#16a34a' }],

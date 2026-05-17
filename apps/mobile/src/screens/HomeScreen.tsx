@@ -71,8 +71,8 @@ export function HomeScreen() {
 
       {ent ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm }}>
-          <Chip label={HOME_COPY.ocrChip(ent.ocrQuotaUsed, ent.ocrQuotaLimit)} />
-          {ent.ocrPaidEnabled ? <Chip label="OCR 유료 ON" tone="muted" /> : null}
+          <Chip label={HOME_COPY.photoAnalysisChip(ent.ocrQuotaUsed, ent.ocrQuotaLimit)} />
+          {ent.ocrPaidEnabled ? <Chip label="사진 분석 추가 이용" tone="muted" /> : null}
         </View>
       ) : null}
 

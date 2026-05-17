@@ -44,3 +44,11 @@ parent_prd: docs/requirements/mobile-log-ux-improvements-prd.md
 | 템플릿 없음 | muted 본문 |
 | 저장 중 | PrimaryButton loading |
 | 오류 | toast error |
+
+## 5) 사진 분석(OCR) 후속 v0.2 (2026-05-17)
+
+- **단일 입력 폼:** 분석 성공 시 별도 Card 없이 통합 입력란에만 prefilled. 저장은 `기록 추가` / `수정 저장` 하나.
+- **촬영 안내 Card:** 「어떤 사진이 좋나요?」 — 포장지·영양성분표 라벨 중심(칼로리·P/C/F 가시).
+- **용어:** 사용자 노출 문자열에서 「OCR」 제거 → 「사진 분석」「영양표 촬영」.
+- **끼니 수정:** PUT body에 `mealSlot` 포함, 서버가 갱신. 수정 시 끼니 Card에 「수정 저장」 안내.
+- **구독 탭:** `useFocusReload`로 탭 진입 시 `ocrQuotaUsed` 최신화.

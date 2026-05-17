@@ -7,10 +7,10 @@ export const HOME_COPY = {
   protein: '단백질',
   carb: '탄수화물',
   fat: '지방',
-  ocrChip: (used: number, limit: number) => `OCR 무료 ${used}/${limit}회`,
+  photoAnalysisChip: (used: number, limit: number) => `사진 분석 무료 ${used}/${limit}회`,
   ocrBannerRemaining:
-    '무료 OCR가 1회 남았어요. 소진 후에는 프리미엄 구독이 필요합니다.',
-  ocrBannerExhausted: '무료 OCR를 모두 사용했어요. 계속 쓰려면 구독이 필요합니다.',
+    '무료 사진 분석이 1회 남았어요. 소진 후에는 프리미엄 구독이 필요합니다.',
+  ocrBannerExhausted: '무료 사진 분석을 모두 사용했어요. 계속 쓰려면 구독이 필요합니다.',
   adBanner: '광고가 표시 중이에요. 프리미엄 구독 시 하단 광고가 숨겨집니다.',
   adHidden: '프리미엄 이용 중이라 광고가 숨겨져 있어요.',
   emptyGoals: '권장 목표가 없어요. 프로필을 입력하면 달성률을 볼 수 있어요.',

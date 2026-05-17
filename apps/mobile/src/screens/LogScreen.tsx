@@ -53,13 +53,8 @@ type Ent = {
   nextPaywallTrigger: 'none' | 'ocr_remaining_1' | 'ocr_exhausted';
 };
 
-type OcrReview = {
-  calories: number;
-  carbohydrate: number;
-  protein: number;
-  fat: number;
+type LastOcrMeta = {
   confidence: number;
-  missingFields: string[];
 };
 
 function unitHint(tpl: FoodTemplateItem): string {
@@ -106,7 +101,7 @@ export function LogScreen() {
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
-  const [ocrReview, setOcrReview] = useState<OcrReview | null>(null);
+  const [lastOcrMeta, setLastOcrMeta] = useState<LastOcrMeta | null>(null);
 
   const [templates, setTemplates] = useState<FoodTemplateItem[]>([]);
   const [tplLoading, setTplLoading] = useState(false);
@@ -127,7 +122,7 @@ export function LogScreen() {
     setSelectedTpl(null);
     setMealInputMode('PORTION_COUNT');
     setTplAmount('1');
-    setOcrReview(null);
+    setLastOcrMeta(null);
   }, []);
 
   const loadEntitlements = useCallback(async () => {
@@ -194,7 +189,7 @@ export function LogScreen() {
 
   const mealBodyBase = (): Record<string, unknown> => ({
     mealSlot,
-    consumedAt,
+    consumedAt: editingMealId ? consumedAt : new Date().toISOString(),
   });
 
   const buildTemplateBody = (): Record<string, unknown> => {
@@ -229,7 +224,7 @@ export function LogScreen() {
         }
       } else {
         const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
-        if (!name.trim()) throw new Error('음식명을 입력해 주세요.');
+        if (!name.trim()) throw new Error(LOG_COPY.nameRequired);
         const body = {
           ...mealBodyBase(),
           name: name.trim(),
@@ -286,37 +281,6 @@ export function LogScreen() {
     }
   };
 
-  const saveOcrReview = async () => {
-    setSaveBusy(true);
-    try {
-      const token = await getAccessToken();
-      if (!token) throw new Error('로그인 필요');
-      const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
-      const mealName = name.trim() || '식사';
-      await createMeal(
-        token,
-        postMealBody({
-          name: mealName,
-          ...nutrition,
-        }),
-      );
-      setOcrReview(null);
-      toast.show({ kind: 'success', message: LOG_COPY.saveSuccess });
-      await load();
-    } catch (e) {
-      if (isAuthDenied(e)) return;
-      toast.show({ kind: 'error', message: e instanceof Error ? e.message : '저장 실패' });
-    } finally {
-      setSaveBusy(false);
-    }
-  };
-
-  const postMealBody = (base: Record<string, unknown>): Record<string, unknown> => ({
-    ...base,
-    mealSlot,
-    consumedAt: new Date().toISOString(),
-  });
-
   const runOcrWithBase64 = async (imageBase64: string) => {
     const token = await getAccessToken();
     if (!token) throw new Error('로그인 필요');
@@ -333,16 +297,10 @@ export function LogScreen() {
       token,
       body: JSON.stringify({ imageBase64 }),
     });
-    setOcrReview({
-      calories: res.calories,
-      carbohydrate: res.carbohydrate,
-      protein: res.protein,
-      fat: res.fat,
-      confidence: res.confidence,
-      missingFields: res.missingFields ?? [],
-    });
+    setLastOcrMeta({ confidence: res.confidence });
     setSelectedTpl(null);
-    setName((prev) => prev.trim() || '식사');
+    setEditingMealId(null);
+    setName('');
     setCalories(String(Math.round(res.calories)));
     setProtein(String(Math.round(res.protein)));
     setCarbohydrate(String(Math.round(res.carbohydrate)));
@@ -350,7 +308,7 @@ export function LogScreen() {
     await loadEntitlements();
     toast.show({
       kind: 'info',
-      message: `OCR 완료 · 남은 무료 ${res.remainingFreeQuota}회 · 값을 확인해 주세요`,
+      message: LOG_COPY.ocrDoneToast(res.remainingFreeQuota),
     });
   };
 
@@ -394,8 +352,8 @@ export function LogScreen() {
       }
     } catch (e) {
       if (isAuthDenied(e)) return;
-      const msg = e instanceof Error ? e.message : 'OCR 실패';
-      if (msg.includes('무료 OCR') || msg.includes('한도')) {
+      const msg = e instanceof Error ? e.message : '사진 분석에 실패했어요';
+      if (msg.includes('무료') || msg.includes('한도') || msg.includes('OCR')) {
         setPaywallOpen(true);
       }
       toast.show({ kind: 'error', message: msg });
@@ -427,7 +385,7 @@ export function LogScreen() {
 
   const applyManualFromMeal = (m: MealRow) => {
     setSelectedTpl(null);
-    setOcrReview(null);
+    setLastOcrMeta(null);
     setName(m.name);
     setCalories(String(Math.round(m.calories)));
     setProtein(String(Math.round(m.protein)));
@@ -454,7 +412,7 @@ export function LogScreen() {
         setCarbohydrate('');
         setFat('');
         if (m.mealSlot) setMealSlot(m.mealSlot);
-        setOcrReview(null);
+        setLastOcrMeta(null);
         toast.show({ kind: 'info', message: '템플릿으로 불러왔어요.' });
         return;
       }
@@ -466,7 +424,7 @@ export function LogScreen() {
     setEditingMealId(item.mealId);
     setConsumedAt(item.consumedAt);
     if (item.mealSlot) setMealSlot(item.mealSlot);
-    setOcrReview(null);
+    setLastOcrMeta(null);
 
     if (item.foodTemplateId) {
       const tpl = templates.find((x) => x.id === item.foodTemplateId);
@@ -585,7 +543,7 @@ export function LogScreen() {
   return (
     <>
       <ScreenLayout title={LOG_COPY.title} subtitle={LOG_COPY.subtitle}>
-        {ent ? <Chip label={`OCR ${ent.ocrQuotaUsed}/${ent.ocrQuotaLimit}회`} /> : null}
+        {ent ? <Chip label={LOG_COPY.photoAnalysisChip(ent.ocrQuotaUsed, ent.ocrQuotaLimit)} /> : null}
 
         {ent?.nextPaywallTrigger === 'ocr_remaining_1' ? (
           <Banner variant="warn">{LOG_COPY.ocrBannerRemaining}</Banner>
@@ -593,6 +551,12 @@ export function LogScreen() {
         {ent?.nextPaywallTrigger === 'ocr_exhausted' && !ent.ocrPaidEnabled ? (
           <Banner variant="warn">{LOG_COPY.ocrBannerExhausted}</Banner>
         ) : null}
+
+        <Card>
+          <CardTitle>{LOG_COPY.photoGuideTitle}</CardTitle>
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{LOG_COPY.photoGuideBody}</Text>
+          <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>{LOG_COPY.photoGuideAlbum}</Text>
+        </Card>
 
         <View style={{ flexDirection: 'row', gap: t.spacing.sm }}>
           <View style={{ flex: 1 }}>
@@ -654,25 +618,20 @@ export function LogScreen() {
 
         <Card>
           <CardTitle>{LOG_COPY.sectionSlot}</CardTitle>
+          {editingMealId ? (
+            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, marginBottom: t.spacing.sm }}>
+              {LOG_COPY.slotEditHint}
+            </Text>
+          ) : null}
           <Segmented<MealSlot> options={MEAL_SLOT_OPTIONS} value={mealSlot} onChange={setMealSlot} />
         </Card>
-
-        {ocrReview ? (
-          <Card>
-            <CardTitle>{LOG_COPY.ocrReviewTitle}</CardTitle>
-            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{LOG_COPY.ocrReviewHint}</Text>
-            {ocrReview.confidence < 0.6 ? (
-              <Banner variant="warn">{LOG_COPY.ocrLowConfidence}</Banner>
-            ) : null}
-            {macroFields}
-            <PrimaryButton title={LOG_COPY.saveOcr} onPress={() => void saveOcrReview()} loading={saveBusy} />
-            <TextButton title="OCR 결과 닫기" onPress={() => setOcrReview(null)} />
-          </Card>
-        ) : null}
 
         <Card>
           {editingMealId ? (
             <Banner variant="info">{LOG_COPY.editBanner(name.trim() || selectedTpl?.name || '식사')}</Banner>
+          ) : null}
+          {lastOcrMeta && lastOcrMeta.confidence < 0.6 ? (
+            <Banner variant="warn">{LOG_COPY.ocrLowConfidence}</Banner>
           ) : null}
 
           {selectedTpl ? (
