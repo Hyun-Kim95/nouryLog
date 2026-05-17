@@ -4,8 +4,8 @@ import { Segmented } from '../components/Segmented';
 import { StatsPeriodNavigator } from '../components/StatsPeriodNavigator';
 import { Banner, Card, CardTitle, ProgressBar, ScreenLayout } from '../components/ui';
 import { STATS_COPY } from '../copy/stats';
-import { apiFetch } from '../api';
-import { getAccessToken } from '../authStorage';
+import { apiFetch, isAuthDenied } from '../api';
+import { ensureAccessToken } from '../authSession';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { computeFulfillment } from '../lib/goalFulfillment';
 import { shiftAnchor, todayAnchorKst, type StatsRange } from '../lib/statsPeriod';
@@ -40,8 +40,8 @@ export function StatsScreen() {
       if (!silent) setLoading(true);
       setErr(null);
       try {
-        const token = await getAccessToken();
-        if (!token) throw new Error('로그인 필요');
+        const token = await ensureAccessToken();
+        if (!token) return;
         const anchor = shiftAnchor(todayAnchorKst(), range, periodOffset);
         const [s, g] = await Promise.all([
           apiFetch<Stats>(`/stats?range=${range}&anchor=${encodeURIComponent(anchor)}`, { token }),
@@ -50,6 +50,7 @@ export function StatsScreen() {
         setData(s);
         setGoals(g);
       } catch (e) {
+        if (isAuthDenied(e)) return;
         const msg = e instanceof Error ? e.message : STATS_COPY.loadError;
         if (msg.includes('미래') || msg.includes('anchor')) {
           setErr(STATS_COPY.periodFutureBlocked);

@@ -1,4 +1,8 @@
 import { API_BASE } from '../config';
+import { handleAuthFailure } from '../authSession';
+import { isAuthDenied } from '../lib/apiError';
+
+export { isAuthDenied };
 
 export type Gender = 'male' | 'female' | 'unspecified';
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active';
@@ -96,7 +100,9 @@ async function request<T>(
     }
   }
   if (!res.ok) {
-    throw new ProfileApiError(res.status, (json ?? {}) as ApiErrorBody);
+    const err = new ProfileApiError(res.status, (json ?? {}) as ApiErrorBody);
+    handleAuthFailure(err);
+    throw err;
   }
   return json as T;
 }
@@ -156,8 +162,3 @@ export async function recalcRecommendation(
   });
 }
 
-export function isAuthDenied(err: unknown): boolean {
-  if (!(err instanceof ProfileApiError)) return false;
-  if (err.status === 401 || err.status === 403) return true;
-  return err.code === 'AUTH_UNAUTHORIZED' || err.code === 'AUTH_TOKEN_EXPIRED' || err.code === 'AUTH_FORBIDDEN';
-}

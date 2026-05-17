@@ -14,7 +14,6 @@ import {
 } from 'recharts';
 import { useAuth } from '../auth';
 import { apiFetch, isAuthDenied } from '../api';
-import { ForbiddenState } from '../components/ForbiddenState';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 
@@ -120,7 +119,6 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [rebusy, setRebusy] = useState(false);
   const [reaggregatedAt, setReaggregatedAt] = useState<string | null>(null);
-  const [forbidden, setForbidden] = useState(false);
 
   const [tokens, setTokens] = useState<ChartTokens>(FALLBACK_TOKENS);
   useEffect(() => {
@@ -138,7 +136,6 @@ export function DashboardPage() {
     if (!token) return;
     setLoading(true);
     setErr(null);
-    setForbidden(false);
     try {
       const [d, ts] = await Promise.all([
         apiFetch<Dash>(`/admin/dashboard?periodDays=${periodDays}`, { token }),
@@ -147,15 +144,10 @@ export function DashboardPage() {
       setData(d);
       setSeries(ts);
     } catch (e) {
-      if (isAuthDenied(e)) {
-        setForbidden(true);
-        setData(null);
-        setSeries(null);
-      } else {
-        setErr(e instanceof Error ? e.message : '불러오기 실패');
-        setData(null);
-        setSeries(null);
-      }
+      if (isAuthDenied(e)) return;
+      setErr(e instanceof Error ? e.message : '불러오기 실패');
+      setData(null);
+      setSeries(null);
     } finally {
       setLoading(false);
     }
@@ -196,28 +188,6 @@ export function DashboardPage() {
       setRebusy(false);
     }
   };
-
-  if (forbidden) {
-    return (
-      <main>
-        <div className="page-head">
-          <div>
-            <h2>대시보드</h2>
-            <div className="subtitle">서비스 핵심 지표와 통계 집계 상태</div>
-          </div>
-          <label className="form-field" style={{ minWidth: 180 }}>
-            집계 기간
-            <select value={periodDays} onChange={(e) => setPeriodDays(Number(e.target.value) as PeriodDays)}>
-              <option value={7}>최근 7일</option>
-              <option value={30}>최근 30일</option>
-              <option value={90}>최근 90일</option>
-            </select>
-          </label>
-        </div>
-        <ForbiddenState description="대시보드를 조회할 권한이 없습니다. 관리자 계정으로 다시 로그인하거나 권한 담당자에게 문의해 주세요." />
-      </main>
-    );
-  }
 
   if (loading) {
     return (

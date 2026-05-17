@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import { useAuth } from '../auth';
 import { apiFetch, isAuthDenied } from '../api';
 import { EmptyState } from '../components/EmptyState';
-import { ForbiddenState } from '../components/ForbiddenState';
 import { COLUMNS, KIND_PATH, KIND_TITLE, type Kind, type Row } from './entityColumns';
 
 const PAGE_SIZE = 15;
@@ -50,8 +49,6 @@ export function EntityListPage({
   const [items, setItems] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [forbidden, setForbidden] = useState(false);
-
   const qs = useMemo(() => {
     const p = new URLSearchParams();
     p.set('page', String(page));
@@ -69,21 +66,15 @@ export function EntityListPage({
     if (!token) return;
     setLoading(true);
     setErr(null);
-    setForbidden(false);
     try {
       const res = await apiFetch<{ total: number; items: Row[] }>(`${KIND_PATH[kind]}?${qs}`, { token });
       setTotal(res.total);
       setItems(res.items);
     } catch (e) {
-      if (isAuthDenied(e)) {
-        setForbidden(true);
-        setItems([]);
-        setTotal(0);
-      } else {
-        setErr(e instanceof Error ? e.message : '목록을 불러오지 못했습니다');
-        setItems([]);
-        setTotal(0);
-      }
+      if (isAuthDenied(e)) return;
+      setErr(e instanceof Error ? e.message : '목록을 불러오지 못했습니다');
+      setItems([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -181,9 +172,7 @@ export function EntityListPage({
         </div>
       </div>
 
-      {forbidden ? (
-        <ForbiddenState description="이 목록을 조회할 권한이 없습니다. 관리자 계정으로 다시 로그인하거나 권한 담당자에게 문의해 주세요." />
-      ) : err ? (
+      {err ? (
         <>
           <div className="banner banner-danger" role="alert">
             {err}

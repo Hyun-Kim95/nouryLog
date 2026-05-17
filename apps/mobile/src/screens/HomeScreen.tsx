@@ -2,8 +2,8 @@ import { useCallback, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { apiFetch } from '../api';
-import { getAccessToken } from '../authStorage';
+import { apiFetch, isAuthDenied } from '../api';
+import { ensureAccessToken } from '../authSession';
 import { Banner, Card, CardTitle, Chip, PrimaryButton, ProgressBar, ScreenLayout } from '../components/ui';
 import { HOME_COPY } from '../copy/home';
 import { sortedWarnings, WARNING_COPY } from '../copy/recommendation';
@@ -36,8 +36,8 @@ export function HomeScreen() {
     if (!silent) setLoading(true);
     setErr(null);
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error('로그인 필요');
+      const token = await ensureAccessToken();
+      if (!token) return;
       const [e, a, todayIntake, todayGoals] = await Promise.all([
         apiFetch<Ent>('/me/billing/entitlements', { token }),
         apiFetch<Ads>('/me/ads/status', { token }),
@@ -49,6 +49,7 @@ export function HomeScreen() {
       setIntake(todayIntake);
       setGoals(todayGoals);
     } catch (e) {
+      if (isAuthDenied(e)) return;
       setErr(e instanceof Error ? e.message : HOME_COPY.loadError);
     } finally {
       if (!silent) setLoading(false);

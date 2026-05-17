@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, isAuthDenied } from '../api';
 import { useAuth } from '../auth';
-import { ForbiddenState } from '../components/ForbiddenState';
 import { useToast } from '../toast/useToast';
 
 type PolicyKind = 'terms' | 'privacy';
@@ -47,7 +46,6 @@ export function PoliciesPage() {
   const [publish, setPublish] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [forbidden, setForbidden] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -56,20 +54,14 @@ export function PoliciesPage() {
     setLoading(true);
     setErr(null);
     setMessage(null);
-    setForbidden(false);
     try {
       const d = await apiFetch<PolicyDoc>(`/admin/policies/${next}`, { token });
       setDoc(d);
       setBody(d.body ?? '');
       setPublish(d.publishedAt !== null);
     } catch (e) {
-      if (isAuthDenied(e)) {
-        setForbidden(true);
-        setDoc(null);
-        setBody('');
-      } else {
-        setErr(e instanceof Error ? e.message : '문서를 불러오지 못했습니다.');
-      }
+      if (isAuthDenied(e)) return;
+      setErr(e instanceof Error ? e.message : '문서를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
@@ -118,20 +110,6 @@ export function PoliciesPage() {
       setSaving(false);
     }
   };
-
-  if (forbidden) {
-    return (
-      <main>
-        <div className="page-head">
-          <div>
-            <h2>정책 문서</h2>
-            <div className="subtitle">이용약관과 개인정보처리방침을 작성하고 게시 상태를 관리합니다.</div>
-          </div>
-        </div>
-        <ForbiddenState description="정책 문서를 조회할 권한이 없습니다. 관리자 계정으로 다시 로그인하거나 권한 담당자에게 문의해 주세요." />
-      </main>
-    );
-  }
 
   return (
     <main>

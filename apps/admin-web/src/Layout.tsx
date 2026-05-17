@@ -22,7 +22,7 @@ const PATH_TITLE: Record<string, string> = {
 };
 
 export function Layout() {
-  const { logout, token } = useAuth();
+  const { logout, isAdmin } = useAuth();
   const { dark, toggle } = useTheme();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -31,7 +31,7 @@ export function Layout() {
     setDrawerOpen(false);
   }, [location.pathname]);
 
-  if (!token) {
+  if (!isAdmin) {
     return (
       <div className="auth-shell">
         <div className="auth-card">

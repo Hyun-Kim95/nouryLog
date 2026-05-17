@@ -1,4 +1,8 @@
 import { API_BASE } from './config';
+import { ApiError, type ApiErrorBody } from './lib/apiError';
+import { handleAuthFailure } from './authSession';
+
+export { ApiError, isAuthDenied } from './lib/apiError';
 
 export async function apiFetch<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
   const { token, headers, ...rest } = init;
@@ -11,10 +15,18 @@ export async function apiFetch<T>(path: string, init: RequestInit & { token?: st
     },
   });
   const text = await res.text();
-  const json = text ? JSON.parse(text) : {};
+  let json: unknown = {};
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = { message: text };
+    }
+  }
   if (!res.ok) {
-    const msg = (json as { message?: string }).message ?? res.statusText;
-    throw new Error(msg);
+    const err = new ApiError(res.status, (json ?? {}) as ApiErrorBody);
+    handleAuthFailure(err);
+    throw err;
   }
   return json as T;
 }

@@ -30,6 +30,12 @@ export function isAuthDenied(err: unknown): boolean {
   );
 }
 
+let authDeniedHandler: (() => void) | null = null;
+
+export function setAuthDeniedHandler(handler: (() => void) | null) {
+  authDeniedHandler = handler;
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit & { token?: string | null } = {},
@@ -46,7 +52,9 @@ export async function apiFetch<T>(
   const text = await res.text();
   const json = text ? JSON.parse(text) : {};
   if (!res.ok) {
-    throw new ApiError(res.status, (json ?? {}) as ApiErrorBody);
+    const err = new ApiError(res.status, (json ?? {}) as ApiErrorBody);
+    if (isAuthDenied(err)) authDeniedHandler?.();
+    throw err;
   }
   return json as T;
 }

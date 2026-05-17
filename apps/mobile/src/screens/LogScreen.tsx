@@ -8,7 +8,8 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { apiFetch } from '../api';
+import { apiFetch, isAuthDenied } from '../api';
+import { ensureAccessToken } from '../authSession';
 import { getAccessToken } from '../authStorage';
 import { Segmented } from '../components/Segmented';
 import {
@@ -133,21 +134,27 @@ export function LogScreen() {
   }, []);
 
   const load = useCallback(async () => {
-    const token = await getAccessToken();
+    const token = await ensureAccessToken();
     if (!token) return;
-    const res = await apiFetch<{ items: MealRow[] }>('/meals?page=1&size=15', { token });
-    setItems(res.items);
-    const recent = await apiFetch<{ items: MealRow[] }>('/meals?page=1&size=20', { token });
-    const seen = new Set<string>();
-    const deduped: MealRow[] = [];
-    for (const m of recent.items ?? []) {
-      const key = `${m.name}|${m.calories}|${m.protein}|${m.carbohydrate}|${m.fat}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      deduped.push(m);
-      if (deduped.length >= 12) break;
+    try {
+      const res = await apiFetch<{ items: MealRow[] }>('/meals?page=1&size=15', { token });
+      setItems(res.items);
+      const recent = await apiFetch<{ items: MealRow[] }>('/meals?page=1&size=20', { token });
+      const seen = new Set<string>();
+      const deduped: MealRow[] = [];
+      for (const m of recent.items ?? []) {
+        const key = `${m.name}|${m.calories}|${m.protein}|${m.carbohydrate}|${m.fat}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(m);
+        if (deduped.length >= 12) break;
+      }
+      setRecentMeals(deduped);
+    } catch (e) {
+      if (isAuthDenied(e)) return;
+      setItems([]);
+      setRecentMeals([]);
     }
-    setRecentMeals(deduped);
   }, []);
 
   const loadTemplates = useCallback(async () => {
@@ -169,7 +176,7 @@ export function LogScreen() {
   useFocusReload(
     useCallback(
       async ({ silent }: { silent: boolean }) => {
-        await load().catch(() => setItems([]));
+        await load();
         await loadEntitlements();
         if (!silent && entryMode === 'template') {
           await loadTemplates();
@@ -285,6 +292,7 @@ export function LogScreen() {
       toast.show({ kind: 'success', message: LOG_COPY.saveSuccess });
       await load();
     } catch (e) {
+      if (isAuthDenied(e)) return;
       toast.show({ kind: 'error', message: e instanceof Error ? e.message : '저장 실패' });
     } finally {
       setSaveBusy(false);
@@ -312,6 +320,7 @@ export function LogScreen() {
       toast.show({ kind: 'success', message: LOG_COPY.saveSuccess });
       await load();
     } catch (e) {
+      if (isAuthDenied(e)) return;
       toast.show({ kind: 'error', message: e instanceof Error ? e.message : '저장 실패' });
     } finally {
       setSaveBusy(false);
@@ -394,6 +403,7 @@ export function LogScreen() {
         await runOcrWithBase64(picked.assets[0].base64);
       }
     } catch (e) {
+      if (isAuthDenied(e)) return;
       const msg = e instanceof Error ? e.message : 'OCR 실패';
       if (msg.includes('무료 OCR') || msg.includes('한도')) {
         setPaywallOpen(true);
@@ -418,6 +428,7 @@ export function LogScreen() {
       setPaywallOpen(false);
       await loadEntitlements();
     } catch (e) {
+      if (isAuthDenied(e)) return;
       toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });
     } finally {
       setCheckoutBusy(false);

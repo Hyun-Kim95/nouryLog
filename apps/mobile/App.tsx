@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { navigationRef } from './src/authSession';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator, type InitialRoute } from './src/navigation';
 import { getAccessToken, getOnboardingDone } from './src/authStorage';
@@ -34,7 +35,7 @@ export default function App() {
       <DevTogglesProvider>
         <ThemeProvider>
           <ToastProvider>
-            <NavigationContainer>
+            <NavigationContainer ref={navigationRef}>
               <RootNavigator initialRoute={initialRoute} />
               <DevPanel />
             </NavigationContainer>

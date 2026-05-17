@@ -12,8 +12,10 @@ import { NoticesPage } from './pages/NoticesPage';
 import { PoliciesPage } from './pages/PoliciesPage';
 
 function Protected({ children }: { children: React.ReactElement }) {
-  const { token } = useAuth();
-  if (!token) return <Navigate to="/login" replace />;
+  const { isAdmin } = useAuth();
+  if (!isAdmin) {
+    return <Navigate to="/login" replace state={{ reason: 'auth_required' as const }} />;
+  }
   return children;
 }
 

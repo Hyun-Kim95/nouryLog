@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { apiFetch } from '../api';
-import { getAccessToken } from '../authStorage';
+import { apiFetch, isAuthDenied } from '../api';
+import { ensureAccessToken } from '../authSession';
 import { Banner, Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
 import { BILLING_COPY } from '../copy/billing';
 import { useTheme } from '../theme';
@@ -26,11 +26,12 @@ export function SubscriptionScreen() {
     setLoading(true);
     setErr(null);
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error('로그인 필요');
+      const token = await ensureAccessToken();
+      if (!token) return;
       const e = await apiFetch<Ent>('/me/billing/entitlements', { token });
       setEnt(e);
     } catch (e) {
+      if (isAuthDenied(e)) return;
       setErr(e instanceof Error ? e.message : BILLING_COPY.loadError);
     } finally {
       setLoading(false);
@@ -46,8 +47,8 @@ export function SubscriptionScreen() {
   const checkout = async () => {
     setBusy(true);
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error('로그인 필요');
+      const token = await ensureAccessToken();
+      if (!token) return;
       await apiFetch('/me/billing/checkout', {
         method: 'POST',
         token,
@@ -56,6 +57,7 @@ export function SubscriptionScreen() {
       toast.show({ kind: 'success', message: BILLING_COPY.subscribeSuccess });
       await load();
     } catch (e) {
+      if (isAuthDenied(e)) return;
       toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });
     } finally {
       setBusy(false);
@@ -65,12 +67,13 @@ export function SubscriptionScreen() {
   const restore = async () => {
     setBusy(true);
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error('로그인 필요');
+      const token = await ensureAccessToken();
+      if (!token) return;
       await apiFetch('/me/billing/restore', { method: 'POST', token, body: JSON.stringify({}) });
       toast.show({ kind: 'success', message: BILLING_COPY.restoreSuccess });
       await load();
     } catch (e) {
+      if (isAuthDenied(e)) return;
       toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });
     } finally {
       setBusy(false);

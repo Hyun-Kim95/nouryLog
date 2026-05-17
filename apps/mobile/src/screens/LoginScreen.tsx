@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -15,6 +16,7 @@ import {
 import { Field } from '../components/Field';
 import { Banner, PrimaryButton, ScreenLayout } from '../components/ui';
 import { socialAdapter } from '../social';
+import { consumeLoginNotice } from '../authSession';
 import { getOnboardingDone, saveTokens } from '../authStorage';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
@@ -26,6 +28,7 @@ export function LoginScreen({ navigation }: Props) {
   const t = useTheme();
   const toast = useToast();
   const [err, setErr] = useState<string | null>(null);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [conflictToken, setConflictToken] = useState<string | null>(null);
   const [conflictEmail, setConflictEmail] = useState<string | null>(null);
@@ -44,6 +47,11 @@ export function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailBusy, setEmailBusy] = useState(false);
+
+  useFocusEffect(() => {
+    const notice = consumeLoginNotice();
+    if (notice) setSessionNotice(notice);
+  });
 
   const goAfterLogin = async () => {
     const done = await getOnboardingDone();
@@ -202,6 +210,7 @@ export function LoginScreen({ navigation }: Props) {
 
   return (
     <ScreenLayout title="식단 관리" subtitle="이메일 또는 SNS로 로그인해요.">
+      {sessionNotice ? <Banner variant="warn">{sessionNotice}</Banner> : null}
       {err ? <Banner variant="danger">{err}</Banner> : null}
 
       <View style={{ gap: t.spacing.md }}>
