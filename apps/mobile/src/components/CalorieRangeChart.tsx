@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Text, View, useWindowDimensions } from 'react-native';
-import { BarChart } from 'react-native-gifted-charts';
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from 'react-native';
 import type { FulfillmentStatus } from '../lib/goalFulfillment';
 import type { Theme } from '../theme';
 import { STATS_COPY } from '../copy/stats';
@@ -26,13 +32,11 @@ type Props = {
   calorieMax: number | null;
 };
 
-const CHART_HEIGHT = 160;
+const CHART_HEIGHT = 140;
+const COL_WIDTH = 36;
 const BAR_WIDTH = 20;
-const SPACING = 16;
-const INITIAL_SPACING = 8;
 const LABEL_GUTTER = 56;
 const TOOLTIP_WIDTH = 200;
-const MIN_BAR_VALUE = 4;
 
 function dayOfMonth(ymd: string): number {
   const parts = ymd.split('-');
@@ -70,15 +74,34 @@ function statusColor(status: FulfillmentStatus, hasRecords: boolean, t: Theme): 
   return t.colors.fgMuted;
 }
 
-function valueToOffset(value: number, scaleMax: number): number {
+function valueToHeight(value: number, scaleMax: number): number {
   if (!Number.isFinite(value) || scaleMax <= 0) return 0;
   return Math.max(0, (value / scaleMax) * CHART_HEIGHT);
+}
+
+function DashedGuideLine({ top, width, color }: { top: number; width: number; color: string }) {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: 0,
+        top,
+        width,
+        height: 0,
+        borderTopWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: color,
+      }}
+    />
+  );
 }
 
 export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
   const t = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [chartWidth, setChartWidth] = useState(0);
 
   useEffect(() => {
     setSelectedDate(null);
@@ -100,49 +123,10 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
     return Number.isFinite(peak) && peak > 0 ? peak * 1.08 : 1;
   }, [daily, goalHigh, goalLow]);
 
-  const barData = useMemo(() => {
-    return daily.map((p) => {
-      const kcal = Number(p.summary?.calories ?? 0);
-      const status = normalizeStatus(p.calorieStatus, p.hasRecords);
-      const dom = dayOfMonth(p.date);
-      const isSelected = p.date === selectedDate;
-      const barValue = p.hasRecords ? Math.max(MIN_BAR_VALUE, kcal) : MIN_BAR_VALUE;
-      return {
-        value: barValue,
-        label: dom ? String(dom) : '·',
-        frontColor: statusColor(status, p.hasRecords, t),
-        onPress: () => setSelectedDate((prev) => (prev === p.date ? null : p.date)),
-        labelComponent: () => (
-          <View
-            style={{
-              marginTop: 6,
-              minWidth: 26,
-              height: 26,
-              borderRadius: 13,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: isSelected ? t.colors.primary : 'transparent',
-            }}
-          >
-            <Text
-              style={{
-                color: isSelected ? t.colors.primaryFg : t.colors.fgSubtle,
-                fontSize: 11,
-                fontWeight: isSelected ? '700' : '500',
-              }}
-            >
-              {dom || '·'}
-            </Text>
-          </View>
-        ),
-      };
-    });
-  }, [daily, selectedDate, t]);
-
   if (!daily.length) return null;
 
-  const plotMinWidth = Math.max(
-    daily.length * (BAR_WIDTH + SPACING) + INITIAL_SPACING * 2,
+  const contentMinWidth = Math.max(
+    daily.length * COL_WIDTH,
     Math.max(0, windowWidth - t.spacing.lg * 2 - LABEL_GUTTER - 32),
   );
 
@@ -150,9 +134,9 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
   const selectedIndex = selected ? daily.findIndex((d) => d.date === selected.date) : -1;
 
   const bandTopY =
-    goalHigh != null && goalHigh > 0 ? CHART_HEIGHT - valueToOffset(goalHigh, scaleMax) : null;
+    goalHigh != null && goalHigh > 0 ? CHART_HEIGHT - valueToHeight(goalHigh, scaleMax) : null;
   const bandBottomY =
-    goalLow != null && goalLow > 0 ? CHART_HEIGHT - valueToOffset(goalLow, scaleMax) : null;
+    goalLow != null && goalLow > 0 ? CHART_HEIGHT - valueToHeight(goalLow, scaleMax) : null;
 
   const showBand =
     goalLow != null &&
@@ -162,24 +146,20 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
     bandTopY != null &&
     bandBottomY != null;
 
+  const onChartLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    if (w > 0) setChartWidth(w);
+  };
+
+  const plotWidth = chartWidth > 0 ? chartWidth : contentMinWidth;
+
   const tooltipLeft =
     selectedIndex >= 0
       ? Math.min(
-          Math.max(
-            INITIAL_SPACING + selectedIndex * (BAR_WIDTH + SPACING) + BAR_WIDTH / 2 - TOOLTIP_WIDTH / 2,
-            4,
-          ),
-          Math.max(4, plotMinWidth - TOOLTIP_WIDTH - 4),
+          Math.max(selectedIndex * COL_WIDTH + COL_WIDTH / 2 - TOOLTIP_WIDTH / 2, 4),
+          Math.max(4, plotWidth - TOOLTIP_WIDTH - 4),
         )
       : 0;
-
-  const refLineConfig = {
-    color: t.colors.info,
-    thickness: 1,
-    type: 'dashed' as const,
-    dashWidth: 4,
-    dashGap: 4,
-  };
 
   return (
     <View style={{ gap: t.spacing.sm }}>
@@ -188,97 +168,136 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
       </Text>
 
       <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          {selected ? (
-            <View
-              style={{
-                marginBottom: t.spacing.xs,
-                marginLeft: tooltipLeft,
-                width: TOOLTIP_WIDTH,
-                backgroundColor: t.colors.surface,
-                borderColor: t.colors.border,
-                borderWidth: 1,
-                borderRadius: t.radius.md,
-                padding: t.spacing.sm,
-                gap: 4,
-              }}
-            >
-              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                {formatTooltipDate(selected.date)}
-              </Text>
-              <Text style={{ color: t.colors.primary, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
-                {Math.round(Number(selected.summary?.calories ?? 0))} kcal
-              </Text>
-              <Text style={{ color: t.colors.fg, fontSize: t.fontSize.caption }}>
-                {statusLabel(
-                  normalizeStatus(selected.calorieStatus, selected.hasRecords),
-                  selected.hasRecords,
-                )}
-              </Text>
-              {selected.hasRecords ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+          <View style={{ minWidth: contentMinWidth }} onLayout={onChartLayout}>
+            {selected ? (
+              <View
+                style={{
+                  marginBottom: t.spacing.xs,
+                  marginLeft: tooltipLeft,
+                  width: TOOLTIP_WIDTH,
+                  backgroundColor: t.colors.surface,
+                  borderColor: t.colors.border,
+                  borderWidth: 1,
+                  borderRadius: t.radius.md,
+                  padding: t.spacing.sm,
+                  gap: 4,
+                }}
+              >
                 <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                  {STATS_COPY.calorieTooltipMacros(
-                    Math.round(Number(selected.summary?.protein ?? 0)),
-                    Math.round(Number(selected.summary?.carbohydrate ?? 0)),
-                    Math.round(Number(selected.summary?.fat ?? 0)),
+                  {formatTooltipDate(selected.date)}
+                </Text>
+                <Text style={{ color: t.colors.primary, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
+                  {Math.round(Number(selected.summary?.calories ?? 0))} kcal
+                </Text>
+                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.caption }}>
+                  {statusLabel(
+                    normalizeStatus(selected.calorieStatus, selected.hasRecords),
+                    selected.hasRecords,
                   )}
                 </Text>
-              ) : null}
-            </View>
-          ) : null}
-
-          <View style={{ height: CHART_HEIGHT, position: 'relative' }}>
-            {showBand ? (
-              <View
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  left: INITIAL_SPACING,
-                  right: 0,
-                  top: bandTopY,
-                  height: Math.max(2, bandBottomY - bandTopY),
-                  backgroundColor: t.colors.primary,
-                  opacity: 0.12,
-                  borderRadius: 2,
-                  zIndex: 0,
-                }}
-              />
+                {selected.hasRecords ? (
+                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                    {STATS_COPY.calorieTooltipMacros(
+                      Math.round(Number(selected.summary?.protein ?? 0)),
+                      Math.round(Number(selected.summary?.carbohydrate ?? 0)),
+                      Math.round(Number(selected.summary?.fat ?? 0)),
+                    )}
+                  </Text>
+                ) : null}
+              </View>
             ) : null}
-            <BarChart
-              data={barData}
-              maxValue={scaleMax}
-              height={CHART_HEIGHT}
-              barWidth={BAR_WIDTH}
-              spacing={SPACING}
-              initialSpacing={INITIAL_SPACING}
-              endSpacing={INITIAL_SPACING}
-              width={plotMinWidth}
-              parentWidth={Math.max(0, windowWidth - t.spacing.lg * 2 - LABEL_GUTTER - 16)}
-              disableScroll={false}
-              showScrollIndicator={false}
-              hideRules
-              hideYAxisText
-              xAxisThickness={0}
-              yAxisThickness={0}
-              yAxisLabelWidth={0}
-              labelsExtraHeight={36}
-              xAxisLabelsHeight={0}
-              noOfSections={4}
-              barBorderRadius={4}
-              isAnimated
-              animationDuration={400}
-              showReferenceLine1={goalHigh != null && goalHigh > 0}
-              referenceLine1Position={goalHigh ?? 0}
-              referenceLine1Config={refLineConfig}
-              showReferenceLine2={
-                goalLow != null && goalLow > 0 && goalLow !== goalHigh
-              }
-              referenceLine2Position={goalLow ?? 0}
-              referenceLine2Config={refLineConfig}
-              referenceLinesOverChartContent
-            />
+
+            <View style={{ height: CHART_HEIGHT, position: 'relative', width: plotWidth }}>
+              {showBand ? (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    width: plotWidth,
+                    top: bandTopY,
+                    height: Math.max(2, bandBottomY - bandTopY),
+                    backgroundColor: t.colors.primary,
+                    opacity: 0.12,
+                    borderRadius: 2,
+                  }}
+                />
+              ) : null}
+              {goalHigh != null && goalHigh > 0 && bandTopY != null ? (
+                <DashedGuideLine top={bandTopY} width={plotWidth} color={t.colors.info} />
+              ) : null}
+              {goalLow != null && goalLow > 0 && bandBottomY != null && goalLow !== goalHigh ? (
+                <DashedGuideLine top={bandBottomY} width={plotWidth} color={t.colors.info} />
+              ) : null}
+
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'flex-end',
+                  height: CHART_HEIGHT,
+                }}
+              >
+                {daily.map((p) => {
+                  const kcal = Number(p.summary?.calories ?? 0);
+                  const status = normalizeStatus(p.calorieStatus, p.hasRecords);
+                  const barH = p.hasRecords ? Math.max(6, valueToHeight(kcal, scaleMax)) : 6;
+                  const isSelected = p.date === selectedDate;
+                  const dom = dayOfMonth(p.date);
+                  return (
+                    <Pressable
+                      key={p.date}
+                      onPress={() => setSelectedDate((prev) => (prev === p.date ? null : p.date))}
+                      style={{ width: COL_WIDTH, alignItems: 'center' }}
+                      accessibilityRole="button"
+                      accessibilityLabel={STATS_COPY.calorieBarA11y(dom, Math.round(kcal))}
+                    >
+                      <View
+                        style={{
+                          height: CHART_HEIGHT,
+                          width: COL_WIDTH,
+                          justifyContent: 'flex-end',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: BAR_WIDTH,
+                            height: barH,
+                            borderRadius: 4,
+                            backgroundColor: statusColor(status, p.hasRecords, t),
+                            opacity: isSelected ? 1 : 0.92,
+                          }}
+                        />
+                      </View>
+                      <View
+                        style={{
+                          marginTop: 6,
+                          minWidth: 26,
+                          height: 26,
+                          borderRadius: 13,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: isSelected ? t.colors.primary : 'transparent',
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: isSelected ? t.colors.primaryFg : t.colors.fgSubtle,
+                            fontSize: 11,
+                            fontWeight: isSelected ? '700' : '500',
+                          }}
+                        >
+                          {dom || '·'}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
           </View>
-        </View>
+        </ScrollView>
 
         <View style={{ width: LABEL_GUTTER, height: CHART_HEIGHT, position: 'relative' }}>
           {goalHigh != null && goalHigh > 0 && bandTopY != null ? (
