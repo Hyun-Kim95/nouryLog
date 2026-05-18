@@ -168,7 +168,7 @@ export function LogScreen() {
     try {
       const all = await listMeals(token, { page: 1, size: 100 });
       setItems(all.items ?? []);
-      const recent = await listMeals(token, { page: 1, size: 20 });
+      const recent = await listMeals(token, { page: 1, size: 30, excludeFoodTemplate: true });
       const seen = new Set<string>();
       const deduped: MealRow[] = [];
       for (const m of recent.items ?? []) {

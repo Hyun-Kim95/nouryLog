@@ -705,11 +705,14 @@ meRouter.get('/meals', async (req, res) => {
     }
     consumedAt.lte = to;
   }
+  const excludeTplRaw = req.query.excludeFoodTemplate;
+  const excludeFoodTemplate = excludeTplRaw === 'true' || excludeTplRaw === '1';
   const where: Prisma.MealWhereInput = {
     userId,
     active: true,
     ...(mealSlotFilter ? { mealSlot: mealSlotFilter } : {}),
     ...(Object.keys(consumedAt).length > 0 ? { consumedAt } : {}),
+    ...(excludeFoodTemplate ? { foodTemplateId: null } : {}),
   };
   const [total, items] = await Promise.all([
     prisma.meal.count({ where }),

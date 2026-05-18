@@ -103,6 +103,68 @@ async function main() {
     });
   }
 
+  const extraTemplates: Array<{
+    name: string;
+    memo: string;
+    category: string;
+    portionUnit: PortionUnit;
+    portionLabel: string;
+    servingGrams: number;
+    calories: number;
+    protein: number;
+    fat: number;
+    carbohydrate: number;
+  }> = [
+    {
+      name: '유개장 컵라면',
+      memo: '컵 1개(포장 기준 근사)',
+      category: '간편식',
+      portionUnit: PortionUnit.PIECE,
+      portionLabel: '개',
+      servingGrams: 120,
+      calories: 530,
+      protein: 10,
+      fat: 20,
+      carbohydrate: 78,
+    },
+    {
+      name: '제육덮밥',
+      memo: '1인분 접시 기준 근사',
+      category: '한식',
+      portionUnit: PortionUnit.PLATE,
+      portionLabel: '접시',
+      servingGrams: 350,
+      calories: 720,
+      protein: 32,
+      fat: 28,
+      carbohydrate: 82,
+    },
+    {
+      name: '순대국',
+      memo: '1인분 그릇 기준 근사',
+      category: '한식',
+      portionUnit: PortionUnit.BOWL,
+      portionLabel: '그릇',
+      servingGrams: 500,
+      calories: 480,
+      protein: 28,
+      fat: 18,
+      carbohydrate: 42,
+    },
+  ];
+
+  for (const tpl of extraTemplates) {
+    if (!(await prisma.foodTemplate.findFirst({ where: { name: tpl.name } }))) {
+      await prisma.foodTemplate.create({
+        data: {
+          ...tpl,
+          referenceAmount: 1,
+          active: true,
+        },
+      });
+    }
+  }
+
   if ((await prisma.inquiry.count()) === 0) {
     await prisma.inquiry.createMany({
       data: Array.from({ length: 5 }, (_, i) => ({

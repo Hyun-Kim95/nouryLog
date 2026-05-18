@@ -43,3 +43,9 @@
 - 기존과 동일(합계, `aggregation`/`periodMeta` 없음).
 
 `goalAchievement`는 유지(모바일 UI에서 미노출).
+
+## 식사 목록 `GET /meals`
+
+### 쿼리 (추가)
+
+- `excludeFoodTemplate=true` | `1` (선택): `foodTemplateId`가 있는(템플릿으로 기록한) 식사를 제외. 모바일「최근 먹은 음식」전용.

@@ -56,13 +56,20 @@ export type CreateMealTemplateBody = {
 
 export async function listMeals(
   token: string,
-  params: { page?: number; size?: number; from?: string; to?: string },
+  params: {
+    page?: number;
+    size?: number;
+    from?: string;
+    to?: string;
+    excludeFoodTemplate?: boolean;
+  },
 ): Promise<{ items: MealRow[] }> {
   const q = new URLSearchParams();
   q.set('page', String(params.page ?? 1));
   q.set('size', String(params.size ?? 15));
   if (params.from) q.set('from', params.from);
   if (params.to) q.set('to', params.to);
+  if (params.excludeFoodTemplate) q.set('excludeFoodTemplate', 'true');
   return apiFetch<{ items: MealRow[] }>(`/meals?${q}`, { token });
 }
 
