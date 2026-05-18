@@ -84,7 +84,7 @@ export function InquiriesPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const next = await apiFetch<InquiryDetail>(`/admin/inquiries/${detail.id}/answer`, {
+      await apiFetch<InquiryDetail>(`/admin/inquiries/${detail.id}/answer`, {
         method: 'PATCH',
         token,
         body: JSON.stringify({ answer }),
