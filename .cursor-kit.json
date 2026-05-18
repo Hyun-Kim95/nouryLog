@@ -1,0 +1,7 @@
+{
+  "kitPath": "vendor/cursor-workspace-kit",
+  "kitRepoMode": "submodule",
+  "remote": "origin",
+  "branch": "main",
+  "channel": "A"
+}
