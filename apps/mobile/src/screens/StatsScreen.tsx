@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Text } from 'react-native';
 import { Segmented } from '../components/Segmented';
 import { StatsPeriodNavigator } from '../components/StatsPeriodNavigator';
-import { DailyGoalChart } from '../components/DailyGoalChart';
+import { CalorieRangeChart } from '../components/CalorieRangeChart';
 import { Banner, Card, CardTitle, ProgressBar, ScreenLayout } from '../components/ui';
 import { STATS_COPY } from '../copy/stats';
 import { fetchStats, type StatsResponse } from '../api/stats';
@@ -34,9 +34,17 @@ export function StatsScreen() {
         const token = await ensureAccessToken();
         if (!token) return;
         const anchor = shiftAnchor(todayAnchorKst(), range, periodOffset);
-        const [s, g] = await Promise.all([fetchStats(token, range, anchor), fetchTodayGoals(token)]);
-        setData(s);
-        setGoals(g);
+        const [statsR, goalsR] = await Promise.allSettled([
+          fetchStats(token, range, anchor),
+          fetchTodayGoals(token),
+        ]);
+        if (statsR.status === 'rejected' && isAuthDenied(statsR.reason)) return;
+        if (goalsR.status === 'rejected' && isAuthDenied(goalsR.reason)) return;
+        if (statsR.status === 'fulfilled') setData(statsR.value);
+        if (goalsR.status === 'fulfilled') setGoals(goalsR.value);
+        if (statsR.status === 'rejected' && goalsR.status === 'rejected') {
+          throw statsR.reason;
+        }
       } catch (e) {
         if (isAuthDenied(e)) return;
         const msg = e instanceof Error ? e.message : STATS_COPY.loadError;
@@ -68,12 +76,16 @@ export function StatsScreen() {
     if (periodOffset < 0) setPeriodOffset((o) => o + 1);
   };
 
+  const isPeriodAverage = data?.aggregation === 'dailyAverage';
+  const recordedDays = data?.periodMeta?.recordedDays ?? 0;
   const empty =
     data &&
-    data.summary.calories === 0 &&
-    data.summary.protein === 0 &&
-    data.summary.carbohydrate === 0 &&
-    data.summary.fat === 0;
+    (isPeriodAverage
+      ? recordedDays === 0
+      : data.summary.calories === 0 &&
+        data.summary.protein === 0 &&
+        data.summary.carbohydrate === 0 &&
+        data.summary.fat === 0);
 
   const profile = goals?.profile;
   const proteinGoalG = goals?.proteinGoalG ?? null;
@@ -109,9 +121,13 @@ export function StatsScreen() {
             {STATS_COPY.aggregatedAt(data.aggregatedAt, data.timezone)}
           </Text>
           <Card>
-            <CardTitle>{STATS_COPY.summaryTitle}</CardTitle>
+            <CardTitle>
+              {isPeriodAverage && recordedDays > 0
+                ? STATS_COPY.summaryTitleAverage(recordedDays)
+                : STATS_COPY.summaryTitle}
+            </CardTitle>
             <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
-              {data.summary.calories} kcal
+              {Math.round(data.summary.calories)} kcal
             </Text>
             <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
               단백질 {data.summary.protein}g · 탄수 {data.summary.carbohydrate}g · 지방 {data.summary.fat}g
@@ -120,7 +136,9 @@ export function StatsScreen() {
 
           {bySlotRows && bySlotRows.length > 0 ? (
             <Card>
-              <CardTitle>{STATS_COPY.bySlotTitle}</CardTitle>
+              <CardTitle>
+                {isPeriodAverage ? STATS_COPY.bySlotTitleAverage : STATS_COPY.bySlotTitle}
+              </CardTitle>
               {bySlotRows.map((row) => (
                 <Text
                   key={row.key}
@@ -168,28 +186,13 @@ export function StatsScreen() {
             </Card>
           ) : null}
 
-          {(range === 'week' || range === 'month') && data.goalAchievement ? (
+          {(range === 'week' || range === 'month') && data.daily && data.daily.length > 0 ? (
             <Card>
-              <CardTitle>{STATS_COPY.goalDaysTitle}</CardTitle>
-              {calorieGoalKcal != null ? (
-                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, marginBottom: t.spacing.xs }}>
-                  {STATS_COPY.calorieGoalDays(
-                    data.goalAchievement.calorie.metDays,
-                    data.goalAchievement.calorie.countedDays,
-                    data.goalAchievement.calorie.pct,
-                  )}
-                </Text>
-              ) : null}
-              {proteinGoalG != null ? (
-                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
-                  {STATS_COPY.proteinGoalDays(
-                    data.goalAchievement.protein.metDays,
-                    data.goalAchievement.protein.countedDays,
-                    data.goalAchievement.protein.pct,
-                  )}
-                </Text>
-              ) : null}
-              {data.daily && data.daily.length > 0 ? <DailyGoalChart daily={data.daily} /> : null}
+              <CalorieRangeChart
+                daily={data.daily}
+                calorieMin={goals?.calorieGoalMinKcal ?? null}
+                calorieMax={goals?.calorieGoalMaxKcal ?? null}
+              />
             </Card>
           ) : null}
         </>
@@ -223,7 +226,6 @@ export function StatsScreen() {
           canGoNext={canGoNext}
           onPrev={goPrev}
           onNext={goNext}
-          swipeEnabled={!err}
         >
           {statsBody}
         </StatsPeriodNavigator>

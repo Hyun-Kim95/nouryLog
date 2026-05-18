@@ -20,5 +20,5 @@
 
 ## 온보딩 (클라이언트)
 
-- SecureStore `dm_onboarding_done:{userId}` — 로그아웃 시 토큰만 삭제, 계정별 완료 플래그 유지
+- SecureStore `dm_onboarding_done_{userId}` (`:` 불가, SecureStore 키 규칙) — 로그아웃 시 토큰만 삭제, 계정별 완료 플래그 유지
 - `calorieGoalKcal` 또는 `proteinGoalG` 존재 시 온보딩 자동 스킵

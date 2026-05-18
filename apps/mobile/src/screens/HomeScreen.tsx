@@ -42,19 +42,29 @@ export function HomeScreen() {
     try {
       const token = await ensureAccessToken();
       if (!token) return;
+
       const { from, to } = localDayBounds();
-      const [e, a, todayIntake, todayGoals, mealsRes] = await Promise.all([
+      const [entR, adsR, intakeR, goalsR, mealsR] = await Promise.allSettled([
         apiFetch<Ent>('/me/billing/entitlements', { token }),
         apiFetch<Ads>('/me/ads/status', { token }),
         fetchTodayIntake(token),
         fetchTodayGoals(token),
         listMeals(token, { page: 1, size: 100, from, to }),
       ]);
-      setEnt(e);
-      setAds(a);
-      setIntake(todayIntake);
-      setGoals(todayGoals);
-      setTodayMeals(mealsRes.items ?? []);
+
+      const rejected = [entR, adsR, intakeR, goalsR, mealsR].filter((r) => r.status === 'rejected');
+      if (rejected.some((r) => r.status === 'rejected' && isAuthDenied(r.reason))) return;
+
+      if (entR.status === 'fulfilled') setEnt(entR.value);
+      if (adsR.status === 'fulfilled') setAds(adsR.value);
+      if (intakeR.status === 'fulfilled') setIntake(intakeR.value);
+      if (goalsR.status === 'fulfilled') setGoals(goalsR.value);
+      if (mealsR.status === 'fulfilled') setTodayMeals(mealsR.value.items ?? []);
+
+      if (rejected.length === 5) {
+        const reason = rejected[0].reason;
+        setErr(reason instanceof Error ? reason.message : HOME_COPY.loadError);
+      }
     } catch (e) {
       if (isAuthDenied(e)) return;
       setErr(e instanceof Error ? e.message : HOME_COPY.loadError);

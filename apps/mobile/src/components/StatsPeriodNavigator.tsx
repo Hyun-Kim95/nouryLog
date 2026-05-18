@@ -1,13 +1,5 @@
-import { useCallback, useEffect, useRef, type ReactNode } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  useWindowDimensions,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from 'react-native';
+import type { ReactNode } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { STATS_COPY } from '../copy/stats';
 import { useTheme } from '../theme';
@@ -18,7 +10,6 @@ type Props = {
   canGoNext: boolean;
   onPrev: () => void;
   onNext: () => void;
-  swipeEnabled: boolean;
   children: ReactNode;
 };
 
@@ -28,34 +19,9 @@ export function StatsPeriodNavigator({
   canGoNext,
   onPrev,
   onNext,
-  swipeEnabled,
   children,
 }: Props) {
   const t = useTheme();
-  const { width: windowWidth } = useWindowDimensions();
-  const pageWidth = Math.max(1, windowWidth - t.spacing.lg * 2);
-  const scrollRef = useRef<ScrollView>(null);
-
-  const scrollToCenter = useCallback(
-    (animated: boolean) => {
-      scrollRef.current?.scrollTo({ x: pageWidth, y: 0, animated });
-    },
-    [pageWidth],
-  );
-
-  useEffect(() => {
-    scrollToCenter(false);
-  }, [label, pageWidth, scrollToCenter]);
-
-  const onMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const page = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
-    if (page === 0 && canGoPrev) {
-      onPrev();
-    } else if (page === 2 && canGoNext) {
-      onNext();
-    }
-    scrollToCenter(false);
-  };
 
   const navBtn = (dir: 'prev' | 'next', enabled: boolean, onPress: () => void) => (
     <Pressable
@@ -83,7 +49,7 @@ export function StatsPeriodNavigator({
   );
 
   return (
-    <View style={{ gap: t.spacing.sm }}>
+    <View style={{ gap: t.spacing.md }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs }}>
         {navBtn('prev', canGoPrev, onPrev)}
         <Text
@@ -100,23 +66,7 @@ export function StatsPeriodNavigator({
         </Text>
         {navBtn('next', canGoNext, onNext)}
       </View>
-
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        scrollEnabled={swipeEnabled && (canGoPrev || canGoNext)}
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        decelerationRate="fast"
-        contentOffset={{ x: pageWidth, y: 0 }}
-        onMomentumScrollEnd={onMomentumScrollEnd}
-        style={{ marginHorizontal: -t.spacing.lg }}
-      >
-        <View style={{ width: pageWidth }} />
-        <View style={{ width: pageWidth, paddingHorizontal: t.spacing.lg, gap: t.spacing.md }}>{children}</View>
-        <View style={{ width: pageWidth }} />
-      </ScrollView>
+      <View style={{ gap: t.spacing.md }}>{children}</View>
     </View>
   );
 }

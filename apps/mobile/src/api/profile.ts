@@ -89,7 +89,7 @@ export class ProfileApiError extends Error {
 
 async function request<T>(
   path: string,
-  init: { token: string; method: 'GET' | 'PUT' | 'POST'; body?: object },
+  init: { token: string; method: 'GET' | 'PUT' | 'POST'; body?: object; signal?: AbortSignal },
 ): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: init.method,
@@ -98,6 +98,7 @@ async function request<T>(
       Authorization: `Bearer ${init.token}`,
     },
     ...(init.body ? { body: JSON.stringify(init.body) } : {}),
+    signal: init.signal,
   });
   const text = await res.text();
   let json: unknown = {};
@@ -131,8 +132,11 @@ function maybeForceFail(opts: ApiCallOptions | undefined, label: string): void {
   }
 }
 
-export async function getProfile(token: string): Promise<ProfileGetResponse> {
-  return request<ProfileGetResponse>('/me/profile', { token, method: 'GET' });
+export async function getProfile(
+  token: string,
+  opts?: { signal?: AbortSignal },
+): Promise<ProfileGetResponse> {
+  return request<ProfileGetResponse>('/me/profile', { token, method: 'GET', signal: opts?.signal });
 }
 
 export type SaveProfileInput = Partial<ProfileInput>;

@@ -6,8 +6,15 @@ const CURRENT_USER = 'dm_current_user_id';
 /** @deprecated 계정별 키로 대체됨 — 마이그레이션 후 삭제 */
 const ONBOARDING_DONE_LEGACY = 'dm_onboarding_done';
 
+/** SecureStore 키는 `[A-Za-z0-9._-]` 만 허용 — `:` 사용 불가 */
 function onboardingKey(userId: string) {
-  return `dm_onboarding_done:${userId}`;
+  const safe = userId.replace(/[^a-zA-Z0-9._-]/g, '_');
+  return `dm_onboarding_done_${safe}`;
+}
+
+function decodeBase64Utf8(padded: string): string | null {
+  if (typeof globalThis.atob !== 'function') return null;
+  return globalThis.atob(padded);
 }
 
 export function parseUserIdFromAccessToken(token: string): string | null {
@@ -16,7 +23,9 @@ export function parseUserIdFromAccessToken(token: string): string | null {
     if (!part) return null;
     const base64 = part.replace(/-/g, '+').replace(/_/g, '/');
     const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-    const json = JSON.parse(atob(padded)) as { sub?: string; userId?: string };
+    const decoded = decodeBase64Utf8(padded);
+    if (!decoded) return null;
+    const json = JSON.parse(decoded) as { sub?: string; userId?: string };
     if (typeof json.sub === 'string' && json.sub) return json.sub;
     if (typeof json.userId === 'string' && json.userId) return json.userId;
     return null;
@@ -46,8 +55,12 @@ export async function getAccessToken() {
 }
 
 export async function clearTokens() {
+  const uid = await SecureStore.getItemAsync(CURRENT_USER);
   await SecureStore.deleteItemAsync(ACCESS);
   await SecureStore.deleteItemAsync(REFRESH);
+  if (uid) {
+    await SecureStore.deleteItemAsync(onboardingKey(uid));
+  }
   await SecureStore.deleteItemAsync(CURRENT_USER);
   await SecureStore.deleteItemAsync(ONBOARDING_DONE_LEGACY);
 }

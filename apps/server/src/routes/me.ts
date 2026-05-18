@@ -25,7 +25,12 @@ import {
   snackPlacementPatchFromBody,
   validateMealSlotSnackCombo,
 } from '../lib/snackPlacement.js';
-import { buildByMealSlotForPeriod, buildStatsExtras } from '../lib/statsAggregate.js';
+import {
+  averageByMealSlot,
+  averageNutritionSum,
+  buildByMealSlotForPeriod,
+  buildStatsExtras,
+} from '../lib/statsAggregate.js';
 import type { MealSlot, SnackPlacement } from '@prisma/client';
 
 export const meRouter = Router();
@@ -1125,12 +1130,29 @@ meRouter.get('/stats', async (req, res) => {
       }
     : null;
 
-  const byMealSlot = await buildByMealSlotForPeriod(userId, period);
+  let byMealSlot = await buildByMealSlotForPeriod(userId, period);
   const statsRange = range === 'day' || range === 'week' || range === 'month' ? range : null;
   const extras =
     statsRange === 'week' || statsRange === 'month'
       ? await buildStatsExtras(userId, period, profileGoals, statsRange)
       : null;
+
+  const rawSummary = {
+    calories: agg._sum.calories ?? 0,
+    carbohydrate: agg._sum.carbohydrate ?? 0,
+    protein: agg._sum.protein ?? 0,
+    fat: agg._sum.fat ?? 0,
+  };
+
+  const isPeriodAverage = statsRange === 'week' || statsRange === 'month';
+  const recordedDays = extras?.periodMeta.recordedDays ?? 0;
+  const summary =
+    isPeriodAverage && recordedDays > 0
+      ? averageNutritionSum(rawSummary, recordedDays)
+      : rawSummary;
+  if (isPeriodAverage && recordedDays > 0 && extras) {
+    byMealSlot = averageByMealSlot(extras.byMealSlot, recordedDays);
+  }
 
   res.json({
     aggregatedAt: aggregatedAt.toISOString(),
@@ -1143,17 +1165,136 @@ meRouter.get('/stats', async (req, res) => {
       toExclusive: period.toExclusive.toISOString(),
       label: period.label,
     },
-    summary: {
-      calories: agg._sum.calories ?? 0,
-      carbohydrate: agg._sum.carbohydrate ?? 0,
-      protein: agg._sum.protein ?? 0,
-      fat: agg._sum.fat ?? 0,
-    },
+    ...(isPeriodAverage
+      ? { aggregation: 'dailyAverage' as const, periodMeta: extras!.periodMeta }
+      : {}),
+    summary,
     byMealSlot,
     ...(extras
       ? { daily: extras.daily, goalAchievement: extras.goalAchievement }
       : {}),
   });
+});
+
+const INQUIRY_SUBJECT_MAX = 200;
+const INQUIRY_BODY_MAX = 4000;
+
+function paginateInquiries(q: { page?: unknown; size?: unknown }) {
+  const page = Math.max(1, Number(q.page ?? 1));
+  const size = Math.min(50, Math.max(1, Number(q.size ?? 15)));
+  return { page, size, skip: (page - 1) * size };
+}
+
+function serializeUserInquirySummary(i: {
+  id: string;
+  subject: string;
+  status: string;
+  answer: string | null;
+  createdAt: Date;
+}) {
+  return {
+    id: i.id,
+    subject: i.subject,
+    status: i.status,
+    answered: i.answer !== null,
+    createdAt: i.createdAt.toISOString(),
+  };
+}
+
+function serializeUserInquiryDetail(i: {
+  id: string;
+  subject: string;
+  body: string;
+  status: string;
+  answer: string | null;
+  answeredAt: Date | null;
+  createdAt: Date;
+}) {
+  return {
+    id: i.id,
+    subject: i.subject,
+    body: i.body,
+    status: i.status,
+    answer: i.answer,
+    answeredAt: i.answeredAt?.toISOString() ?? null,
+    createdAt: i.createdAt.toISOString(),
+  };
+}
+
+meRouter.get('/me/inquiries', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 조회할 수 있습니다.');
+    return;
+  }
+  const { page, size, skip } = paginateInquiries(req.query);
+  const where: Prisma.InquiryWhereInput = { userId, active: true };
+  const [total, rows] = await Promise.all([
+    prisma.inquiry.count({ where }),
+    prisma.inquiry.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: size,
+    }),
+  ]);
+  res.json({
+    page,
+    size,
+    total,
+    items: rows.map(serializeUserInquirySummary),
+  });
+});
+
+meRouter.get('/me/inquiries/:id', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 조회할 수 있습니다.');
+    return;
+  }
+  const inquiry = await prisma.inquiry.findFirst({
+    where: { id: req.params.id, userId, active: true },
+  });
+  if (!inquiry) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '문의를 찾을 수 없습니다.');
+    return;
+  }
+  res.json(serializeUserInquiryDetail(inquiry));
+});
+
+meRouter.post('/me/inquiries', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 문의할 수 있습니다.');
+    return;
+  }
+  const b = (req.body ?? {}) as { subject?: unknown; body?: unknown };
+  const subject = typeof b.subject === 'string' ? b.subject.trim() : '';
+  const body = typeof b.body === 'string' ? b.body.trim() : '';
+  if (!subject) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '제목이 필요합니다.', { field: 'subject' });
+    return;
+  }
+  if (!body) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '내용이 필요합니다.', { field: 'body' });
+    return;
+  }
+  if (subject.length > INQUIRY_SUBJECT_MAX) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `제목은 ${INQUIRY_SUBJECT_MAX}자 이하여야 합니다.`, {
+      maxLength: INQUIRY_SUBJECT_MAX,
+    });
+    return;
+  }
+  if (body.length > INQUIRY_BODY_MAX) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `내용은 ${INQUIRY_BODY_MAX}자 이하여야 합니다.`, {
+      maxLength: INQUIRY_BODY_MAX,
+    });
+    return;
+  }
+  const created = await prisma.inquiry.create({
+    data: { userId, subject, body, status: 'pending' },
+  });
+  res.status(201).json(serializeUserInquiryDetail(created));
 });
 
 meRouter.get('/me/billing/entitlements', async (req, res) => {

@@ -8,11 +8,15 @@ export type NutritionSum = {
   fat: number;
 };
 
+import type { FulfillmentStatus } from '../lib/goalFulfillment';
+
 export type StatsResponse = {
   aggregatedAt: string;
   isStale: boolean;
   staleHours: number;
   timezone: string;
+  aggregation?: 'dailyAverage';
+  periodMeta?: { recordedDays: number; calendarDays: number };
   period: {
     anchor: string;
     from: string;
@@ -25,6 +29,7 @@ export type StatsResponse = {
     date: string;
     summary: NutritionSum;
     goalMet: { calorie: boolean; protein: boolean };
+    calorieStatus: FulfillmentStatus;
     hasRecords: boolean;
   }>;
   goalAchievement?: {

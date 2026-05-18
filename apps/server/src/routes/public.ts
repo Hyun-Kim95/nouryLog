@@ -11,6 +11,7 @@ import {
   parseSocialProvider,
   verifyConflictToken,
 } from '../lib/socialAuth.js';
+import { publishedNoticeWhere } from '../lib/noticePublish.js';
 
 export const publicRouter = Router();
 
@@ -409,6 +410,85 @@ type PublicPolicyKind = (typeof PUBLIC_POLICY_KINDS)[number];
 function isPublicPolicyKind(v: unknown): v is PublicPolicyKind {
   return typeof v === 'string' && (PUBLIC_POLICY_KINDS as readonly string[]).includes(v);
 }
+
+function paginatePublic(q: { page?: unknown; size?: unknown }) {
+  const page = Math.max(1, Number(q.page ?? 1));
+  const size = Math.min(50, Math.max(1, Number(q.size ?? 15)));
+  return { page, size, skip: (page - 1) * size };
+}
+
+function serializePublicNoticeSummary(n: {
+  id: string;
+  title: string;
+  pinned: boolean;
+  publishStart: Date | null;
+  publishEnd: Date | null;
+  createdAt: Date;
+}) {
+  return {
+    id: n.id,
+    title: n.title,
+    pinned: n.pinned,
+    publishStart: n.publishStart?.toISOString() ?? null,
+    publishEnd: n.publishEnd?.toISOString() ?? null,
+    createdAt: n.createdAt.toISOString(),
+  };
+}
+
+function serializePublicNoticeDetail(n: {
+  id: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  publishStart: Date | null;
+  publishEnd: Date | null;
+  createdAt: Date;
+}) {
+  return {
+    ...serializePublicNoticeSummary(n),
+    body: n.body,
+  };
+}
+
+publicRouter.get('/public/notices', async (req, res) => {
+  const { page, size, skip } = paginatePublic(req.query);
+  const where = publishedNoticeWhere();
+  const [total, rows] = await Promise.all([
+    prisma.notice.count({ where }),
+    prisma.notice.findMany({
+      where,
+      orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
+      skip,
+      take: size,
+      select: {
+        id: true,
+        title: true,
+        pinned: true,
+        publishStart: true,
+        publishEnd: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+  res.json({
+    page,
+    size,
+    total,
+    items: rows.map(serializePublicNoticeSummary),
+  });
+});
+
+publicRouter.get('/public/notices/:id', async (req, res) => {
+  const id = req.params.id;
+  const notice = await prisma.notice.findFirst({
+    where: { id, ...publishedNoticeWhere() },
+  });
+  if (!notice) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '공지를 찾을 수 없습니다.');
+    return;
+  }
+  res.json(serializePublicNoticeDetail(notice));
+});
 
 publicRouter.get('/public/policies/:kind', async (req, res) => {
   const kind = req.params.kind;

@@ -4,16 +4,42 @@ import { handleAuthFailure } from './authSession';
 
 export { ApiError, isAuthDenied } from './lib/apiError';
 
-export async function apiFetch<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
-  const { token, headers, ...rest } = init;
-  const res = await fetch(`${API_BASE}${path.startsWith('/') ? path : `/${path}`}`, {
-    ...rest,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-  });
+const DEFAULT_API_TIMEOUT_MS = 20_000;
+
+export async function apiFetch<T>(
+  path: string,
+  init: RequestInit & { token?: string; timeoutMs?: number } = {},
+): Promise<T> {
+  const { token, headers, timeoutMs = DEFAULT_API_TIMEOUT_MS, signal: externalSignal, ...rest } = init;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path.startsWith('/') ? path : `/${path}`}`, {
+      ...rest,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new ApiError(408, {
+        code: 'TIMEOUT',
+        message: '서버 응답이 지연되고 있어요. 네트워크를 확인한 뒤 다시 시도해 주세요.',
+      });
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   let json: unknown = {};
   if (text) {

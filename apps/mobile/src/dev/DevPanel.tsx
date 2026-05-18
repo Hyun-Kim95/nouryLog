@@ -10,58 +10,62 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { CommonActions } from '@react-navigation/native';
 import { useTheme } from '../theme';
+import { navigationRef } from '../authSession';
 import { useDevToggles, isDevBuild, type ThemeOverride } from './devToggles';
 import { setOnboardingDone, clearTokens } from '../authStorage';
 import type { RootStackParamList } from '../navigation';
 
 /**
- * DevPanel은 시뮬레이터·실기기 dev 빌드에서만 렌더된다.
- * `docs/design/mobile-onboarding-spec.md` §9 시각 점검 체크리스트를 빠르게 수행할 수 있도록
- * 라이트/다크 강제, 5xx/recalc 실패 시뮬, 온보딩 플래그 리셋, 강제 로그아웃 진입을 제공한다.
+ * 개발자 도구는 설정 화면에서만 열 수 있다(__DEV__ 빌드).
+ * `docs/design/mobile-onboarding-spec.md` §9 시각 점검 체크리스트용.
  */
-export function DevPanel() {
+export function DevToolsSection() {
   if (!isDevBuild()) return null;
-  return <DevPanelInner />;
+  return <DevToolsSectionInner />;
 }
 
-function DevPanelInner() {
+function DevToolsSectionInner() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const dev = useDevToggles();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [open, setOpen] = useState(false);
+
+  const resetTo = (name: keyof RootStackParamList) => {
+    if (!navigationRef.isReady()) return;
+    navigationRef.dispatch(CommonActions.reset({ index: 0, routes: [{ name }] }));
+  };
 
   const onResetOnboarding = async () => {
     await setOnboardingDone(false);
     setOpen(false);
-    navigation.reset({ index: 0, routes: [{ name: 'Onboarding' }] });
+    resetTo('Onboarding');
   };
 
   const onForceLogout = async () => {
     await clearTokens();
     setOpen(false);
-    navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    resetTo('Login');
   };
 
   return (
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="dev 패널 열기"
+        accessibilityLabel="개발자 도구 열기"
         onPress={() => setOpen(true)}
-        style={[
-          styles.fab,
-          {
-            top: Math.max(insets.top, 8) + 4,
-            backgroundColor: t.colors.surface2,
-            borderColor: t.colors.border,
-          },
-        ]}
+        style={({ pressed }) => ({
+          borderColor: t.colors.border,
+          borderWidth: 1,
+          borderRadius: t.radius.md,
+          padding: t.spacing.md,
+          opacity: pressed ? 0.85 : 1,
+        })}
       >
-        <Text style={{ color: t.colors.fg, fontSize: 12, fontWeight: '700' }}>DEV</Text>
+        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body, fontWeight: '600' }}>
+          개발자 도구 열기
+        </Text>
       </Pressable>
 
       <Modal
@@ -301,16 +305,6 @@ function ThemeRadio({
 }
 
 const styles = StyleSheet.create({
-  fab: {
-    position: 'absolute',
-    right: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    zIndex: 1000,
-    elevation: 6,
-  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',

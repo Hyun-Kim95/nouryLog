@@ -8,6 +8,8 @@ import { clearTokens } from '../authStorage';
 import { useToast } from '../toast/useToast';
 import type { RootStackParamList } from '../navigation';
 import { NotificationCard } from './settings/NotificationCard';
+import { DevToolsSection } from '../dev/DevPanel';
+import { isDevBuild } from '../dev/devToggles';
 
 const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'light', label: '라이트' },
@@ -72,6 +74,43 @@ export function SettingsScreen() {
       <NotificationCard />
 
       <Card>
+        <CardTitle>고객 지원</CardTitle>
+        <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
+          공지사항을 확인하거나 문의를 남길 수 있어요.
+        </Text>
+        <View style={{ gap: t.spacing.sm }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="공지사항 보기"
+            onPress={() => navigation.navigate('NoticeList')}
+            style={({ pressed }) => ({
+              borderColor: t.colors.border,
+              borderWidth: 1,
+              borderRadius: t.radius.md,
+              padding: t.spacing.md,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <Text style={{ color: t.colors.info, fontWeight: '700', fontSize: t.fontSize.body }}>공지사항</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="문의하기"
+            onPress={() => navigation.navigate('InquiryList')}
+            style={({ pressed }) => ({
+              borderColor: t.colors.border,
+              borderWidth: 1,
+              borderRadius: t.radius.md,
+              padding: t.spacing.md,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <Text style={{ color: t.colors.info, fontWeight: '700', fontSize: t.fontSize.body }}>문의하기</Text>
+          </Pressable>
+        </View>
+      </Card>
+
+      <Card>
         <CardTitle>약관 및 정책</CardTitle>
         <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
           게시 중인 이용약관과 개인정보처리방침을 확인할 수 있어요.
@@ -109,6 +148,13 @@ export function SettingsScreen() {
           </Pressable>
         </View>
       </Card>
+
+      {isDevBuild() ? (
+        <Card>
+          <CardTitle>개발자</CardTitle>
+          <DevToolsSection />
+        </Card>
+      ) : null}
 
       <Card>
         <CardTitle>계정</CardTitle>

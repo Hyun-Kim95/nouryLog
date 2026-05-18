@@ -49,7 +49,12 @@ export function LoginScreen({ navigation }: Props) {
   });
 
   const goAfterLogin = async (accessToken: string) => {
-    const done = await resolveOnboardingComplete(accessToken);
+    let done = false;
+    try {
+      done = await resolveOnboardingComplete(accessToken);
+    } catch (e) {
+      if (__DEV__) console.warn('[Login] onboarding resolve failed', e);
+    }
     navigation.reset({ index: 0, routes: [{ name: done ? 'Main' : 'Onboarding' }] });
   };
 

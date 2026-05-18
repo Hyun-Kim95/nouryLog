@@ -105,29 +105,29 @@ const UserThemeModeContext = createContext<UserThemeModeApi | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const scheme = useColorScheme();
   const { themeOverride } = useDevToggles();
-  // null: 부팅 직후 SecureStore 로드 전. children 미렌더로 1프레임 깜빡임 방지.
-  const [userMode, setUserModeState] = useState<ThemeMode | null>(null);
+  const seedMode: ThemeMode = scheme === 'dark' ? 'dark' : 'light';
+  const [userMode, setUserModeState] = useState<ThemeMode>(seedMode);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const saved = await getThemeMode();
-      if (cancelled) return;
-      if (saved === 'light' || saved === 'dark') {
-        setUserModeState(saved);
-        return;
+      try {
+        const saved = await getThemeMode();
+        if (cancelled) return;
+        if (saved === 'light' || saved === 'dark') {
+          setUserModeState(saved);
+          return;
+        }
+        setUserModeState(seedMode);
+        void setThemeModeStored(seedMode);
+      } catch (e) {
+        if (__DEV__) console.warn('[ThemeProvider] load theme failed', e);
       }
-      // 첫 부팅 시드: useColorScheme()을 1회만 사용. 이후 OS 변경에는 반응하지 않는다.
-      const seed: ThemeMode = scheme === 'dark' ? 'dark' : 'light';
-      setUserModeState(seed);
-      void setThemeModeStored(seed);
     })();
     return () => {
       cancelled = true;
     };
-    // 시드 결정 1회. 의도적 빈 deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [seedMode]);
 
   const setUserMode = useCallback((mode: ThemeMode) => {
     setUserModeState(mode);
@@ -139,7 +139,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       ? 'light'
       : themeOverride === 'dark'
         ? 'dark'
-        : (userMode ?? 'light');
+        : userMode;
 
   const value = useMemo<Theme>(
     () => ({
@@ -153,11 +153,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 
   const userApi = useMemo<UserThemeModeApi>(
-    () => ({ userMode: userMode ?? 'light', setUserMode }),
+    () => ({ userMode, setUserMode }),
     [userMode, setUserMode],
   );
-
-  if (userMode === null) return null;
 
   return (
     <UserThemeModeContext.Provider value={userApi}>

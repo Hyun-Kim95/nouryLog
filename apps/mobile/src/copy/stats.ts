@@ -4,6 +4,7 @@ export const STATS_COPY = {
     `최신 반영 지연 · 마지막 집계가 ${hours}시간 전이에요. 잠시 후 다시 확인해 주세요.`,
   aggregatedAt: (at: string, tz: string) => `${tz} · 집계 ${at}`,
   summaryTitle: '영양 합계',
+  summaryTitleAverage: (days: number) => `일평균 (기록 ${days}일)`,
   fulfillmentTitle: '목표 대비',
   proteinFulfillment: (pct: number, current: number, goal: number) =>
     `단백질 ${pct}% (${current}/${goal}g)`,
@@ -20,16 +21,9 @@ export const STATS_COPY = {
   periodNext: '다음 기간',
   periodFutureBlocked: '아직 시작하지 않은 기간이에요.',
   bySlotTitle: '끼니별 합계',
+  bySlotTitleAverage: '끼니별 일평균',
   slotLine: (label: string, kcal: number, proteinG: number) => `${label} · ${kcal} kcal · 단백질 ${proteinG}g`,
-  goalDaysTitle: '목표 달성 일수',
-  calorieGoalDays: (met: number, counted: number, pct: number) =>
-    `칼로리 · ${met}/${counted}일 달성 (${pct}%)`,
-  proteinGoalDays: (met: number, counted: number, pct: number) =>
-    `단백질 · ${met}/${counted}일 달성 (${pct}%)`,
-  dailyChartTitle: '일별 달성',
-  dailyChartCalorie: '칼로리',
-  dailyChartProtein: '단백질',
-  dailyMet: '달성',
-  dailyNotMet: '미달성',
-  dailyNoRecord: '기록 없음',
+  calorieRangeChartTitle: '일별 칼로리 · 목표 구간',
+  calorieRangeBand: (min: number, max: number) => `목표 구간 ${Math.round(min)}–${Math.round(max)} kcal`,
+  calorieRangeLegend: '막대: 실제 섭취 · 연한 영역: 목표 구간 · 색: 부족 / 적정 / 초과 / 기록 없음',
 } as const;

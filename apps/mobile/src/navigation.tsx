@@ -11,6 +11,12 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import { ProfileEditScreen } from './screens/ProfileEditScreen';
 import { PolicyViewScreen } from './screens/PolicyViewScreen';
+import { NoticeListScreen } from './screens/support/NoticeListScreen';
+import { NoticeDetailScreen } from './screens/support/NoticeDetailScreen';
+import { InquiryListScreen } from './screens/support/InquiryListScreen';
+import { InquiryCreateScreen } from './screens/support/InquiryCreateScreen';
+import { InquiryDetailScreen } from './screens/support/InquiryDetailScreen';
+import { themedStackScreenOptions } from './navigation/themedStackOptions';
 import { useTheme } from './theme';
 
 export type RootStackParamList = {
@@ -19,6 +25,11 @@ export type RootStackParamList = {
   Main: undefined;
   ProfileEdit: undefined;
   PolicyView: { kind: 'terms' | 'privacy' };
+  NoticeList: undefined;
+  NoticeDetail: { id: string };
+  InquiryList: undefined;
+  InquiryCreate: undefined;
+  InquiryDetail: { id: string };
 };
 
 export type InitialRoute = 'Login' | 'Onboarding' | 'Main';
@@ -28,9 +39,6 @@ const Tabs = createBottomTabNavigator();
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
-/// 5탭 Ionicons 매핑. focused → filled 글리프 / unfocused → outline 글리프.
-/// `@expo/vector-icons`의 Ionicons 셋을 사용하며, tintColor는 `tabBarActiveTintColor`/`tabBarInactiveTintColor`가 위임 처리.
-/// Phase L의 텍스트 이모지 매핑을 대체.
 const TAB_ICON: Record<string, { focused: IoniconName; unfocused: IoniconName }> = {
   Home: { focused: 'home', unfocused: 'home-outline' },
   Log: { focused: 'restaurant', unfocused: 'restaurant-outline' },
@@ -68,6 +76,9 @@ function MainTabs() {
 }
 
 export function RootNavigator({ initialRoute }: { initialRoute: InitialRoute }) {
+  const t = useTheme();
+  const themed = themedStackScreenOptions(t);
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRoute}>
       <Stack.Screen name="Login" component={LoginScreen} />
@@ -76,12 +87,41 @@ export function RootNavigator({ initialRoute }: { initialRoute: InitialRoute }) 
       <Stack.Screen
         name="ProfileEdit"
         component={ProfileEditScreen}
-        options={{ headerShown: true, title: '프로필 편집' }}
+        options={{ ...themed, headerShown: true, title: '프로필 편집' }}
       />
       <Stack.Screen
         name="PolicyView"
         component={PolicyViewScreen}
-        options={{ headerShown: true, title: '정책 문서' }}
+        options={({ route }) => ({
+          ...themed,
+          headerShown: true,
+          title: route.params.kind === 'terms' ? '이용약관' : '개인정보처리방침',
+        })}
+      />
+      <Stack.Screen
+        name="NoticeList"
+        component={NoticeListScreen}
+        options={{ ...themed, headerShown: true, title: '공지사항' }}
+      />
+      <Stack.Screen
+        name="NoticeDetail"
+        component={NoticeDetailScreen}
+        options={{ ...themed, headerShown: true, title: '공지' }}
+      />
+      <Stack.Screen
+        name="InquiryList"
+        component={InquiryListScreen}
+        options={{ ...themed, headerShown: true, title: '문의하기' }}
+      />
+      <Stack.Screen
+        name="InquiryCreate"
+        component={InquiryCreateScreen}
+        options={{ ...themed, headerShown: true, title: '문의 작성' }}
+      />
+      <Stack.Screen
+        name="InquiryDetail"
+        component={InquiryDetailScreen}
+        options={{ ...themed, headerShown: true, title: '문의 상세' }}
       />
     </Stack.Navigator>
   );

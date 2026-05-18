@@ -1,5 +1,5 @@
 import { prisma } from './prisma.js';
-import { isGoalMet } from './goalFulfillment.js';
+import { computeFulfillment, isGoalMet, type FulfillmentStatus } from './goalFulfillment.js';
 import { addDaysYmd, todayAnchorKst, type StatsPeriodBounds } from './statsPeriod.js';
 
 export type NutritionSum = {
@@ -18,6 +18,40 @@ function addSum(a: NutritionSum, b: Partial<NutritionSum>): NutritionSum {
     carbohydrate: a.carbohydrate + Number(b.carbohydrate ?? 0),
     fat: a.fat + Number(b.fat ?? 0),
   };
+}
+
+export function divideNutritionSum(sum: NutritionSum, divisor: number): NutritionSum {
+  if (divisor <= 0) return { ...ZERO };
+  return {
+    calories: sum.calories / divisor,
+    protein: sum.protein / divisor,
+    carbohydrate: sum.carbohydrate / divisor,
+    fat: sum.fat / divisor,
+  };
+}
+
+function roundNutritionSum(sum: NutritionSum): NutritionSum {
+  return {
+    calories: Math.round(sum.calories * 10) / 10,
+    protein: Math.round(sum.protein * 10) / 10,
+    carbohydrate: Math.round(sum.carbohydrate * 10) / 10,
+    fat: Math.round(sum.fat * 10) / 10,
+  };
+}
+
+export function averageNutritionSum(sum: NutritionSum, recordedDays: number): NutritionSum {
+  return roundNutritionSum(divideNutritionSum(sum, recordedDays));
+}
+
+export function averageByMealSlot(
+  slots: Record<string, NutritionSum>,
+  recordedDays: number,
+): Record<string, NutritionSum> {
+  const out: Record<string, NutritionSum> = {};
+  for (const [key, sum] of Object.entries(slots)) {
+    out[key] = averageNutritionSum(sum, recordedDays);
+  }
+  return out;
 }
 
 function enumerateKstDays(from: Date, toExclusive: Date): string[] {
@@ -49,8 +83,10 @@ export type StatsExtras = {
     date: string;
     summary: NutritionSum;
     goalMet: { calorie: boolean; protein: boolean };
+    calorieStatus: FulfillmentStatus;
     hasRecords: boolean;
   }>;
+  periodMeta: { recordedDays: number; calendarDays: number };
   goalAchievement: {
     calorie: { metDays: number; countedDays: number; pct: number };
     protein: { metDays: number; countedDays: number; pct: number };
@@ -114,10 +150,13 @@ export async function buildStatsExtras(
     const hasRecords = dailyHasRecords.get(date) === true;
     let calorieMet = false;
     let proteinMet = false;
+    let calorieStatus: FulfillmentStatus = 'none';
     if (hasRecords) {
       countedDays += 1;
       if (calorieGoal != null) {
-        calorieMet = isGoalMet('calorie', summary.calories, calorieGoal, profileCtx, calorieBounds);
+        const f = computeFulfillment('calorie', summary.calories, calorieGoal, profileCtx, calorieBounds);
+        calorieStatus = f.status;
+        calorieMet = f.status === 'met';
         if (calorieMet) calorieMetDays += 1;
       }
       if (proteinGoal != null) {
@@ -125,7 +164,7 @@ export async function buildStatsExtras(
         if (proteinMet) proteinMetDays += 1;
       }
     }
-    return { date, summary, goalMet: { calorie: calorieMet, protein: proteinMet }, hasRecords };
+    return { date, summary, goalMet: { calorie: calorieMet, protein: proteinMet }, calorieStatus, hasRecords };
   });
 
   const pct = (met: number, counted: number) => (counted > 0 ? Math.round((met / counted) * 100) : 0);
@@ -133,6 +172,7 @@ export async function buildStatsExtras(
   return {
     byMealSlot,
     daily,
+    periodMeta: { recordedDays: countedDays, calendarDays: allDays.length },
     goalAchievement: {
       calorie: { metDays: calorieMetDays, countedDays, pct: pct(calorieMetDays, countedDays) },
       protein: { metDays: proteinMetDays, countedDays, pct: pct(proteinMetDays, countedDays) },
