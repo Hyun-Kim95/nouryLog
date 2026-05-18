@@ -1165,8 +1165,8 @@ meRouter.get('/stats', async (req, res) => {
       toExclusive: period.toExclusive.toISOString(),
       label: period.label,
     },
-    ...(isPeriodAverage
-      ? { aggregation: 'dailyAverage' as const, periodMeta: extras!.periodMeta }
+    ...(isPeriodAverage && extras
+      ? { aggregation: 'dailyAverage' as const, periodMeta: extras.periodMeta }
       : {}),
     summary,
     byMealSlot,

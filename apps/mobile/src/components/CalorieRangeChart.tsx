@@ -7,7 +7,6 @@ import {
   useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
-import Svg, { Line, Rect } from 'react-native-svg';
 import type { FulfillmentStatus } from '../lib/goalFulfillment';
 import type { Theme } from '../theme';
 import { STATS_COPY } from '../copy/stats';
@@ -20,15 +19,15 @@ type NutritionSum = {
   fat: number;
 };
 
-type DailyPoint = {
+export type CalorieDailyPoint = {
   date: string;
   summary: NutritionSum;
-  calorieStatus: FulfillmentStatus;
+  calorieStatus?: FulfillmentStatus;
   hasRecords: boolean;
 };
 
 type Props = {
-  daily: DailyPoint[];
+  daily: CalorieDailyPoint[];
   calorieMin: number | null;
   calorieMax: number | null;
 };
@@ -50,7 +49,14 @@ function formatTooltipDate(ymd: string): string {
   if (parts.length !== 3) return ymd;
   const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
   const weekdays = ['일', '월', '화', '수', '목', '금', '토'] as const;
-  return `${Number(parts[1])}월 ${Number(parts[2])}일 (${weekdays[d.getDay()]})`;
+  const w = weekdays[d.getDay()];
+  return w ? `${Number(parts[1])}월 ${Number(parts[2])}일 (${w})` : `${Number(parts[1])}월 ${Number(parts[2])}일`;
+}
+
+function normalizeStatus(status: FulfillmentStatus | undefined, hasRecords: boolean): FulfillmentStatus {
+  if (!hasRecords) return 'none';
+  if (status === 'under' || status === 'over' || status === 'met') return status;
+  return 'none';
 }
 
 function statusLabel(status: FulfillmentStatus, hasRecords: boolean): string {
@@ -69,8 +75,26 @@ function statusColor(status: FulfillmentStatus, hasRecords: boolean, t: Theme): 
 }
 
 function valueToHeight(value: number, scaleMax: number): number {
-  if (scaleMax <= 0) return 0;
+  if (!Number.isFinite(value) || scaleMax <= 0) return 0;
   return Math.max(0, (value / scaleMax) * CHART_HEIGHT);
+}
+
+function DashedGuideLine({ top, width, color }: { top: number; width: number; color: string }) {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: 0,
+        top,
+        width,
+        height: 0,
+        borderTopWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: color,
+      }}
+    />
+  );
 }
 
 export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
@@ -83,26 +107,48 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
     setSelectedDate(null);
   }, [daily]);
 
-  const bandLow = calorieMin ?? calorieMax ?? null;
-  const bandHigh = calorieMax ?? calorieMin ?? null;
+  const goalLow =
+    calorieMin != null && calorieMax != null
+      ? Math.min(calorieMin, calorieMax)
+      : calorieMin ?? calorieMax ?? null;
+  const goalHigh =
+    calorieMin != null && calorieMax != null
+      ? Math.max(calorieMin, calorieMax)
+      : calorieMax ?? calorieMin ?? null;
 
   const scaleMax = useMemo(() => {
-    const peak = Math.max(...daily.map((d) => d.summary.calories), bandHigh ?? 0, bandLow ?? 0, 1);
-    return peak * 1.08;
-  }, [daily, bandHigh, bandLow]);
+    if (!daily.length) return 1;
+    const peaks = daily.map((d) => Number(d.summary?.calories ?? 0));
+    const peak = Math.max(...peaks, goalHigh ?? 0, goalLow ?? 0, 1);
+    return Number.isFinite(peak) && peak > 0 ? peak * 1.08 : 1;
+  }, [daily, goalHigh, goalLow]);
 
-  const contentMinWidth = Math.max(daily.length * COL_WIDTH, windowWidth - t.spacing.lg * 2 - LABEL_GUTTER - 32);
+  if (!daily.length) return null;
+
+  const contentMinWidth = Math.max(
+    daily.length * COL_WIDTH,
+    Math.max(0, windowWidth - t.spacing.lg * 2 - LABEL_GUTTER - 32),
+  );
 
   const selected = daily.find((d) => d.date === selectedDate) ?? null;
   const selectedIndex = selected ? daily.findIndex((d) => d.date === selected.date) : -1;
 
   const bandTopY =
-    bandHigh != null && bandHigh > 0 ? CHART_HEIGHT - valueToHeight(bandHigh, scaleMax) : null;
+    goalHigh != null && goalHigh > 0 ? CHART_HEIGHT - valueToHeight(goalHigh, scaleMax) : null;
   const bandBottomY =
-    bandLow != null && bandLow > 0 ? CHART_HEIGHT - valueToHeight(bandLow, scaleMax) : null;
+    goalLow != null && goalLow > 0 ? CHART_HEIGHT - valueToHeight(goalLow, scaleMax) : null;
+
+  const showBand =
+    goalLow != null &&
+    goalHigh != null &&
+    goalLow > 0 &&
+    goalHigh > 0 &&
+    bandTopY != null &&
+    bandBottomY != null;
 
   const onChartLayout = (e: LayoutChangeEvent) => {
-    setChartWidth(e.nativeEvent.layout.width);
+    const w = e.nativeEvent.layout.width;
+    if (w > 0) setChartWidth(w);
   };
 
   const plotWidth = chartWidth > 0 ? chartWidth : contentMinWidth;
@@ -111,7 +157,7 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
     selectedIndex >= 0
       ? Math.min(
           Math.max(selectedIndex * COL_WIDTH + COL_WIDTH / 2 - TOOLTIP_WIDTH / 2, 4),
-          plotWidth - TOOLTIP_WIDTH - 4,
+          Math.max(4, plotWidth - TOOLTIP_WIDTH - 4),
         )
       : 0;
 
@@ -142,62 +188,47 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
                   {formatTooltipDate(selected.date)}
                 </Text>
                 <Text style={{ color: t.colors.primary, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
-                  {Math.round(selected.summary.calories)} kcal
+                  {Math.round(Number(selected.summary?.calories ?? 0))} kcal
                 </Text>
                 <Text style={{ color: t.colors.fg, fontSize: t.fontSize.caption }}>
-                  {statusLabel(selected.calorieStatus, selected.hasRecords)}
+                  {statusLabel(
+                    normalizeStatus(selected.calorieStatus, selected.hasRecords),
+                    selected.hasRecords,
+                  )}
                 </Text>
                 {selected.hasRecords ? (
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                     {STATS_COPY.calorieTooltipMacros(
-                      Math.round(selected.summary.protein),
-                      Math.round(selected.summary.carbohydrate),
-                      Math.round(selected.summary.fat),
+                      Math.round(Number(selected.summary?.protein ?? 0)),
+                      Math.round(Number(selected.summary?.carbohydrate ?? 0)),
+                      Math.round(Number(selected.summary?.fat ?? 0)),
                     )}
                   </Text>
                 ) : null}
               </View>
             ) : null}
 
-            <View style={{ height: CHART_HEIGHT, position: 'relative' }}>
-              {bandLow != null && bandHigh != null && bandTopY != null && bandBottomY != null ? (
-                <Svg
-                  width={plotWidth}
-                  height={CHART_HEIGHT}
-                  style={{ position: 'absolute', left: 0, top: 0 }}
+            <View style={{ height: CHART_HEIGHT, position: 'relative', width: plotWidth }}>
+              {showBand ? (
+                <View
                   pointerEvents="none"
-                >
-                  <Rect
-                    x={0}
-                    y={bandTopY}
-                    width={plotWidth}
-                    height={Math.max(2, bandBottomY - bandTopY)}
-                    fill={t.colors.primary}
-                    opacity={0.12}
-                  />
-                  {bandHigh > 0 ? (
-                    <Line
-                      x1={0}
-                      y1={bandTopY}
-                      x2={plotWidth}
-                      y2={bandTopY}
-                      stroke={t.colors.info}
-                      strokeWidth={1}
-                      strokeDasharray="4 4"
-                    />
-                  ) : null}
-                  {bandLow > 0 && bandLow !== bandHigh ? (
-                    <Line
-                      x1={0}
-                      y1={bandBottomY}
-                      x2={plotWidth}
-                      y2={bandBottomY}
-                      stroke={t.colors.info}
-                      strokeWidth={1}
-                      strokeDasharray="4 4"
-                    />
-                  ) : null}
-                </Svg>
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    width: plotWidth,
+                    top: bandTopY,
+                    height: Math.max(2, bandBottomY - bandTopY),
+                    backgroundColor: t.colors.primary,
+                    opacity: 0.12,
+                    borderRadius: 2,
+                  }}
+                />
+              ) : null}
+              {goalHigh != null && goalHigh > 0 && bandTopY != null ? (
+                <DashedGuideLine top={bandTopY} width={plotWidth} color={t.colors.info} />
+              ) : null}
+              {goalLow != null && goalLow > 0 && bandBottomY != null && goalLow !== goalHigh ? (
+                <DashedGuideLine top={bandBottomY} width={plotWidth} color={t.colors.info} />
               ) : null}
 
               <View
@@ -208,9 +239,9 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
                 }}
               >
                 {daily.map((p) => {
-                  const barH = p.hasRecords
-                    ? Math.max(6, valueToHeight(p.summary.calories, scaleMax))
-                    : 6;
+                  const kcal = Number(p.summary?.calories ?? 0);
+                  const status = normalizeStatus(p.calorieStatus, p.hasRecords);
+                  const barH = p.hasRecords ? Math.max(6, valueToHeight(kcal, scaleMax)) : 6;
                   const isSelected = p.date === selectedDate;
                   const dom = dayOfMonth(p.date);
                   return (
@@ -219,7 +250,7 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
                       onPress={() => setSelectedDate((prev) => (prev === p.date ? null : p.date))}
                       style={{ width: COL_WIDTH, alignItems: 'center' }}
                       accessibilityRole="button"
-                      accessibilityLabel={STATS_COPY.calorieBarA11y(dom, Math.round(p.summary.calories))}
+                      accessibilityLabel={STATS_COPY.calorieBarA11y(dom, Math.round(kcal))}
                     >
                       <View
                         style={{
@@ -234,7 +265,7 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
                             width: BAR_WIDTH,
                             height: barH,
                             borderRadius: 4,
-                            backgroundColor: statusColor(p.calorieStatus, p.hasRecords, t),
+                            backgroundColor: statusColor(status, p.hasRecords, t),
                             opacity: isSelected ? 1 : 0.92,
                           }}
                         />
@@ -269,30 +300,30 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
         </ScrollView>
 
         <View style={{ width: LABEL_GUTTER, height: CHART_HEIGHT, position: 'relative' }}>
-          {bandHigh != null && bandHigh > 0 && bandTopY != null ? (
+          {goalHigh != null && goalHigh > 0 && bandTopY != null ? (
             <Text
               style={{
                 position: 'absolute',
                 right: 0,
-                top: bandTopY - 8,
+                top: Math.max(0, bandTopY - 8),
                 color: t.colors.fgMuted,
                 fontSize: 10,
               }}
             >
-              {Math.round(bandHigh)} kcal
+              {Math.round(goalHigh)} kcal
             </Text>
           ) : null}
-          {bandLow != null && bandLow > 0 && bandBottomY != null && bandLow !== bandHigh ? (
+          {goalLow != null && goalLow > 0 && bandBottomY != null && goalLow !== goalHigh ? (
             <Text
               style={{
                 position: 'absolute',
                 right: 0,
-                top: bandBottomY - 8,
+                top: Math.min(CHART_HEIGHT - 12, Math.max(0, bandBottomY - 8)),
                 color: t.colors.fgMuted,
                 fontSize: 10,
               }}
             >
-              {Math.round(bandLow)} kcal
+              {Math.round(goalLow)} kcal
             </Text>
           ) : null}
         </View>
