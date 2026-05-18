@@ -3,7 +3,12 @@ dist/
 .env
 .env.local
 *.log
+*.tsbuildinfo
 .DS_Store
+
+# Cursor hook runtime state (bootstrap 플래그만 추적)
+.cursor/state/*
+!.cursor/state/obsidian-bootstrap.done
 apps/server/uploads/
 apps/server/prisma/*.db
 apps/server/prisma/*.db-journal
