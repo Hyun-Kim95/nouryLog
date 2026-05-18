@@ -15,6 +15,11 @@
     ],
     "beforeSubmitPrompt": [
       {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/kit-start-on-prompt.ps1",
+        "matcher": "UserPromptSubmit",
+        "timeout": 120
+      },
+      {
         "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/rule-approval-gate.ps1",
         "matcher": "UserPromptSubmit",
         "timeout": 20
