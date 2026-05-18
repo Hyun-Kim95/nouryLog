@@ -33,10 +33,11 @@ type Props = {
 };
 
 const CHART_HEIGHT = 140;
+const DAY_LABEL_HEIGHT = 32;
 const COL_WIDTH = 36;
 const BAR_WIDTH = 20;
 const LABEL_GUTTER = 56;
-const TOOLTIP_WIDTH = 200;
+const TOOLTIP_SLOT_HEIGHT = 88;
 
 function dayOfMonth(ymd: string): number {
   const parts = ymd.split('-');
@@ -97,6 +98,64 @@ function DashedGuideLine({ top, width, color }: { top: number; width: number; co
   );
 }
 
+function TooltipSlot({
+  selected,
+  t,
+}: {
+  selected: CalorieDailyPoint | null;
+  t: Theme;
+}) {
+  return (
+    <View
+      style={{
+        height: TOOLTIP_SLOT_HEIGHT,
+        justifyContent: 'center',
+        marginBottom: t.spacing.xs,
+        paddingHorizontal: t.spacing.xs,
+      }}
+    >
+      {selected ? (
+        <View
+          style={{
+            backgroundColor: t.colors.surface,
+            borderColor: t.colors.border,
+            borderWidth: 1,
+            borderRadius: t.radius.md,
+            padding: t.spacing.sm,
+            gap: 4,
+          }}
+        >
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+            {formatTooltipDate(selected.date)}
+          </Text>
+          <Text style={{ color: t.colors.primary, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
+            {Math.round(Number(selected.summary?.calories ?? 0))} kcal
+          </Text>
+          <Text style={{ color: t.colors.fg, fontSize: t.fontSize.caption }}>
+            {statusLabel(
+              normalizeStatus(selected.calorieStatus, selected.hasRecords),
+              selected.hasRecords,
+            )}
+          </Text>
+          {selected.hasRecords ? (
+            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+              {STATS_COPY.calorieTooltipMacros(
+                Math.round(Number(selected.summary?.protein ?? 0)),
+                Math.round(Number(selected.summary?.carbohydrate ?? 0)),
+                Math.round(Number(selected.summary?.fat ?? 0)),
+              )}
+            </Text>
+          ) : null}
+        </View>
+      ) : (
+        <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption, textAlign: 'center' }}>
+          {STATS_COPY.calorieChartTapHint}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
   const t = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -131,7 +190,6 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
   );
 
   const selected = daily.find((d) => d.date === selectedDate) ?? null;
-  const selectedIndex = selected ? daily.findIndex((d) => d.date === selected.date) : -1;
 
   const bandTopY =
     goalHigh != null && goalHigh > 0 ? CHART_HEIGHT - valueToHeight(goalHigh, scaleMax) : null;
@@ -152,14 +210,7 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
   };
 
   const plotWidth = chartWidth > 0 ? chartWidth : contentMinWidth;
-
-  const tooltipLeft =
-    selectedIndex >= 0
-      ? Math.min(
-          Math.max(selectedIndex * COL_WIDTH + COL_WIDTH / 2 - TOOLTIP_WIDTH / 2, 4),
-          Math.max(4, plotWidth - TOOLTIP_WIDTH - 4),
-        )
-      : 0;
+  const plotBlockHeight = CHART_HEIGHT + DAY_LABEL_HEIGHT;
 
   return (
     <View style={{ gap: t.spacing.sm }}>
@@ -167,139 +218,110 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
         {STATS_COPY.calorieRangeChartTitle}
       </Text>
 
-      <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
-          <View style={{ minWidth: contentMinWidth }} onLayout={onChartLayout}>
-            {selected ? (
-              <View
-                style={{
-                  marginBottom: t.spacing.xs,
-                  marginLeft: tooltipLeft,
-                  width: TOOLTIP_WIDTH,
-                  backgroundColor: t.colors.surface,
-                  borderColor: t.colors.border,
-                  borderWidth: 1,
-                  borderRadius: t.radius.md,
-                  padding: t.spacing.sm,
-                  gap: 4,
-                }}
-              >
-                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                  {formatTooltipDate(selected.date)}
-                </Text>
-                <Text style={{ color: t.colors.primary, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
-                  {Math.round(Number(selected.summary?.calories ?? 0))} kcal
-                </Text>
-                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.caption }}>
-                  {statusLabel(
-                    normalizeStatus(selected.calorieStatus, selected.hasRecords),
-                    selected.hasRecords,
-                  )}
-                </Text>
-                {selected.hasRecords ? (
-                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                    {STATS_COPY.calorieTooltipMacros(
-                      Math.round(Number(selected.summary?.protein ?? 0)),
-                      Math.round(Number(selected.summary?.carbohydrate ?? 0)),
-                      Math.round(Number(selected.summary?.fat ?? 0)),
-                    )}
-                  </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <TooltipSlot selected={selected} t={t} />
+
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            style={{ flexGrow: 0 }}
+          >
+            <View style={{ minWidth: contentMinWidth }} onLayout={onChartLayout}>
+              <View style={{ height: plotBlockHeight, position: 'relative', width: plotWidth }}>
+                {showBand ? (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      width: plotWidth,
+                      top: bandTopY,
+                      height: Math.max(2, bandBottomY - bandTopY),
+                      backgroundColor: t.colors.primary,
+                      opacity: 0.12,
+                      borderRadius: 2,
+                    }}
+                  />
                 ) : null}
-              </View>
-            ) : null}
+                {goalHigh != null && goalHigh > 0 && bandTopY != null ? (
+                  <DashedGuideLine top={bandTopY} width={plotWidth} color={t.colors.info} />
+                ) : null}
+                {goalLow != null && goalLow > 0 && bandBottomY != null && goalLow !== goalHigh ? (
+                  <DashedGuideLine top={bandBottomY} width={plotWidth} color={t.colors.info} />
+                ) : null}
 
-            <View style={{ height: CHART_HEIGHT, position: 'relative', width: plotWidth }}>
-              {showBand ? (
                 <View
-                  pointerEvents="none"
                   style={{
-                    position: 'absolute',
-                    left: 0,
-                    width: plotWidth,
-                    top: bandTopY,
-                    height: Math.max(2, bandBottomY - bandTopY),
-                    backgroundColor: t.colors.primary,
-                    opacity: 0.12,
-                    borderRadius: 2,
+                    flexDirection: 'row',
+                    alignItems: 'flex-end',
+                    height: plotBlockHeight,
                   }}
-                />
-              ) : null}
-              {goalHigh != null && goalHigh > 0 && bandTopY != null ? (
-                <DashedGuideLine top={bandTopY} width={plotWidth} color={t.colors.info} />
-              ) : null}
-              {goalLow != null && goalLow > 0 && bandBottomY != null && goalLow !== goalHigh ? (
-                <DashedGuideLine top={bandBottomY} width={plotWidth} color={t.colors.info} />
-              ) : null}
-
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'flex-end',
-                  height: CHART_HEIGHT,
-                }}
-              >
-                {daily.map((p) => {
-                  const kcal = Number(p.summary?.calories ?? 0);
-                  const status = normalizeStatus(p.calorieStatus, p.hasRecords);
-                  const barH = p.hasRecords ? Math.max(6, valueToHeight(kcal, scaleMax)) : 6;
-                  const isSelected = p.date === selectedDate;
-                  const dom = dayOfMonth(p.date);
-                  return (
-                    <Pressable
-                      key={p.date}
-                      onPress={() => setSelectedDate((prev) => (prev === p.date ? null : p.date))}
-                      style={{ width: COL_WIDTH, alignItems: 'center' }}
-                      accessibilityRole="button"
-                      accessibilityLabel={STATS_COPY.calorieBarA11y(dom, Math.round(kcal))}
-                    >
-                      <View
-                        style={{
-                          height: CHART_HEIGHT,
-                          width: COL_WIDTH,
-                          justifyContent: 'flex-end',
-                          alignItems: 'center',
-                        }}
+                >
+                  {daily.map((p) => {
+                    const kcal = Number(p.summary?.calories ?? 0);
+                    const status = normalizeStatus(p.calorieStatus, p.hasRecords);
+                    const barH = p.hasRecords ? Math.max(6, valueToHeight(kcal, scaleMax)) : 6;
+                    const isSelected = p.date === selectedDate;
+                    const dom = dayOfMonth(p.date);
+                    return (
+                      <Pressable
+                        key={p.date}
+                        onPress={() => setSelectedDate((prev) => (prev === p.date ? null : p.date))}
+                        style={{ width: COL_WIDTH, alignItems: 'center' }}
+                        accessibilityRole="button"
+                        accessibilityLabel={STATS_COPY.calorieBarA11y(dom, Math.round(kcal))}
                       >
                         <View
                           style={{
-                            width: BAR_WIDTH,
-                            height: barH,
-                            borderRadius: 4,
-                            backgroundColor: statusColor(status, p.hasRecords, t),
-                            opacity: isSelected ? 1 : 0.92,
-                          }}
-                        />
-                      </View>
-                      <View
-                        style={{
-                          marginTop: 6,
-                          minWidth: 26,
-                          height: 26,
-                          borderRadius: 13,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: isSelected ? t.colors.primary : 'transparent',
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: isSelected ? t.colors.primaryFg : t.colors.fgSubtle,
-                            fontSize: 11,
-                            fontWeight: isSelected ? '700' : '500',
+                            height: CHART_HEIGHT,
+                            width: COL_WIDTH,
+                            justifyContent: 'flex-end',
+                            alignItems: 'center',
                           }}
                         >
-                          {dom || '·'}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
+                          <View
+                            style={{
+                              width: BAR_WIDTH,
+                              height: barH,
+                              borderRadius: 4,
+                              backgroundColor: statusColor(status, p.hasRecords, t),
+                              opacity: isSelected ? 1 : 0.92,
+                            }}
+                          />
+                        </View>
+                        <View
+                          style={{
+                            marginTop: 6,
+                            minWidth: 26,
+                            height: 26,
+                            borderRadius: 13,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: isSelected ? t.colors.primary : 'transparent',
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: isSelected ? t.colors.primaryFg : t.colors.fgSubtle,
+                              fontSize: 11,
+                              fontWeight: isSelected ? '700' : '500',
+                            }}
+                          >
+                            {dom || '·'}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
             </View>
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </View>
 
-        <View style={{ width: LABEL_GUTTER, height: CHART_HEIGHT, position: 'relative' }}>
+        <View style={{ width: LABEL_GUTTER, height: plotBlockHeight, marginTop: TOOLTIP_SLOT_HEIGHT + t.spacing.xs }}>
           {goalHigh != null && goalHigh > 0 && bandTopY != null ? (
             <Text
               style={{

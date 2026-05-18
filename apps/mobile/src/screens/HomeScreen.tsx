@@ -3,18 +3,24 @@ import { Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { apiFetch, isAuthDenied } from '../api';
+import { getWeightCheckInStatus, type WeightCheckInStatus } from '../api/weightEntries';
 import { ensureAccessToken } from '../authSession';
+import { WeightCheckInModal } from '../components/WeightCheckInModal';
 import { Banner, Card, CardTitle, Chip, PrimaryButton, ProgressBar, ScreenLayout } from '../components/ui';
 import { HOME_COPY } from '../copy/home';
 import { sortedWarnings, WARNING_COPY } from '../copy/recommendation';
+import { WEIGHT_COPY } from '../copy/weight';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { computeFulfillment } from '../lib/goalFulfillment';
 import { listMeals, type MealRow } from '../api/meals';
 import { summarizeByMealSlot } from '../lib/mealTimeline';
 import { fetchTodayGoals, fetchTodayIntake } from '../lib/todayNutrition';
 import { localDayBounds } from '../lib/dateRange';
+import { todayAnchorKst } from '../lib/statsPeriod';
 import type { RootStackParamList } from '../navigation';
+import { useToast } from '../toast/useToast';
 import { useTheme } from '../theme';
+import { getWeightPromptDismissedYmd, setWeightPromptDismissedYmd } from '../userPrefs';
 
 type Ent = {
   ocrQuotaLimit: number;
@@ -27,6 +33,7 @@ type Ads = { showBottomBanner: boolean; reason: string };
 
 export function HomeScreen() {
   const t = useTheme();
+  const toast = useToast();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -35,6 +42,9 @@ export function HomeScreen() {
   const [intake, setIntake] = useState<Awaited<ReturnType<typeof fetchTodayIntake>> | null>(null);
   const [goals, setGoals] = useState<Awaited<ReturnType<typeof fetchTodayGoals>> | null>(null);
   const [todayMeals, setTodayMeals] = useState<MealRow[]>([]);
+  const [weightStatus, setWeightStatus] = useState<WeightCheckInStatus | null>(null);
+  const [weightModalVisible, setWeightModalVisible] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   const load = useCallback(async ({ silent }: { silent: boolean }) => {
     if (!silent) setLoading(true);
@@ -43,15 +53,21 @@ export function HomeScreen() {
       const token = await ensureAccessToken();
       if (!token) return;
 
+      setAuthToken(token);
       const { from, to } = localDayBounds();
-      const [entR, adsR, intakeR, goalsR, mealsR] = await Promise.allSettled([
-        apiFetch<Ent>('/me/billing/entitlements', { token }),
-        apiFetch<Ads>('/me/ads/status', { token }),
-        fetchTodayIntake(token),
-        fetchTodayGoals(token),
-        listMeals(token, { page: 1, size: 100, from, to }),
+      const [settled, weightR, dismissedYmd] = await Promise.all([
+        Promise.allSettled([
+          apiFetch<Ent>('/me/billing/entitlements', { token }),
+          apiFetch<Ads>('/me/ads/status', { token }),
+          fetchTodayIntake(token),
+          fetchTodayGoals(token),
+          listMeals(token, { page: 1, size: 100, from, to }),
+        ]),
+        getWeightCheckInStatus(token).catch(() => null),
+        getWeightPromptDismissedYmd(),
       ]);
 
+      const [entR, adsR, intakeR, goalsR, mealsR] = settled;
       const rejected = [entR, adsR, intakeR, goalsR, mealsR].filter((r) => r.status === 'rejected');
       if (rejected.some((r) => r.status === 'rejected' && isAuthDenied(r.reason))) return;
 
@@ -60,6 +76,13 @@ export function HomeScreen() {
       if (intakeR.status === 'fulfilled') setIntake(intakeR.value);
       if (goalsR.status === 'fulfilled') setGoals(goalsR.value);
       if (mealsR.status === 'fulfilled') setTodayMeals(mealsR.value.items ?? []);
+
+      if (weightR) {
+        setWeightStatus(weightR);
+        const todayKst = todayAnchorKst();
+        const showModal = weightR.due && dismissedYmd !== todayKst;
+        setWeightModalVisible(showModal);
+      }
 
       if (rejected.length === 5) {
         const reason = rejected[0].reason;
@@ -200,6 +223,38 @@ export function HomeScreen() {
             {ads.showBottomBanner ? HOME_COPY.adBanner : HOME_COPY.adHidden}
           </Text>
         </Card>
+      ) : null}
+
+      {authToken ? (
+        <WeightCheckInModal
+          visible={weightModalVisible}
+          status={weightStatus}
+          token={authToken}
+          onDismissLater={() => {
+            void setWeightPromptDismissedYmd(todayAnchorKst());
+            setWeightModalVisible(false);
+          }}
+          onSaved={(result) => {
+            setWeightModalVisible(false);
+            setWeightStatus({
+              due: false,
+              lastRecordedAt: result.entry.recordedAt,
+              lastWeightKg: result.entry.weightKg,
+              daysSince: 0,
+            });
+            toast.show({
+              kind: 'success',
+              message: WEIGHT_COPY.toastSaved(
+                result.entry.weightKg,
+                result.goalsBefore.calorieGoalKcal,
+                result.goalsAfter.calorieGoalKcal,
+                result.goalsBefore.proteinGoalG,
+                result.goalsAfter.proteinGoalG,
+              ),
+            });
+            void load({ silent: true });
+          }}
+        />
       ) : null}
     </ScreenLayout>
   );

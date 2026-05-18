@@ -1,6 +1,7 @@
 import { prisma } from './prisma.js';
 import { computeFulfillment, isGoalMet, type FulfillmentStatus } from './goalFulfillment.js';
 import { addDaysYmd, todayAnchorKst, type StatsPeriodBounds } from './statsPeriod.js';
+import { buildEffectiveGoalsByDate, type GoalSnapshot } from './weightEntry.js';
 
 export type NutritionSum = {
   calories: number;
@@ -67,15 +68,12 @@ function enumerateKstDays(from: Date, toExclusive: Date): string[] {
   return days;
 }
 
-type ProfileGoals = {
-  goal: string | null;
-  proteinGoalG: number | null;
-  calorieGoalKcal: number | null;
-  proteinGoalMinG: number | null;
-  proteinGoalMaxG: number | null;
-  calorieGoalMinKcal: number | null;
-  calorieGoalMaxKcal: number | null;
-};
+type ProfileGoals = GoalSnapshot;
+
+function profileToSnapshot(profile: ProfileGoals | null): GoalSnapshot | null {
+  if (!profile) return null;
+  return { ...profile };
+}
 
 export type StatsExtras = {
   byMealSlot: Record<string, NutritionSum>;
@@ -130,17 +128,18 @@ export async function buildStatsExtras(
     dailyHasRecords.set(ymd, true);
   }
 
-  const profileCtx = profile ? { goal: profile.goal } : null;
-  const calorieGoal = profile?.calorieGoalKcal ?? null;
-  const proteinGoal = profile?.proteinGoalG ?? null;
-  const calorieBounds = profile
-    ? { min: profile.calorieGoalMinKcal, max: profile.calorieGoalMaxKcal }
-    : undefined;
-  const proteinBounds = profile
-    ? { min: profile.proteinGoalMinG, max: profile.proteinGoalMaxG }
-    : undefined;
-
   const allDays = enumerateKstDays(period.from, period.toExclusive);
+
+  const entriesAsc = await prisma.weightEntry.findMany({
+    where: { userId, recordedAt: { lt: period.toExclusive } },
+    orderBy: { recordedAt: 'asc' },
+  });
+  const effectiveByDate = buildEffectiveGoalsByDate(
+    entriesAsc,
+    allDays,
+    profileToSnapshot(profile),
+  );
+
   let calorieMetDays = 0;
   let proteinMetDays = 0;
   let countedDays = 0;
@@ -148,6 +147,17 @@ export async function buildStatsExtras(
   const daily = allDays.map((date) => {
     const summary = dailyMap.get(date) ?? { ...ZERO };
     const hasRecords = dailyHasRecords.get(date) === true;
+    const goals = effectiveByDate.get(date) ?? null;
+    const profileCtx = goals ? { goal: goals.goal } : null;
+    const calorieGoal = goals?.calorieGoalKcal ?? null;
+    const proteinGoal = goals?.proteinGoalG ?? null;
+    const calorieBounds = goals
+      ? { min: goals.calorieGoalMinKcal, max: goals.calorieGoalMaxKcal }
+      : undefined;
+    const proteinBounds = goals
+      ? { min: goals.proteinGoalMinG, max: goals.proteinGoalMaxG }
+      : undefined;
+
     let calorieMet = false;
     let proteinMet = false;
     let calorieStatus: FulfillmentStatus = 'none';

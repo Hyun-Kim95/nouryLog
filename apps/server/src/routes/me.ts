@@ -31,6 +31,11 @@ import {
   buildByMealSlotForPeriod,
   buildStatsExtras,
 } from '../lib/statsAggregate.js';
+import {
+  daysSinceRecordedAt,
+  isWeightCheckInDue,
+  type GoalSnapshot,
+} from '../lib/weightEntry.js';
 import type { MealSlot, SnackPlacement } from '@prisma/client';
 
 export const meRouter = Router();
@@ -476,6 +481,136 @@ meRouter.post('/me/recommendation/recalculate', async (req, res) => {
     recommendationVersion: full.recommendationVersion,
     policy: full.policy,
     warnings: full.warnings,
+  });
+});
+
+function goalsSnapshotFromProfile(p: {
+  goal: string | null;
+  proteinGoalG: number | null;
+  calorieGoalKcal: number | null;
+  proteinGoalMinG: number | null;
+  proteinGoalMaxG: number | null;
+  calorieGoalMinKcal: number | null;
+  calorieGoalMaxKcal: number | null;
+}): GoalSnapshot {
+  return {
+    goal: p.goal,
+    proteinGoalG: p.proteinGoalG,
+    calorieGoalKcal: p.calorieGoalKcal,
+    proteinGoalMinG: p.proteinGoalMinG,
+    proteinGoalMaxG: p.proteinGoalMaxG,
+    calorieGoalMinKcal: p.calorieGoalMinKcal,
+    calorieGoalMaxKcal: p.calorieGoalMaxKcal,
+  };
+}
+
+function validateWeightKgInput(input: unknown): { value?: number; message?: string } {
+  if (input === undefined || input === null || input === '') {
+    return { message: '체중을 입력해 주세요.' };
+  }
+  const n = typeof input === 'number' ? input : Number(input);
+  if (!Number.isFinite(n)) {
+    return { message: '체중은 숫자(소수 1자리까지)만 입력할 수 있습니다.' };
+  }
+  const rounded = Math.round(n * 10) / 10;
+  if (rounded < WEIGHT_MIN || rounded > WEIGHT_MAX) {
+    return { message: `체중은 ${WEIGHT_MIN}~${WEIGHT_MAX}kg 범위로 입력해 주세요.` };
+  }
+  return { value: rounded };
+}
+
+meRouter.get('/me/weight-entries/status', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 조회할 수 있습니다.');
+    return;
+  }
+  const last = await prisma.weightEntry.findFirst({
+    where: { userId },
+    orderBy: { recordedAt: 'desc' },
+    select: { recordedAt: true, weightKg: true },
+  });
+  const lastRecordedAt = last?.recordedAt.toISOString() ?? null;
+  const due = isWeightCheckInDue(last?.recordedAt ?? null);
+  res.json({
+    due,
+    lastRecordedAt,
+    lastWeightKg: last?.weightKg ?? null,
+    daysSince: last ? daysSinceRecordedAt(last.recordedAt) : null,
+  });
+});
+
+meRouter.post('/me/weight-entries', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 사용할 수 있습니다.');
+    return;
+  }
+  const b = (req.body ?? {}) as { weightKg?: unknown };
+  const weight = validateWeightKgInput(b.weightKg);
+  if (weight.message) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, weight.message, { field: 'weightKg' });
+    return;
+  }
+
+  const p = await prisma.profile.findUnique({ where: { userId } });
+  if (!p) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '프로필이 없습니다.');
+    return;
+  }
+
+  const goalsBefore = goalsSnapshotFromProfile(p);
+
+  await prisma.profile.update({
+    where: { userId },
+    data: { weightKg: weight.value! },
+  });
+
+  const full = calculateRecommendationFull({
+    gender: p.gender,
+    age: p.age,
+    heightCm: p.heightCm,
+    weightKg: weight.value!,
+    activityLevel: p.activityLevel,
+    goal: p.goal,
+  });
+  const ranges = computeGoalRanges(full.proteinGoalG, full.calorieGoalKcal, safeGoal(p.goal));
+
+  const updated = await prisma.profile.update({
+    where: { userId },
+    data: {
+      proteinGoalG: full.proteinGoalG,
+      calorieGoalKcal: full.calorieGoalKcal,
+      ...ranges,
+    },
+  });
+
+  const goalsAfter = goalsSnapshotFromProfile(updated);
+
+  const entry = await prisma.weightEntry.create({
+    data: {
+      userId,
+      recordedAt: new Date(),
+      weightKg: weight.value!,
+      goal: p.goal,
+      activityLevel: p.activityLevel,
+      proteinGoalG: goalsAfter.proteinGoalG,
+      calorieGoalKcal: goalsAfter.calorieGoalKcal,
+      proteinGoalMinG: goalsAfter.proteinGoalMinG,
+      proteinGoalMaxG: goalsAfter.proteinGoalMaxG,
+      calorieGoalMinKcal: goalsAfter.calorieGoalMinKcal,
+      calorieGoalMaxKcal: goalsAfter.calorieGoalMaxKcal,
+    },
+  });
+
+  res.status(201).json({
+    entry: {
+      id: entry.id,
+      recordedAt: entry.recordedAt.toISOString(),
+      weightKg: entry.weightKg,
+    },
+    goalsBefore,
+    goalsAfter,
   });
 });
 

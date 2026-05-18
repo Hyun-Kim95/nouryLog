@@ -24,6 +24,7 @@ export const STATS_COPY = {
   bySlotTitleAverage: '끼니별 일평균',
   slotLine: (label: string, kcal: number, proteinG: number) => `${label} · ${kcal} kcal · 단백질 ${proteinG}g`,
   calorieRangeChartTitle: '일별 칼로리 · 목표 구간',
+  calorieChartTapHint: '막대를 탭하면 해당 날짜 상세가 표시돼요.',
   calorieRangeLegend: '연한 영역: 목표 구간 · 점선: min/max(kcal) · 막대: 실제 섭취',
   calorieStatusUnder: '목표 대비 부족',
   calorieStatusMet: '목표 구간 적정',

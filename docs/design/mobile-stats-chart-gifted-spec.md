@@ -16,6 +16,11 @@
 - 탭: 막대 탭 시 툴팁(날짜·kcal·상태·매크로), 재탭 시 해제
 - 스크롤: 주·월 `BarChart` 내장 가로 스크롤
 
+## 툴팁 레이아웃 (2026-05-18)
+
+- 고정 높이 슬롯(88px) + 가로 스크롤은 막대 영역만 — 탭 시 세로 점프 없음.
+- 미선택 시 `calorieChartTapHint` 안내 문구.
+
 ## 구현 (2026-05-18 운영 복구)
 
 - dev client에 `ExpoLinearGradient` / `RNSVG` 미포함 시 주·월 통계에서 `IllegalViewOperationException` 발생.

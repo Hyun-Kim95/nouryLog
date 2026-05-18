@@ -30,8 +30,9 @@ model User {
   createdAt     DateTime  @default(now())
   freeOcrUsed   Int       @default(0)
 
-  profile Profile?
-  meals   Meal[]
+  profile       Profile?
+  meals         Meal[]
+  weightEntries WeightEntry[]
   billing Billing?
   socialAccounts SocialAccount[]
   consents UserConsent[]
@@ -103,6 +104,26 @@ model Profile {
   calorieGoalMaxKcal   Int?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// 주간 체중 기록 + 해당 시점 권장 목표 스냅샷(과거 통계 달성률용).
+model WeightEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  recordedAt DateTime
+  weightKg  Float
+  goal             String?
+  activityLevel    String?
+  proteinGoalG       Int?
+  calorieGoalKcal    Int?
+  proteinGoalMinG    Int?
+  proteinGoalMaxG    Int?
+  calorieGoalMinKcal Int?
+  calorieGoalMaxKcal Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, recordedAt])
 }
 
 model Meal {

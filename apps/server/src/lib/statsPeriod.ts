@@ -11,7 +11,7 @@ export type StatsPeriodBounds = {
   label: string;
 };
 
-function parseYmdParts(ymd: string): { y: number; m: number; d: number } {
+export function parseYmdParts(ymd: string): { y: number; m: number; d: number } {
   const m = ymd.match(ANCHOR_RE);
   if (!m) throw new Error('bad_anchor');
   const y = Number(m[1]);
