@@ -89,9 +89,10 @@ export function InquiriesPage() {
         token,
         body: JSON.stringify({ answer }),
       });
-      setDetail(next);
       reload();
-      setMessage('답변이 등록되어 완료 상태로 전환되었습니다.');
+      setDrawerOpen(false);
+      setDetail(null);
+      setAnswerDraft('');
       toast.show({ kind: 'success', message: '답변을 등록했어요.' });
     } catch (e) {
       const msg = e instanceof Error ? e.message : '답변을 등록하지 못했습니다.';
