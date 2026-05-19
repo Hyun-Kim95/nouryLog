@@ -3,12 +3,21 @@ const ANCHOR_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'] as const;
 
+export const STATS_WINDOW_SIZE = 6;
 
 export type StatsPeriodBounds = {
   anchor: string;
   from: Date;
   toExclusive: Date;
   label: string;
+};
+
+export type StatsBucket = {
+  /** 버킷 키: YYYY-MM-DD (일·주 월요일) 또는 YYYY-MM-01 (월) */
+  date: string;
+  label: string;
+  from: Date;
+  toExclusive: Date;
 };
 
 export function parseYmdParts(ymd: string): { y: number; m: number; d: number } {
@@ -59,6 +68,22 @@ export function addDaysYmd(ymd: string, days: number): string {
   return todayAnchorKst(new Date(base + days * 86_400_000));
 }
 
+function addMonthsYmd(ymd: string, months: number): string {
+  const { y, m, d } = parseYmdParts(ymd);
+  let month = m + months;
+  let year = y;
+  while (month < 1) {
+    month += 12;
+    year -= 1;
+  }
+  while (month > 12) {
+    month -= 12;
+    year += 1;
+  }
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return formatYmd(year, month, Math.min(d, lastDay));
+}
+
 function weekdaySun0(y: number, m: number, d: number): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
@@ -74,11 +99,148 @@ function formatShortMd(ymd: string): string {
   return `${m}월 ${d}일`;
 }
 
-function mondayOfWeekYmd(anchorYmd: string): string {
+function formatShortMdSlash(ymd: string): string {
+  const { m, d } = parseYmdParts(ymd);
+  return `${m}/${d}`;
+}
+
+export function mondayOfWeekYmd(anchorYmd: string): string {
   const { y, m, d } = parseYmdParts(anchorYmd);
   const dow = weekdaySun0(y, m, d);
   const daysFromMonday = (dow + 6) % 7;
   return addDaysYmd(anchorYmd, -daysFromMonday);
+}
+
+/** 월요일이 속한 달 기준 N번째 월요일 → `4월 5주차` */
+export function formatWeekLabelKst(mondayYmd: string): string {
+  const { y, m } = parseYmdParts(mondayYmd);
+  if (weekdaySun0(y, m, parseYmdParts(mondayYmd).d) !== 1) {
+    throw new Error('not_monday');
+  }
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  let weekIndex = 0;
+  for (let day = 1; day <= lastDay; day++) {
+    if (weekdaySun0(y, m, day) === 1) {
+      weekIndex += 1;
+      const ymd = formatYmd(y, m, day);
+      if (ymd === mondayYmd) {
+        return `${m}월 ${weekIndex}주차`;
+      }
+    }
+  }
+  return `${m}월 ${weekIndex || 1}주차`;
+}
+
+export function bucketGoalDate(bucket: StatsBucket, range: 'day' | 'week' | 'month'): string {
+  if (range === 'day') return bucket.date;
+  if (range === 'week') return addDaysYmd(bucket.date, 6);
+  const { y, m } = parseYmdParts(bucket.date);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return formatYmd(y, m, lastDay);
+}
+
+export function listStatsBuckets(range: 'day' | 'week' | 'month', anchorYmd: string): StatsBucket[] {
+  if (range === 'day') {
+    const startYmd = addDaysYmd(anchorYmd, -(STATS_WINDOW_SIZE - 1));
+    const buckets: StatsBucket[] = [];
+    let cursor = startYmd;
+    for (let i = 0; i < STATS_WINDOW_SIZE; i++) {
+      const { y, m, d } = parseYmdParts(cursor);
+      const from = kstMidnightUtc(y, m, d);
+      const np = parseYmdParts(addDaysYmd(cursor, 1));
+      buckets.push({
+        date: cursor,
+        label: formatShortMdSlash(cursor),
+        from,
+        toExclusive: kstMidnightUtc(np.y, np.m, np.d),
+      });
+      cursor = addDaysYmd(cursor, 1);
+    }
+    return buckets;
+  }
+
+  if (range === 'week') {
+    const endMonday = mondayOfWeekYmd(anchorYmd);
+    const startMonday = addDaysYmd(endMonday, -(STATS_WINDOW_SIZE - 1) * 7);
+    const buckets: StatsBucket[] = [];
+    let cursor = startMonday;
+    for (let i = 0; i < STATS_WINDOW_SIZE; i++) {
+      const mp = parseYmdParts(cursor);
+      const from = kstMidnightUtc(mp.y, mp.m, mp.d);
+      const nextWeek = parseYmdParts(addDaysYmd(cursor, 7));
+      buckets.push({
+        date: cursor,
+        label: formatWeekLabelKst(cursor),
+        from,
+        toExclusive: kstMidnightUtc(nextWeek.y, nextWeek.m, nextWeek.d),
+      });
+      cursor = addDaysYmd(cursor, 7);
+    }
+    return buckets;
+  }
+
+  if (range === 'month') {
+    const anchorMonthStart = formatYmd(
+      parseYmdParts(anchorYmd).y,
+      parseYmdParts(anchorYmd).m,
+      1,
+    );
+    const startMonthStart = addMonthsYmd(anchorMonthStart, -(STATS_WINDOW_SIZE - 1));
+    const buckets: StatsBucket[] = [];
+    let cursor = startMonthStart;
+    for (let i = 0; i < STATS_WINDOW_SIZE; i++) {
+      const { y, m } = parseYmdParts(cursor);
+      const from = kstMidnightUtc(y, m, 1);
+      const nextY = m === 12 ? y + 1 : y;
+      const nextM = m === 12 ? 1 : m + 1;
+      buckets.push({
+        date: cursor,
+        label: `${m}월`,
+        from,
+        toExclusive: kstMidnightUtc(nextY, nextM, 1),
+      });
+      cursor = formatYmd(nextY, nextM, 1);
+    }
+    return buckets;
+  }
+
+  throw new Error('bad_range');
+}
+
+function formatWindowLabel(
+  range: 'day' | 'week' | 'month',
+  buckets: StatsBucket[],
+): string {
+  const first = buckets[0]!;
+  const last = buckets[buckets.length - 1]!;
+  if (range === 'day') {
+    return `${first.label} – ${last.label}`;
+  }
+  if (range === 'week') {
+    return `${first.label} – ${last.label}`;
+  }
+  const y1 = parseYmdParts(first.date).y;
+  const m1 = parseYmdParts(first.date).m;
+  const y2 = parseYmdParts(last.date).y;
+  const m2 = parseYmdParts(last.date).m;
+  if (y1 === y2) return `${y1}년 ${m1}월 – ${m2}월`;
+  return `${y1}년 ${m1}월 – ${y2}년 ${m2}월`;
+}
+
+/** 6버킷 롤링 윈도우(앵커 = 윈도우 끝) */
+export function boundsForStatsWindow(
+  range: 'day' | 'week' | 'month',
+  anchorYmd: string,
+): StatsPeriodBounds {
+  const buckets = listStatsBuckets(range, anchorYmd);
+  const first = buckets[0]!;
+  const last = buckets[buckets.length - 1]!;
+  return {
+    anchor: anchorYmd,
+    from: first.from,
+    toExclusive: last.toExclusive,
+    label: formatWindowLabel(range, buckets),
+  };
 }
 
 export function isPeriodInFuture(from: Date, todayYmd = todayAnchorKst()): boolean {
@@ -88,6 +250,7 @@ export function isPeriodInFuture(from: Date, todayYmd = todayAnchorKst()): boole
   return from.getTime() >= tomorrowStart.getTime();
 }
 
+/** @deprecated meal range 등 레거시 — 통계는 boundsForStatsWindow 사용 */
 export function boundsForRange(range: 'day' | 'week' | 'month', anchorYmd: string): StatsPeriodBounds {
   if (range === 'day') {
     const { y, m, d } = parseYmdParts(anchorYmd);

@@ -1,6 +1,12 @@
 import { prisma } from './prisma.js';
 import { computeFulfillment, isGoalMet, type FulfillmentStatus } from './goalFulfillment.js';
-import { addDaysYmd, todayAnchorKst, type StatsPeriodBounds } from './statsPeriod.js';
+import {
+  STATS_WINDOW_SIZE,
+  bucketGoalDate,
+  listStatsBuckets,
+  type StatsBucket,
+  type StatsPeriodBounds,
+} from './statsPeriod.js';
 import { buildEffectiveGoalsByDate, type GoalSnapshot } from './weightEntry.js';
 
 export type NutritionSum = {
@@ -55,19 +61,6 @@ export function averageByMealSlot(
   return out;
 }
 
-function enumerateKstDays(from: Date, toExclusive: Date): string[] {
-  const days: string[] = [];
-  let ymd = todayAnchorKst(from);
-  const lastInstant = new Date(toExclusive.getTime() - 1);
-  const endYmd = todayAnchorKst(lastInstant);
-  while (ymd <= endYmd) {
-    days.push(ymd);
-    if (ymd === endYmd) break;
-    ymd = addDaysYmd(ymd, 1);
-  }
-  return days;
-}
-
 type ProfileGoals = GoalSnapshot;
 
 function profileToSnapshot(profile: ProfileGoals | null): GoalSnapshot | null {
@@ -75,15 +68,28 @@ function profileToSnapshot(profile: ProfileGoals | null): GoalSnapshot | null {
   return { ...profile };
 }
 
+function findBucketForInstant(buckets: StatsBucket[], instant: Date): string | null {
+  const t = instant.getTime();
+  for (const b of buckets) {
+    if (t >= b.from.getTime() && t < b.toExclusive.getTime()) {
+      return b.date;
+    }
+  }
+  return null;
+}
+
+export type StatsSeriesPoint = {
+  date: string;
+  label: string;
+  summary: NutritionSum;
+  goalMet: { calorie: boolean; protein: boolean };
+  calorieStatus: FulfillmentStatus;
+  hasRecords: boolean;
+};
+
 export type StatsExtras = {
   byMealSlot: Record<string, NutritionSum>;
-  daily: Array<{
-    date: string;
-    summary: NutritionSum;
-    goalMet: { calorie: boolean; protein: boolean };
-    calorieStatus: FulfillmentStatus;
-    hasRecords: boolean;
-  }>;
+  daily: StatsSeriesPoint[];
   periodMeta: { recordedDays: number; calendarDays: number };
   goalAchievement: {
     calorie: { metDays: number; countedDays: number; pct: number };
@@ -91,13 +97,13 @@ export type StatsExtras = {
   };
 };
 
-export async function buildStatsExtras(
+export async function buildStatsSeries(
   userId: string,
   period: StatsPeriodBounds,
   profile: ProfileGoals | null,
   range: 'day' | 'week' | 'month',
-): Promise<StatsExtras | null> {
-  if (range === 'day') return null;
+): Promise<StatsExtras> {
+  const buckets = listStatsBuckets(range, period.anchor);
 
   const meals = await prisma.meal.findMany({
     where: {
@@ -116,19 +122,25 @@ export async function buildStatsExtras(
   });
 
   const byMealSlot: Record<string, NutritionSum> = {};
-  const dailyMap = new Map<string, NutritionSum>();
-  const dailyHasRecords = new Map<string, boolean>();
+  const bucketSums = new Map<string, NutritionSum>();
+  const bucketHasRecords = new Map<string, boolean>();
+
+  for (const b of buckets) {
+    bucketSums.set(b.date, { ...ZERO });
+    bucketHasRecords.set(b.date, false);
+  }
 
   for (const m of meals) {
     const slotKey = m.mealSlot ?? 'UNSPECIFIED';
     byMealSlot[slotKey] = addSum(byMealSlot[slotKey] ?? { ...ZERO }, m);
 
-    const ymd = todayAnchorKst(m.consumedAt);
-    dailyMap.set(ymd, addSum(dailyMap.get(ymd) ?? { ...ZERO }, m));
-    dailyHasRecords.set(ymd, true);
+    const bucketKey = findBucketForInstant(buckets, m.consumedAt);
+    if (!bucketKey) continue;
+    bucketSums.set(bucketKey, addSum(bucketSums.get(bucketKey) ?? { ...ZERO }, m));
+    bucketHasRecords.set(bucketKey, true);
   }
 
-  const allDays = enumerateKstDays(period.from, period.toExclusive);
+  const goalDates = buckets.map((b) => bucketGoalDate(b, range));
 
   const entriesAsc = await prisma.weightEntry.findMany({
     where: { userId, recordedAt: { lt: period.toExclusive } },
@@ -136,18 +148,19 @@ export async function buildStatsExtras(
   });
   const effectiveByDate = buildEffectiveGoalsByDate(
     entriesAsc,
-    allDays,
+    goalDates,
     profileToSnapshot(profile),
   );
 
-  let calorieMetDays = 0;
-  let proteinMetDays = 0;
-  let countedDays = 0;
+  let calorieMetBuckets = 0;
+  let proteinMetBuckets = 0;
+  let countedBuckets = 0;
 
-  const daily = allDays.map((date) => {
-    const summary = dailyMap.get(date) ?? { ...ZERO };
-    const hasRecords = dailyHasRecords.get(date) === true;
-    const goals = effectiveByDate.get(date) ?? null;
+  const daily: StatsSeriesPoint[] = buckets.map((b) => {
+    const summary = bucketSums.get(b.date) ?? { ...ZERO };
+    const hasRecords = bucketHasRecords.get(b.date) === true;
+    const goalDate = bucketGoalDate(b, range);
+    const goals = effectiveByDate.get(goalDate) ?? null;
     const profileCtx = goals ? { goal: goals.goal } : null;
     const calorieGoal = goals?.calorieGoalKcal ?? null;
     const proteinGoal = goals?.proteinGoalG ?? null;
@@ -162,19 +175,26 @@ export async function buildStatsExtras(
     let proteinMet = false;
     let calorieStatus: FulfillmentStatus = 'none';
     if (hasRecords) {
-      countedDays += 1;
+      countedBuckets += 1;
       if (calorieGoal != null) {
         const f = computeFulfillment('calorie', summary.calories, calorieGoal, profileCtx, calorieBounds);
         calorieStatus = f.status;
         calorieMet = f.status === 'met';
-        if (calorieMet) calorieMetDays += 1;
+        if (calorieMet) calorieMetBuckets += 1;
       }
       if (proteinGoal != null) {
         proteinMet = isGoalMet('protein', summary.protein, proteinGoal, profileCtx, proteinBounds);
-        if (proteinMet) proteinMetDays += 1;
+        if (proteinMet) proteinMetBuckets += 1;
       }
     }
-    return { date, summary, goalMet: { calorie: calorieMet, protein: proteinMet }, calorieStatus, hasRecords };
+    return {
+      date: b.date,
+      label: b.label,
+      summary,
+      goalMet: { calorie: calorieMet, protein: proteinMet },
+      calorieStatus,
+      hasRecords,
+    };
   });
 
   const pct = (met: number, counted: number) => (counted > 0 ? Math.round((met / counted) * 100) : 0);
@@ -182,15 +202,26 @@ export async function buildStatsExtras(
   return {
     byMealSlot,
     daily,
-    periodMeta: { recordedDays: countedDays, calendarDays: allDays.length },
+    periodMeta: { recordedDays: countedBuckets, calendarDays: STATS_WINDOW_SIZE },
     goalAchievement: {
-      calorie: { metDays: calorieMetDays, countedDays, pct: pct(calorieMetDays, countedDays) },
-      protein: { metDays: proteinMetDays, countedDays, pct: pct(proteinMetDays, countedDays) },
+      calorie: {
+        metDays: calorieMetBuckets,
+        countedDays: countedBuckets,
+        pct: pct(calorieMetBuckets, countedBuckets),
+      },
+      protein: {
+        metDays: proteinMetBuckets,
+        countedDays: countedBuckets,
+        pct: pct(proteinMetBuckets, countedBuckets),
+      },
     },
   };
 }
 
-/** day range에도 끼니별 합계 제공 */
+/** @deprecated buildStatsSeries 사용 */
+export const buildStatsExtras = buildStatsSeries;
+
+/** 끼니별 합계(윈도우 전체) */
 export async function buildByMealSlotForPeriod(
   userId: string,
   period: StatsPeriodBounds,

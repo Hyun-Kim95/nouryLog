@@ -1,5 +1,6 @@
 export const STATS_COPY = {
   title: '통계',
+  weightHistoryCta: '체중 추이',
   staleBanner: (hours: number) =>
     `최신 반영 지연 · 마지막 집계가 ${hours}시간 전이에요. 잠시 후 다시 확인해 주세요.`,
   aggregatedAt: (at: string, tz: string) => `${tz} · 집계 ${at}`,
@@ -26,7 +27,9 @@ export const STATS_COPY = {
   calorieRangeChartTitle: '일별 칼로리 · 단백질 · 목표 구간',
   calorieChartTapHint: '막대를 탭하면 해당 날짜 상세가 표시돼요.',
   calorieRangeLegend:
-    '연한 영역·점선: 칼로리 목표 구간(kcal) · 초록 막대: 칼로리 · 파란 막대: 단백질(g)',
+    '위·아래 패널: 칼로리(kcal)·단백질(g) 각각 목표 구간·막대. 연한 영역·점선=목표 구간.',
+  caloriePanelTitle: '칼로리',
+  proteinPanelTitle: '단백질',
   calorieTooltipProtein: (proteinG: number) => `단백질 ${proteinG}g`,
   calorieStatusUnder: '목표 대비 부족',
   calorieStatusMet: '목표 구간 적정',

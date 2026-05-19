@@ -15,6 +15,7 @@ import { SubscriptionScreen } from './screens/SubscriptionScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import { ProfileEditScreen } from './screens/ProfileEditScreen';
+import { WeightHistoryScreen } from './screens/WeightHistoryScreen';
 import { PolicyViewScreen } from './screens/PolicyViewScreen';
 import { NoticeListScreen } from './screens/support/NoticeListScreen';
 import { NoticeDetailScreen } from './screens/support/NoticeDetailScreen';
@@ -29,6 +30,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Main: undefined;
   ProfileEdit: undefined;
+  WeightHistory: undefined;
   PolicyView: { kind: 'terms' | 'privacy' };
   NoticeList: undefined;
   NoticeDetail: { id: string };
@@ -114,6 +116,11 @@ export function RootNavigator({ initialRoute }: { initialRoute: InitialRoute }) 
         name="ProfileEdit"
         component={ProfileEditScreen}
         options={{ ...themed, headerShown: true, title: '프로필 편집' }}
+      />
+      <Stack.Screen
+        name="WeightHistory"
+        component={WeightHistoryScreen}
+        options={{ ...themed, headerShown: true, title: '체중 추이' }}
       />
       <Stack.Screen
         name="PolicyView"

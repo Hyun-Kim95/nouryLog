@@ -1,10 +1,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  STATS_WINDOW_SIZE,
   addDaysYmd,
   boundsForRange,
+  boundsForStatsWindow,
+  formatWeekLabelKst,
   isPeriodInFuture,
   kstMidnightUtc,
+  listStatsBuckets,
+  mondayOfWeekYmd,
   parseAnchorDate,
   todayAnchorKst,
 } from './statsPeriod.js';
@@ -43,6 +48,47 @@ describe('statsPeriod', () => {
     assert.equal(b.from.toISOString(), '2026-04-30T15:00:00.000Z');
     assert.equal(b.toExclusive.toISOString(), '2026-05-31T15:00:00.000Z');
     assert.equal(b.label, '2026년 5월');
+  });
+
+  it('formatWeekLabelKst uses Monday index within month', () => {
+    assert.equal(formatWeekLabelKst('2026-04-27'), '4월 4주차');
+    assert.equal(formatWeekLabelKst('2026-05-04'), '5월 1주차');
+  });
+
+  it('listStatsBuckets day returns 6 days ending at anchor', () => {
+    const buckets = listStatsBuckets('day', '2026-05-16');
+    assert.equal(buckets.length, STATS_WINDOW_SIZE);
+    assert.equal(buckets[0]!.date, '2026-05-11');
+    assert.equal(buckets[5]!.date, '2026-05-16');
+  });
+
+  it('listStatsBuckets week returns 6 weeks ending at anchor week', () => {
+    const buckets = listStatsBuckets('week', '2026-05-16');
+    assert.equal(buckets.length, STATS_WINDOW_SIZE);
+    assert.equal(buckets[5]!.date, mondayOfWeekYmd('2026-05-16'));
+    assert.equal(buckets[0]!.date, addDaysYmd(buckets[5]!.date, -35));
+    assert.equal(buckets[0]!.label, '4월 1주차');
+    assert.equal(buckets[5]!.label, '5월 2주차');
+  });
+
+  it('listStatsBuckets month returns 6 months ending at anchor month', () => {
+    const buckets = listStatsBuckets('month', '2026-05-10');
+    assert.equal(buckets.length, STATS_WINDOW_SIZE);
+    assert.equal(buckets[0]!.date, '2025-12-01');
+    assert.equal(buckets[5]!.date, '2026-05-01');
+    assert.equal(buckets[5]!.label, '5월');
+  });
+
+  it('boundsForStatsWindow day spans 6 days', () => {
+    const b = boundsForStatsWindow('day', '2026-05-16');
+    assert.equal(b.from.toISOString(), kstMidnightUtc(2026, 5, 11).toISOString());
+    assert.equal(b.toExclusive.toISOString(), kstMidnightUtc(2026, 5, 17).toISOString());
+    assert.match(b.label, /5\/11 – 5\/16/);
+  });
+
+  it('boundsForStatsWindow week label uses week-of-month', () => {
+    const b = boundsForStatsWindow('week', '2026-05-16');
+    assert.equal(b.label, '4월 1주차 – 5월 2주차');
   });
 
   it('isPeriodInFuture rejects tomorrow and later', () => {

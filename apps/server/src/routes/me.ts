@@ -15,7 +15,7 @@ import {
   safeGoal,
 } from '../lib/recommendation.js';
 import {
-  boundsForRange,
+  boundsForStatsWindow,
   isPeriodInFuture,
   parseAnchorDate,
   todayAnchorKst,
@@ -30,7 +30,7 @@ import {
   averageByMealSlot,
   averageNutritionSum,
   buildByMealSlotForPeriod,
-  buildStatsExtras,
+  buildStatsSeries,
 } from '../lib/statsAggregate.js';
 import {
   daysSinceRecordedAt,
@@ -1323,7 +1323,7 @@ meRouter.get('/stats', async (req, res) => {
       period = mealRollingBounds(now);
     } else if (range === 'day' || range === 'week' || range === 'month') {
       const anchor = anchorParsed ?? todayAnchorKst(now);
-      const bounds = boundsForRange(range, anchor);
+      const bounds = boundsForStatsWindow(range, anchor);
       if (isPeriodInFuture(bounds.from, todayAnchorKst(now))) {
         sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '미래 기간은 조회할 수 없습니다.', { field: 'anchor' });
         return;
@@ -1368,10 +1368,9 @@ meRouter.get('/stats', async (req, res) => {
 
   let byMealSlot = await buildByMealSlotForPeriod(userId, period);
   const statsRange = range === 'day' || range === 'week' || range === 'month' ? range : null;
-  const extras =
-    statsRange === 'week' || statsRange === 'month'
-      ? await buildStatsExtras(userId, period, profileGoals, statsRange)
-      : null;
+  const extras = statsRange
+    ? await buildStatsSeries(userId, period, profileGoals, statsRange)
+    : null;
 
   const rawSummary = {
     calories: agg._sum.calories ?? 0,
@@ -1380,7 +1379,7 @@ meRouter.get('/stats', async (req, res) => {
     fat: agg._sum.fat ?? 0,
   };
 
-  const isPeriodAverage = statsRange === 'week' || statsRange === 'month';
+  const isPeriodAverage = extras != null;
   const recordedDays = extras?.periodMeta.recordedDays ?? 0;
   const summary =
     isPeriodAverage && recordedDays > 0

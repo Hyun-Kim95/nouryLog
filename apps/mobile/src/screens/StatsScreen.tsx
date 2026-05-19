@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Text } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Segmented } from '../components/Segmented';
 import { StatsPeriodNavigator } from '../components/StatsPeriodNavigator';
 import { CalorieRangeChart } from '../components/CalorieRangeChart';
-import { StatsWeightSection } from '../components/StatsWeightSection';
-import { Banner, Card, CardTitle, ProgressBar, ScreenLayout } from '../components/ui';
+import { Banner, Card, CardTitle, ScreenLayout, TextButton } from '../components/ui';
+import type { RootStackParamList } from '../navigation';
 import { STATS_COPY } from '../copy/stats';
 import { fetchStats, type StatsResponse } from '../api/stats';
 import { isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
 import { useFocusReload } from '../hooks/useFocusReload';
-import { computeFulfillment } from '../lib/goalFulfillment';
 import { mealSlotLabel, type MealSlot } from '../lib/mealSlot';
 import { shiftAnchor, todayAnchorKst, type StatsRange } from '../lib/statsPeriod';
 import { fetchTodayGoals } from '../lib/todayNutrition';
@@ -20,6 +21,7 @@ const SLOT_ORDER: Array<MealSlot | 'UNSPECIFIED'> = ['BREAKFAST', 'LUNCH', 'DINN
 
 export function StatsScreen() {
   const t = useTheme();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [range, setRange] = useState<StatsRange>('day');
@@ -88,9 +90,6 @@ export function StatsScreen() {
         data.summary.carbohydrate === 0 &&
         data.summary.fat === 0);
 
-  const profile = goals?.profile;
-  const proteinGoalG = goals?.proteinGoalG ?? null;
-  const calorieGoalKcal = goals?.calorieGoalKcal ?? null;
   const periodLabel = data?.period.label ?? '…';
   const canGoNext = periodOffset < 0;
 
@@ -151,48 +150,19 @@ export function StatsScreen() {
             </Card>
           ) : null}
 
-          {(proteinGoalG != null || calorieGoalKcal != null) && range === 'day' ? (
-            <Card>
-              <CardTitle>{STATS_COPY.fulfillmentTitle}</CardTitle>
-              {calorieGoalKcal != null ? (
-                <ProgressBar
-                  label="칼로리"
-                  value={data.summary.calories}
-                  max={goals?.calorieGoalMaxKcal ?? calorieGoalKcal}
-                  unit=" kcal"
-                  fulfillment={computeFulfillment(
-                    'calorie',
-                    data.summary.calories,
-                    calorieGoalKcal,
-                    profile,
-                    {
-                      min: goals?.calorieGoalMinKcal ?? null,
-                      max: goals?.calorieGoalMaxKcal ?? null,
-                    },
-                  )}
-                />
-              ) : null}
-              {proteinGoalG != null ? (
-                <ProgressBar
-                  label="단백질"
-                  value={data.summary.protein}
-                  max={goals?.proteinGoalMaxG ?? proteinGoalG}
-                  unit="g"
-                  fulfillment={computeFulfillment('protein', data.summary.protein, proteinGoalG, profile, {
-                    min: goals?.proteinGoalMinG ?? null,
-                    max: goals?.proteinGoalMaxG ?? null,
-                  })}
-                />
-              ) : null}
-            </Card>
-          ) : null}
-
-          {(range === 'week' || range === 'month') && data.daily && data.daily.length > 0 ? (
+          {data.daily && data.daily.length > 0 ? (
             <Card>
               <CalorieRangeChart
-                daily={data.daily}
+                daily={data.daily.map((d) => ({
+                  date: d.date,
+                  label: d.label,
+                  summary: d.summary,
+                  calorieStatus: d.calorieStatus,
+                  hasRecords: d.hasRecords,
+                }))}
                 calorieMin={goals?.calorieGoalMinKcal ?? null}
                 calorieMax={goals?.calorieGoalMaxKcal ?? null}
+                proteinGoalMinG={goals?.proteinGoalMinG ?? null}
                 proteinGoalMaxG={goals?.proteinGoalMaxG ?? goals?.proteinGoalG ?? null}
               />
             </Card>
@@ -206,13 +176,21 @@ export function StatsScreen() {
           <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>{STATS_COPY.emptyCta}</Text>
         </Card>
       ) : null}
-
-      <StatsWeightSection />
     </>
   );
 
   return (
-    <ScreenLayout title={STATS_COPY.title} loading={loading}>
+    <ScreenLayout
+      title={STATS_COPY.title}
+      loading={loading}
+      headerRight={
+        <TextButton
+          title={STATS_COPY.weightHistoryCta}
+          variant="info"
+          onPress={() => navigation.navigate('WeightHistory')}
+        />
+      }
+    >
       <Segmented<StatsRange>
         options={[
           { value: 'day', label: STATS_COPY.rangeDay },

@@ -27,6 +27,7 @@ export type StatsResponse = {
   byMealSlot?: Record<string, NutritionSum>;
   daily?: Array<{
     date: string;
+    label?: string;
     summary: NutritionSum;
     goalMet: { calorie: boolean; protein: boolean };
     calorieStatus: FulfillmentStatus;

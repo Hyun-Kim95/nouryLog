@@ -47,10 +47,13 @@ function addMonthsYmd(ymd: string, months: number): string {
   return formatYmd(year, month, Math.min(d, lastDay));
 }
 
-/** offset 0 = 오늘이 포함된 현재 기간, -1 = 이전 일/주/월 */
+export const STATS_WINDOW_SIZE = 6;
+
+/** offset 0 = 현재 6버킷 윈도우(끝=오늘), -1 = 이전 6일/6주/6월 블록 */
 export function shiftAnchor(todayYmd: string, range: StatsRange, periodOffset: number): string {
   if (periodOffset === 0) return todayYmd;
-  if (range === 'day') return addDaysYmd(todayYmd, periodOffset);
-  if (range === 'week') return addDaysYmd(todayYmd, periodOffset * 7);
-  return addMonthsYmd(todayYmd, periodOffset);
+  const step = STATS_WINDOW_SIZE;
+  if (range === 'day') return addDaysYmd(todayYmd, periodOffset * step);
+  if (range === 'week') return addDaysYmd(todayYmd, periodOffset * step * 7);
+  return addMonthsYmd(todayYmd, periodOffset * step);
 }

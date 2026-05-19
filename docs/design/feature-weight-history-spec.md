@@ -14,7 +14,7 @@ version: 0.1
 
 | 조건 | 근거 |
 |------|------|
-| 좁은 스코프 | 신규 라우트 0. 통계 탭 **하단 Card 섹션** 추가 + 온보딩/프로필 **ReferenceWeightCard** 1블록. `Card`, `Field`, `RadioGroup`, `CalorieRangeChart` 패턴 재사용. |
+| 좁은 스코프 | 통계 탭 **우측 상단 CTA → WeightHistory 스택 화면** + 온보딩/프로필 **ReferenceWeightCard** 1블록. `Card`, `Field`, `RadioGroup`, `CalorieRangeChart` 패턴 재사용. |
 | SSOT | `apps/mobile/src/theme.tsx`, `mobile-onboarding-spec.md`, `StatsScreen`/`CalorieRangeChart` |
 | 재사용 | `WeightCheckInModal`, `ScreenLayout`, `Banner`, `PrimaryButton` |
 
@@ -28,13 +28,21 @@ version: 0.1
 - `warnings` → `Banner` warn 톤
 - caption: disclaimer (`fgSubtle`, caption)
 
-## 2) Stats 탭 체중 섹션
+## 2) 체중 추이 진입·전용 화면
+
+### 통계 탭
+- `ScreenLayout` 제목 행 **우측** `TextButton` 「체중 추이」(`variant: info`)
+- 탭 본문에는 체중 카드 없음
+
+### WeightHistory 스택 화면
+- 루트 스택 `WeightHistory`, 네이티브 헤더(뒤로), 제목 「체중 추이」
+- 본문: `StatsWeightSection`(차트 + 최근 20건 + 「체중 기록」 + `WeightCheckInModal`)
 
 | 상태 | UI |
 |------|-----|
 | 로딩 | Card 내 ActivityIndicator |
 | 빈 | 안내 문구 + 「체중 기록」 PrimaryButton |
-| 기본 | WeightTrendChart + FlatList(날짜·kg) |
+| 기본 | WeightTrendChart + 목록(날짜·kg) |
 | 오류 | Banner + 재시도 |
 
 ## 3) WeightTrendChart
