@@ -116,7 +116,7 @@ async function main() {
     carbohydrate: number;
   }> = [
     {
-      name: '유개장 컵라면',
+      name: '육개장 컵라면',
       memo: '컵 1개(포장 기준 근사)',
       category: '간편식',
       portionUnit: PortionUnit.PIECE,
@@ -224,6 +224,11 @@ async function main() {
       carbohydrate: 18,
     },
   ];
+
+  await prisma.foodTemplate.updateMany({
+    where: { name: '유개장 컵라면' },
+    data: { name: '육개장 컵라면' },
+  });
 
   for (const tpl of extraTemplates) {
     if (!(await prisma.foodTemplate.findFirst({ where: { name: tpl.name } }))) {

@@ -16,7 +16,7 @@ INSERT INTO "FoodTemplate" (
 )
 SELECT
   gen_random_uuid()::text,
-  '유개장 컵라면',
+  '육개장 컵라면',
   '컵 1개(포장 기준 근사)',
   '간편식',
   'PIECE',
@@ -28,7 +28,7 @@ SELECT
   20,
   78,
   true
-WHERE NOT EXISTS (SELECT 1 FROM "FoodTemplate" WHERE "name" = '유개장 컵라면');
+WHERE NOT EXISTS (SELECT 1 FROM "FoodTemplate" WHERE "name" = '육개장 컵라면');
 
 INSERT INTO "FoodTemplate" (
   "id",

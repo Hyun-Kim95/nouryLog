@@ -1,12 +1,12 @@
 import type { ComponentProps } from 'react';
 import { useCallback } from 'react';
-import { View } from 'react-native';
+import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { AdsGateProvider, useAdsGate } from './ads/AdsGateContext';
-import { BottomBannerAd } from './ads/BottomBannerAd';
+import { AppTabBar } from './navigation/AppTabBar';
 import { LoginScreen } from './screens/LoginScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { LogScreen } from './screens/LogScreen';
@@ -54,7 +54,7 @@ const TAB_ICON: Record<string, { focused: IoniconName; unfocused: IoniconName }>
 
 function MainTabsInner() {
   const t = useTheme();
-  const { showBottomBanner, refresh } = useAdsGate();
+  const { refresh } = useAdsGate();
 
   useFocusEffect(
     useCallback(() => {
@@ -69,22 +69,20 @@ function MainTabsInner() {
         tabBarIcon: ({ focused, color, size }) => {
           const pair = TAB_ICON[route.name];
           const name = pair ? (focused ? pair.focused : pair.unfocused) : 'ellipse-outline';
-          return <Ionicons name={name} size={size ?? 22} color={color} />;
+          return <Ionicons name={name} size={size ?? 24} color={color} />;
         },
         tabBarActiveTintColor: t.colors.primary,
         tabBarInactiveTintColor: t.colors.fgMuted,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: 2 },
+        tabBarItemStyle: {
+          paddingVertical: Platform.OS === 'android' ? 4 : 2,
+        },
         tabBarStyle: {
           backgroundColor: t.colors.bg,
-          borderTopColor: t.colors.border,
+          borderTopWidth: 0,
         },
       })}
-      tabBar={(props) => (
-        <View>
-          {showBottomBanner ? <BottomBannerAd /> : null}
-          <BottomTabBar {...props} />
-        </View>
-      )}
+      tabBar={(props) => <AppTabBar {...props} />}
     >
       <Tabs.Screen name="Home" component={HomeScreen} options={{ title: '홈' }} />
       <Tabs.Screen name="Log" component={LogScreen} options={{ title: '기록' }} />

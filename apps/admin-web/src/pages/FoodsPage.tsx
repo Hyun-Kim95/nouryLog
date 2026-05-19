@@ -3,10 +3,9 @@ import { apiFetch } from '../api';
 import { useAuth } from '../auth';
 import { Drawer } from '../components/Drawer';
 import { useToast } from '../toast/useToast';
+import { FOOD_TEMPLATE_CATEGORIES, foodCategorySelectOptions } from '../constants/foodCategories';
 import { EntityListPage } from './EntityListPage';
 import type { Row } from './entityColumns';
-
-const CATEGORY_OPTIONS = ['한식', '중식', '일식', '양식', '간식', '음료'] as const;
 
 const PORTION_UNIT_OPTIONS = [
   { value: 'GRAM', label: '그램 (g)' },
@@ -90,6 +89,8 @@ export function FoodsPage() {
     if (!category) return {} as Record<string, string>;
     return { category };
   }, [category]);
+
+  const formCategoryOptions = useMemo(() => foodCategorySelectOptions(form.category), [form.category]);
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
@@ -274,7 +275,7 @@ export function FoodsPage() {
             카테고리
             <select value={category} onChange={(e) => setCategory(e.target.value)}>
               <option value="">전체</option>
-              {CATEGORY_OPTIONS.map((option) => (
+              {FOOD_TEMPLATE_CATEGORIES.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
@@ -329,7 +330,7 @@ export function FoodsPage() {
                 카테고리
                 <select value={form.category} onChange={(e) => updateField('category', e.target.value)}>
                   <option value="">미지정</option>
-                  {CATEGORY_OPTIONS.map((option) => (
+                  {formCategoryOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
