@@ -4,6 +4,7 @@ import { Field } from './Field';
 import { PrimaryButton, TextButton } from './ui';
 import { postWeightEntry, type WeightCheckInStatus } from '../api/weightEntries';
 import { WEIGHT_COPY } from '../copy/weight';
+import { useBottomSafeInset } from '../hooks/useBottomSafeInset';
 import { useTheme } from '../theme';
 
 const WEIGHT_MIN = 20;
@@ -31,6 +32,7 @@ export function WeightCheckInModal({
   onSaved: (result: Awaited<ReturnType<typeof postWeightEntry>>) => void;
 }) {
   const t = useTheme();
+  const bottomInset = useBottomSafeInset();
   const [weightStr, setWeightStr] = useState('');
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -84,7 +86,9 @@ export function WeightCheckInModal({
             backgroundColor: t.colors.surface,
             borderTopLeftRadius: t.radius.xl,
             borderTopRightRadius: t.radius.xl,
-            padding: t.spacing.xl,
+            paddingTop: t.spacing.xl,
+            paddingHorizontal: t.spacing.xl,
+            paddingBottom: t.spacing.xl + bottomInset,
             gap: t.spacing.md,
             borderWidth: 1,
             borderColor: t.colors.border,

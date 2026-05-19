@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { navigationRef } from './src/authSession';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator, type InitialRoute } from './src/navigation';
 import { clearTokens, getAccessToken } from './src/authStorage';
 import { flushPendingLoginRedirect } from './src/authSession';
+import { BootstrapLoading } from './src/components/BootstrapLoading';
 import { resolveOnboardingComplete } from './src/lib/onboardingGate';
 import { isAccessTokenValid } from './src/lib/sessionBootstrap';
 import { ThemeProvider } from './src/theme';
@@ -19,12 +19,13 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState<InitialRoute>('Login');
 
   useEffect(() => {
+    void setupNotifications();
+    void ensureMobileAdsInitialized().catch((e) => {
+      if (__DEV__) console.warn('[App] AdMob init failed', e);
+    });
+
     void (async () => {
       try {
-        await setupNotifications();
-        await ensureMobileAdsInitialized().catch((e) => {
-          if (__DEV__) console.warn('[App] AdMob init failed', e);
-        });
         let token = await getAccessToken();
         if (!token) {
           setInitialRoute('Login');
@@ -52,23 +53,19 @@ export default function App() {
     })();
   }, []);
 
-  if (!ready) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
-        <ActivityIndicator size="large" color="#16a34a" />
-      </View>
-    );
-  }
-
   return (
     <SafeAreaProvider>
       <DevTogglesProvider>
         <ThemeProvider>
-          <ToastProvider>
-            <NavigationContainer ref={navigationRef} onReady={flushPendingLoginRedirect}>
-              <RootNavigator initialRoute={initialRoute} />
-            </NavigationContainer>
-          </ToastProvider>
+          {!ready ? (
+            <BootstrapLoading />
+          ) : (
+            <ToastProvider>
+              <NavigationContainer ref={navigationRef} onReady={flushPendingLoginRedirect}>
+                <RootNavigator initialRoute={initialRoute} />
+              </NavigationContainer>
+            </ToastProvider>
+          )}
         </ThemeProvider>
       </DevTogglesProvider>
     </SafeAreaProvider>

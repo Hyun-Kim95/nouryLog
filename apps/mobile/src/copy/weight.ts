@@ -9,6 +9,24 @@ export const WEIGHT_COPY = {
   invalidWeight: '체중은 숫자(소수 1자리까지)만 입력해 주세요.',
   weightRange: '체중은 20~300kg 범위로 입력해 주세요.',
   saveError: '체중을 저장하지 못했어요. 다시 시도해 주세요.',
+  sectionTitle: '체중',
+  historyTitle: '체중 기록',
+  historyEmpty: '아직 체중 기록이 없어요.',
+  historyRecord: '체중 기록',
+  historyLoadError: '체중 기록을 불러오지 못했어요.',
+  historyRetry: '다시 시도',
+  historyEntryLine: (dateLabel: string, weightKg: number) => `${dateLabel} · ${weightKg}kg`,
+  chartTitle: '체중 추이 (최근 90일)',
+  chartTapHint: '점을 탭하면 해당 날짜 체중이 표시돼요.',
+  chartTooltip: (dateLabel: string, weightKg: number) => `${dateLabel} · ${weightKg}kg`,
+  referenceTitle: '참고 체중 구간',
+  referenceRange: (minKg: number, maxKg: number, bmiMin: number, bmiMax: number) =>
+    `${minKg}~${maxKg}kg (BMI ${bmiMin}~${bmiMax})`,
+  referenceCurrent: (weightKg: number, bmi: number) => `현재 ${weightKg}kg · BMI ${bmi}`,
+  hintLose: '현재 체중이 참고 구간보다 높아요. 감량을 고려해 볼 수 있어요.',
+  hintMaintain: '참고 구간 안에 있어요. 유지를 고려해 볼 수 있어요.',
+  hintGain: '현재 체중이 참고 구간보다 낮아요. 증량을 고려해 볼 수 있어요.',
+  hintTeen: '성장기에는 균형 잡힌 식사가 우선이에요. 목표는 신중히 선택해 주세요.',
   toastSaved: (weightKg: number, calBefore: number | null, calAfter: number | null, protBefore: number | null, protAfter: number | null) => {
     const cal =
       calBefore != null && calAfter != null ? `칼로리 ${calBefore}→${calAfter} kcal` : '칼로리 목표 갱신';

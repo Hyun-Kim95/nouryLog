@@ -9,7 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomSafeInset } from '../hooks/useBottomSafeInset';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
@@ -34,6 +35,8 @@ import {
 } from '../authStorage';
 import { useDevToggles } from '../dev/devToggles';
 import { useToast } from '../toast/useToast';
+import { fetchReferenceWeight, type ReferenceWeightResponse } from '../api/referenceWeight';
+import { ReferenceWeightCard } from '../components/ReferenceWeightCard';
 import { RECOMMENDATION_COPY } from '../copy/recommendation';
 import type { RootStackParamList } from '../navigation';
 
@@ -51,10 +54,10 @@ const ACTIVITY_OPTIONS: { value: ActivityLevel; label: string; description: stri
   { value: 'active', label: '활동적', description: '주 5회 이상 강한 운동' },
 ];
 
-const GOAL_OPTIONS: { value: Goal; label: string; description: string }[] = [
-  { value: 'lose', label: '감량', description: '현재 체중 대비 −10%' },
-  { value: 'maintain', label: '유지', description: '현재 체중 유지' },
-  { value: 'gain', label: '증량', description: '현재 체중 대비 +10%' },
+const GOAL_OPTIONS: { value: Goal; label: string }[] = [
+  { value: 'lose', label: '감량' },
+  { value: 'maintain', label: '유지' },
+  { value: 'gain', label: '증량' },
 ];
 
 const AGE_MIN = 13;
@@ -107,7 +110,7 @@ function validateWeight(input: string): { value?: number; error?: string } {
 
 export function OnboardingScreen({ navigation }: Props) {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
+  const bottomInset = useBottomSafeInset();
   const dev = useDevToggles();
   const toast = useToast();
   const [token, setToken] = useState<string | null>(null);
@@ -120,6 +123,9 @@ export function OnboardingScreen({ navigation }: Props) {
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [banner, setBanner] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refData, setRefData] = useState<ReferenceWeightResponse | null>(null);
+  const [refLoading, setRefLoading] = useState(false);
+  const [refError, setRefError] = useState<string | null>(null);
 
   useEffect(() => {
     void getAccessToken().then((tk) => {
@@ -130,6 +136,38 @@ export function OnboardingScreen({ navigation }: Props) {
       setToken(tk);
     });
   }, [navigation]);
+
+  useEffect(() => {
+    if (!token) return;
+    const h = validateHeight(heightStr);
+    const a = validateAge(ageStr);
+    const w = validateWeight(weightStr);
+    if (h.error || a.error || h.value == null || a.value == null) {
+      setRefData(null);
+      setRefError(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void (async () => {
+        setRefLoading(true);
+        setRefError(null);
+        try {
+          const data = await fetchReferenceWeight(token, {
+            heightCm: h.value as number,
+            age: a.value as number,
+            weightKg: w.value ?? undefined,
+          });
+          setRefData(data);
+        } catch (e) {
+          setRefData(null);
+          setRefError(e instanceof Error ? e.message : '참고 체중을 불러오지 못했어요.');
+        } finally {
+          setRefLoading(false);
+        }
+      })();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [token, heightStr, ageStr, weightStr]);
 
   const goMain = useCallback(() => {
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
@@ -362,9 +400,10 @@ export function OnboardingScreen({ navigation }: Props) {
             }}
           />
 
+          <ReferenceWeightCard data={refData} loading={refLoading} error={refError} />
+
           <RadioGroup<Goal>
             label="목표 (선택)"
-            helper="현재 체중 대비 권장 칼로리를 가감합니다."
             error={errors.goal}
             options={GOAL_OPTIONS}
             value={goal}
@@ -387,7 +426,7 @@ export function OnboardingScreen({ navigation }: Props) {
               borderTopColor: t.colors.border,
               paddingHorizontal: t.spacing.lg,
               paddingTop: t.spacing.md,
-              paddingBottom: Math.max(insets.bottom, t.spacing.md),
+              paddingBottom: bottomInset + t.spacing.md,
               gap: t.spacing.sm,
             },
           ]}

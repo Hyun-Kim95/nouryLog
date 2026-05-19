@@ -88,12 +88,15 @@ export function computeFulfillment(
         tone: 'warn',
       };
     }
+    const met = current >= (bounds?.min ?? threshold);
     return {
       pct: rawPct,
-      status: current >= (bounds?.min ?? threshold) ? 'met' : 'under',
-      detailLabel: `${Math.round(current)}/${goalText} · ${rawPct}%`,
-      barPct: Math.min(100, rawPct),
-      tone: 'primary',
+      status: met ? 'met' : 'under',
+      detailLabel: met
+        ? `${Math.round(current)}/${goalText} · 목표 달성`
+        : `${Math.round(current)}/${goalText} · ${rawPct}% (목표 미달)`,
+      barPct: met ? 100 : Math.min(100, rawPct),
+      tone: met ? 'primary' : 'warn',
     };
   }
 
@@ -120,8 +123,8 @@ export function computeFulfillment(
   return {
     pct: rawPct,
     status: 'met',
-    detailLabel: `${Math.round(current)}/${goalText} · 권장 범위 내`,
-    barPct: Math.min(100, rawPct),
+    detailLabel: `${Math.round(current)}/${goalText} · 목표 달성`,
+    barPct: 100,
     tone: 'primary',
   };
 }

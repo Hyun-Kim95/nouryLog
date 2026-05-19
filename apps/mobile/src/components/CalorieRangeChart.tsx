@@ -30,12 +30,14 @@ type Props = {
   daily: CalorieDailyPoint[];
   calorieMin: number | null;
   calorieMax: number | null;
+  proteinGoalMaxG?: number | null;
 };
 
 const CHART_HEIGHT = 140;
 const DAY_LABEL_HEIGHT = 32;
-const COL_WIDTH = 36;
-const BAR_WIDTH = 20;
+const COL_WIDTH = 52;
+const BAR_WIDTH = 8;
+const BAR_GAP = 4;
 const LABEL_GUTTER = 56;
 const TOOLTIP_SLOT_HEIGHT = 88;
 
@@ -131,6 +133,9 @@ function TooltipSlot({
           <Text style={{ color: t.colors.primary, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
             {Math.round(Number(selected.summary?.calories ?? 0))} kcal
           </Text>
+          <Text style={{ color: t.colors.info, fontSize: t.fontSize.body, fontWeight: '600' }}>
+            {STATS_COPY.calorieTooltipProtein(Math.round(Number(selected.summary?.protein ?? 0)))}
+          </Text>
           <Text style={{ color: t.colors.fg, fontSize: t.fontSize.caption }}>
             {statusLabel(
               normalizeStatus(selected.calorieStatus, selected.hasRecords),
@@ -156,7 +161,7 @@ function TooltipSlot({
   );
 }
 
-export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
+export function CalorieRangeChart({ daily, calorieMin, calorieMax, proteinGoalMaxG }: Props) {
   const t = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -175,12 +180,19 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
       ? Math.max(calorieMin, calorieMax)
       : calorieMax ?? calorieMin ?? null;
 
-  const scaleMax = useMemo(() => {
+  const calorieScaleMax = useMemo(() => {
     if (!daily.length) return 1;
     const peaks = daily.map((d) => Number(d.summary?.calories ?? 0));
     const peak = Math.max(...peaks, goalHigh ?? 0, goalLow ?? 0, 1);
     return Number.isFinite(peak) && peak > 0 ? peak * 1.08 : 1;
   }, [daily, goalHigh, goalLow]);
+
+  const proteinScaleMax = useMemo(() => {
+    if (!daily.length) return 1;
+    const peaks = daily.map((d) => Number(d.summary?.protein ?? 0));
+    const peak = Math.max(...peaks, proteinGoalMaxG ?? 0, 1);
+    return Number.isFinite(peak) && peak > 0 ? peak * 1.08 : 1;
+  }, [daily, proteinGoalMaxG]);
 
   if (!daily.length) return null;
 
@@ -192,9 +204,9 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
   const selected = daily.find((d) => d.date === selectedDate) ?? null;
 
   const bandTopY =
-    goalHigh != null && goalHigh > 0 ? CHART_HEIGHT - valueToHeight(goalHigh, scaleMax) : null;
+    goalHigh != null && goalHigh > 0 ? CHART_HEIGHT - valueToHeight(goalHigh, calorieScaleMax) : null;
   const bandBottomY =
-    goalLow != null && goalLow > 0 ? CHART_HEIGHT - valueToHeight(goalLow, scaleMax) : null;
+    goalLow != null && goalLow > 0 ? CHART_HEIGHT - valueToHeight(goalLow, calorieScaleMax) : null;
 
   const showBand =
     goalLow != null &&
@@ -261,8 +273,12 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
                 >
                   {daily.map((p) => {
                     const kcal = Number(p.summary?.calories ?? 0);
+                    const proteinG = Number(p.summary?.protein ?? 0);
                     const status = normalizeStatus(p.calorieStatus, p.hasRecords);
-                    const barH = p.hasRecords ? Math.max(6, valueToHeight(kcal, scaleMax)) : 6;
+                    const kcalBarH = p.hasRecords ? Math.max(6, valueToHeight(kcal, calorieScaleMax)) : 6;
+                    const proteinBarH = p.hasRecords
+                      ? Math.max(6, valueToHeight(proteinG, proteinScaleMax))
+                      : 6;
                     const isSelected = p.date === selectedDate;
                     const dom = dayOfMonth(p.date);
                     return (
@@ -271,7 +287,11 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
                         onPress={() => setSelectedDate((prev) => (prev === p.date ? null : p.date))}
                         style={{ width: COL_WIDTH, alignItems: 'center' }}
                         accessibilityRole="button"
-                        accessibilityLabel={STATS_COPY.calorieBarA11y(dom, Math.round(kcal))}
+                        accessibilityLabel={STATS_COPY.calorieBarA11y(
+                          dom,
+                          Math.round(kcal),
+                          Math.round(proteinG),
+                        )}
                       >
                         <View
                           style={{
@@ -283,13 +303,30 @@ export function CalorieRangeChart({ daily, calorieMin, calorieMax }: Props) {
                         >
                           <View
                             style={{
-                              width: BAR_WIDTH,
-                              height: barH,
-                              borderRadius: 4,
-                              backgroundColor: statusColor(status, p.hasRecords, t),
-                              opacity: isSelected ? 1 : 0.92,
+                              flexDirection: 'row',
+                              alignItems: 'flex-end',
+                              gap: BAR_GAP,
                             }}
-                          />
+                          >
+                            <View
+                              style={{
+                                width: BAR_WIDTH,
+                                height: kcalBarH,
+                                borderRadius: 4,
+                                backgroundColor: statusColor(status, p.hasRecords, t),
+                                opacity: isSelected ? 1 : 0.92,
+                              }}
+                            />
+                            <View
+                              style={{
+                                width: BAR_WIDTH,
+                                height: proteinBarH,
+                                borderRadius: 4,
+                                backgroundColor: p.hasRecords ? t.colors.info : t.colors.border,
+                                opacity: isSelected ? 1 : 0.92,
+                              }}
+                            />
+                          </View>
                         </View>
                         <View
                           style={{

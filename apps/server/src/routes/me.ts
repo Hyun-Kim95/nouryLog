@@ -37,6 +37,10 @@ import {
   isWeightCheckInDue,
   type GoalSnapshot,
 } from '../lib/weightEntry.js';
+import {
+  computeReferenceWeight,
+  validateHeightForReference,
+} from '../lib/referenceWeight.js';
 import type { MealSlot, SnackPlacement } from '@prisma/client';
 
 export const meRouter = Router();
@@ -50,6 +54,12 @@ const TOTAL_GRAMS_MAX = 5000;
 function paginateFoodTemplates(q: { page?: unknown; size?: unknown }) {
   const page = Math.max(1, Number(q.page ?? 1));
   const size = Math.min(100, Math.max(1, Number(q.size ?? 15)));
+  return { page, size, skip: (page - 1) * size };
+}
+
+function paginateList(q: { page?: unknown; size?: unknown }, defaultSize = 30, maxSize = 100) {
+  const page = Math.max(1, Number(q.page ?? 1));
+  const size = Math.min(maxSize, Math.max(1, Number(q.size ?? defaultSize)));
   return { page, size, skip: (page - 1) * size };
 }
 
@@ -613,6 +623,97 @@ meRouter.post('/me/weight-entries', async (req, res) => {
     goalsBefore,
     goalsAfter,
   });
+});
+
+meRouter.get('/me/weight-entries', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 조회할 수 있습니다.');
+    return;
+  }
+  const { page, size, skip } = paginateList(req.query);
+  const recordedAt: Prisma.DateTimeFilter = {};
+  const fromRaw = req.query.from;
+  const toRaw = req.query.to;
+  if (fromRaw) {
+    const from = new Date(String(fromRaw));
+    if (Number.isNaN(from.getTime())) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'from 날짜가 올바르지 않습니다.', { field: 'from' });
+      return;
+    }
+    recordedAt.gte = from;
+  }
+  if (toRaw) {
+    const to = new Date(String(toRaw));
+    if (Number.isNaN(to.getTime())) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'to 날짜가 올바르지 않습니다.', { field: 'to' });
+      return;
+    }
+    recordedAt.lte = to;
+  }
+  const where: Prisma.WeightEntryWhereInput = {
+    userId,
+    ...(Object.keys(recordedAt).length > 0 ? { recordedAt } : {}),
+  };
+  const [total, items] = await Promise.all([
+    prisma.weightEntry.count({ where }),
+    prisma.weightEntry.findMany({
+      where,
+      orderBy: { recordedAt: 'desc' },
+      skip,
+      take: size,
+      select: { id: true, recordedAt: true, weightKg: true },
+    }),
+  ]);
+  res.json({
+    items: items.map((e) => ({
+      id: e.id,
+      recordedAt: e.recordedAt.toISOString(),
+      weightKg: e.weightKg,
+    })),
+    page,
+    size,
+    total,
+  });
+});
+
+meRouter.get('/me/reference-weight', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 조회할 수 있습니다.');
+    return;
+  }
+  const p = await prisma.profile.findUnique({ where: { userId } });
+  if (!p) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '프로필이 없습니다.');
+    return;
+  }
+  const qHeight = req.query.heightCm != null ? Number(req.query.heightCm) : p.heightCm;
+  const qAge = req.query.age != null ? Number(req.query.age) : p.age;
+  const qWeightRaw = req.query.weightKg;
+  const qWeight =
+    qWeightRaw != null && String(qWeightRaw).trim() !== '' ? Number(qWeightRaw) : p.weightKg;
+
+  const heightErr = validateHeightForReference(qHeight);
+  if (heightErr) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, heightErr, { field: 'heightCm' });
+    return;
+  }
+  if (!Number.isFinite(qAge) || qAge < 13 || qAge > 99) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '나이는 13~99세 범위여야 합니다.', { field: 'age' });
+    return;
+  }
+  if (qWeight != null && (!Number.isFinite(qWeight) || qWeight < 20 || qWeight > 300)) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '체중은 20~300kg 범위여야 합니다.', { field: 'weightKg' });
+    return;
+  }
+  res.json(
+    computeReferenceWeight({
+      heightCm: qHeight,
+      age: Math.round(qAge),
+      weightKg: qWeight,
+    }),
+  );
 });
 
 meRouter.get('/me/food-templates', async (req, res) => {

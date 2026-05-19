@@ -11,13 +11,16 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomSafeInset } from '../hooks/useBottomSafeInset';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import { Field } from '../components/Field';
 import { Segmented } from '../components/Segmented';
 import { RadioGroup } from '../components/RadioGroup';
 import { Banner, Card, CardTitle } from '../components/ui';
+import { fetchReferenceWeight, type ReferenceWeightResponse } from '../api/referenceWeight';
+import { ReferenceWeightCard } from '../components/ReferenceWeightCard';
 import {
   ProfileApiError,
   getProfile,
@@ -63,10 +66,10 @@ const ACTIVITY_OPTIONS: { value: ActivityLevel; label: string; description: stri
   { value: 'active', label: '활동적', description: '주 5회 이상 강한 운동' },
 ];
 
-const GOAL_OPTIONS: { value: Goal; label: string; description: string }[] = [
-  { value: 'lose', label: '감량', description: '현재 체중 대비 −10%' },
-  { value: 'maintain', label: '유지', description: '현재 체중 유지' },
-  { value: 'gain', label: '증량', description: '현재 체중 대비 +10%' },
+const GOAL_OPTIONS: { value: Goal; label: string }[] = [
+  { value: 'lose', label: '감량' },
+  { value: 'maintain', label: '유지' },
+  { value: 'gain', label: '증량' },
 ];
 
 type FormState = {
@@ -101,7 +104,7 @@ function parseDecimal(input: string): number | null {
 
 export function ProfileEditScreen({ navigation }: Props) {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
+  const bottomInset = useBottomSafeInset();
   const dev = useDevToggles();
   const toast = useToast();
 
@@ -122,6 +125,9 @@ export function ProfileEditScreen({ navigation }: Props) {
   const [banner, setBanner] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refData, setRefData] = useState<ReferenceWeightResponse | null>(null);
+  const [refLoading, setRefLoading] = useState(false);
+  const [refError, setRefError] = useState<string | null>(null);
 
   // Phase T — override 입력 모드. 영속화하지 않으며 매 진입 시 OFF로 시작.
   const [overrideEnabled, setOverrideEnabled] = useState(false);
@@ -174,6 +180,41 @@ export function ProfileEditScreen({ navigation }: Props) {
       }
     })();
   }, [navigation]);
+
+  useEffect(() => {
+    if (!token || loading) return;
+    const height = parseInteger(form.heightStr);
+    const age = parseInteger(form.ageStr);
+    const weight = parseDecimal(form.weightStr);
+    if (height == null || height < HEIGHT_MIN || height > HEIGHT_MAX) {
+      setRefData(null);
+      return;
+    }
+    if (age == null || age < AGE_MIN || age > AGE_MAX) {
+      setRefData(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void (async () => {
+        setRefLoading(true);
+        setRefError(null);
+        try {
+          const data = await fetchReferenceWeight(token, {
+            heightCm: height,
+            age,
+            weightKg: weight != null && weight >= WEIGHT_MIN && weight <= WEIGHT_MAX ? Math.round(weight) : undefined,
+          });
+          setRefData(data);
+        } catch (e) {
+          setRefData(null);
+          setRefError(e instanceof Error ? e.message : '참고 체중을 불러오지 못했어요.');
+        } finally {
+          setRefLoading(false);
+        }
+      })();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [token, loading, form.heightStr, form.ageStr, form.weightStr]);
 
   const formDirty = useMemo(() => {
     return (
@@ -516,9 +557,10 @@ export function ProfileEditScreen({ navigation }: Props) {
                 onChange={(v) => setField('activityLevel', v)}
               />
 
+              <ReferenceWeightCard data={refData} loading={refLoading} error={refError} />
+
               <RadioGroup<Goal>
                 label="목표 (선택)"
-                helper="현재 체중 대비 권장 칼로리를 가감합니다."
                 error={errors.goal}
                 options={GOAL_OPTIONS}
                 value={form.goal}
@@ -667,7 +709,7 @@ export function ProfileEditScreen({ navigation }: Props) {
               borderTopColor: t.colors.border,
               paddingHorizontal: t.spacing.lg,
               paddingTop: t.spacing.md,
-              paddingBottom: Math.max(insets.bottom, t.spacing.md),
+              paddingBottom: bottomInset + t.spacing.md,
               gap: t.spacing.sm,
             },
           ]}

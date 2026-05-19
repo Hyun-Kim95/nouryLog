@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,6 +10,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { resolveImagePickerBase64 } from '../lib/imagePickerBase64';
 import { apiFetch, isAuthDenied } from '../api';
 import {
   createMeal,
@@ -79,6 +80,19 @@ function baselineSummary(tpl: FoodTemplateItem): string {
 }
 
 const PAST_PAGE_SIZE = 10;
+const NAME_SUGGEST_LIMIT = 8;
+
+function mealSuggestionPool(...groups: MealRow[][]): MealRow[] {
+  const byName = new Map<string, MealRow>();
+  for (const group of groups) {
+    for (const m of group) {
+      const key = m.name.trim().toLowerCase();
+      if (!key || byName.has(key)) continue;
+      byName.set(key, m);
+    }
+  }
+  return [...byName.values()];
+}
 
 const EMPTY_FORM = {
   name: '',
@@ -124,6 +138,7 @@ export function LogScreen() {
   const [mealInputMode, setMealInputMode] = useState<TemplateInputMode>('PORTION_COUNT');
   const [tplAmount, setTplAmount] = useState('1');
   const [editingMealId, setEditingMealId] = useState<string | null>(null);
+  const [nameFocused, setNameFocused] = useState(false);
 
   const resetForm = useCallback(() => {
     setEditingMealId(null);
@@ -398,33 +413,48 @@ export function LogScreen() {
       const token = await getAccessToken();
       if (!token) throw new Error('로그인 필요');
 
+      const mediaTypes = ImagePicker.MediaTypeOptions.Images;
+      const pickerOptions: ImagePicker.ImagePickerOptions = {
+        mediaTypes,
+        quality: 0.8,
+        base64: true,
+      };
+
       if (source === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) throw new Error('카메라 접근 권한이 필요합니다.');
-        const picked = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          quality: 0.8,
-          base64: true,
-        });
-        if (picked.canceled || !picked.assets[0]?.base64) {
-          toast.show({ kind: 'info', message: '촬영이 취소되었습니다.' });
+        const picked = await ImagePicker.launchCameraAsync(pickerOptions);
+        if (picked.canceled) {
+          toast.show({ kind: 'info', message: LOG_COPY.ocrCameraCanceled });
           return;
         }
-        await runOcrWithBase64(picked.assets[0].base64);
+        const asset = picked.assets[0];
+        if (!asset) {
+          toast.show({ kind: 'info', message: LOG_COPY.ocrCameraCanceled });
+          return;
+        }
+        const base64 = await resolveImagePickerBase64(asset);
+        if (!base64) throw new Error(LOG_COPY.ocrImageLoadFailed);
+        await runOcrWithBase64(base64);
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) throw new Error('갤러리 접근 권한이 필요합니다.');
         const picked = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          quality: 0.8,
-          base64: true,
+          ...pickerOptions,
           allowsEditing: false,
         });
-        if (picked.canceled || !picked.assets[0]?.base64) {
-          toast.show({ kind: 'info', message: '이미지 선택이 취소되었습니다.' });
+        if (picked.canceled) {
+          toast.show({ kind: 'info', message: LOG_COPY.ocrPickCanceled });
           return;
         }
-        await runOcrWithBase64(picked.assets[0].base64);
+        const asset = picked.assets[0];
+        if (!asset) {
+          toast.show({ kind: 'info', message: LOG_COPY.ocrPickCanceled });
+          return;
+        }
+        const base64 = await resolveImagePickerBase64(asset);
+        if (!base64) throw new Error(LOG_COPY.ocrImageLoadFailed);
+        await runOcrWithBase64(base64);
       }
     } catch (e) {
       if (isAuthDenied(e)) return;
@@ -555,9 +585,73 @@ export function LogScreen() {
         })()
       : null;
 
+  const nameSuggestions = useMemo(() => {
+    if (!nameFocused || selectedTpl) return [];
+    const q = name.trim().toLowerCase();
+    if (q.length < 1) return [];
+    const pool = mealSuggestionPool(recentMeals, pastMeals, items);
+    return pool.filter((m) => m.name.trim().toLowerCase().includes(q)).slice(0, NAME_SUGGEST_LIMIT);
+  }, [nameFocused, selectedTpl, name, recentMeals, pastMeals, items]);
+
   const macroFields = (
     <View style={{ gap: t.spacing.sm }}>
-      <LabeledField label="음식명" value={name} onChangeText={setName} placeholder="예: 닭가슴살 샐러드" />
+      <View style={{ gap: t.spacing.xs, zIndex: 10 }}>
+        <LabeledField
+          label="음식명"
+          value={name}
+          onChangeText={setName}
+          placeholder="예: 닭가슴살 샐러드"
+          onFocus={() => setNameFocused(true)}
+          onBlur={() => {
+            setTimeout(() => setNameFocused(false), 200);
+          }}
+        />
+        {nameFocused && name.trim().length >= 1 && !selectedTpl ? (
+          <View
+            style={{
+              borderWidth: 1,
+              borderColor: t.colors.border,
+              borderRadius: t.radius.md,
+              backgroundColor: t.colors.surface,
+              overflow: 'hidden',
+            }}
+          >
+            {nameSuggestions.length === 0 ? (
+              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, padding: t.spacing.md }}>
+                {LOG_COPY.nameSuggestEmpty}
+              </Text>
+            ) : (
+              nameSuggestions.map((m, idx) => (
+                <Pressable
+                  key={m.mealId}
+                  onPress={() => {
+                    applyRecentMeal(m);
+                    setNameFocused(false);
+                  }}
+                  style={{
+                    padding: t.spacing.md,
+                    borderTopWidth: idx === 0 ? 0 : 1,
+                    borderTopColor: t.colors.border,
+                  }}
+                >
+                  <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
+                    {m.name}
+                  </Text>
+                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                    {formatMacroLine({
+                      protein: m.protein,
+                      carbohydrate: m.carbohydrate,
+                      fat: m.fat,
+                    })}
+                    {' · '}
+                    {Math.round(m.calories)} kcal
+                  </Text>
+                </Pressable>
+              ))
+            )}
+          </View>
+        ) : null}
+      </View>
       <LabeledField
         label="칼로리 (kcal)"
         value={calories}

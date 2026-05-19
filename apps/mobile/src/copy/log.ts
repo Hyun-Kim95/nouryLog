@@ -11,6 +11,9 @@ export const LOG_COPY = {
   ocrLowConfidence: '인식 신뢰도가 낮아요. 영양 값을 꼭 확인해 주세요.',
   ocrBannerRemaining: '무료 사진 분석이 1회 남았어요.',
   ocrBannerExhausted: '무료 사진 분석을 모두 사용했어요.',
+  ocrPickCanceled: '이미지 선택이 취소되었습니다.',
+  ocrCameraCanceled: '촬영이 취소되었습니다.',
+  ocrImageLoadFailed: '이미지를 불러오지 못했어요. 다른 사진을 선택해 주세요.',
   ocrDoneToast: (remaining: number) =>
     `분석 완료 · 남은 무료 ${remaining}회 · 음식명을 입력한 뒤 저장해 주세요`,
   nameRequired: '음식명을 입력해 주세요.',
@@ -38,6 +41,8 @@ export const LOG_COPY = {
   pastLoadingMore: '이전 기록을 불러오는 중…',
   sectionRecent: '최근 먹은 음식',
   recentHint: '탭하면 아래 입력란에 채워져요.',
+  nameSuggestHint: '과거 기록에서 선택하면 입력란이 채워져요.',
+  nameSuggestEmpty: '일치하는 과거 기록이 없어요.',
   protein: '단백질 (g)',
   carb: '탄수화물 (g)',
   fat: '지방 (g)',

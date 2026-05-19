@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomSafeInset } from '../hooks/useBottomSafeInset';
 import { CommonActions } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import { navigationRef } from '../authSession';
@@ -28,7 +28,7 @@ export function DevToolsSection() {
 
 function DevToolsSectionInner() {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
+  const bottomInset = useBottomSafeInset();
   const dev = useDevToggles();
   const [open, setOpen] = useState(false);
 
@@ -84,7 +84,7 @@ function DevToolsSectionInner() {
                 backgroundColor: t.colors.surface,
                 borderColor: t.colors.border,
                 paddingTop: t.spacing.lg,
-                paddingBottom: Math.max(insets.bottom, t.spacing.lg) + t.spacing.md,
+                paddingBottom: bottomInset + t.spacing.lg,
                 paddingHorizontal: t.spacing.lg,
                 borderTopLeftRadius: t.radius.lg,
                 borderTopRightRadius: t.radius.lg,

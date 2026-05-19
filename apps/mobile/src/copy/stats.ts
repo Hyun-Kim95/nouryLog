@@ -23,14 +23,17 @@ export const STATS_COPY = {
   bySlotTitle: '끼니별 합계',
   bySlotTitleAverage: '끼니별 일평균',
   slotLine: (label: string, kcal: number, proteinG: number) => `${label} · ${kcal} kcal · 단백질 ${proteinG}g`,
-  calorieRangeChartTitle: '일별 칼로리 · 목표 구간',
+  calorieRangeChartTitle: '일별 칼로리 · 단백질 · 목표 구간',
   calorieChartTapHint: '막대를 탭하면 해당 날짜 상세가 표시돼요.',
-  calorieRangeLegend: '연한 영역: 목표 구간 · 점선: min/max(kcal) · 막대: 실제 섭취',
+  calorieRangeLegend:
+    '연한 영역·점선: 칼로리 목표 구간(kcal) · 초록 막대: 칼로리 · 파란 막대: 단백질(g)',
+  calorieTooltipProtein: (proteinG: number) => `단백질 ${proteinG}g`,
   calorieStatusUnder: '목표 대비 부족',
   calorieStatusMet: '목표 구간 적정',
   calorieStatusOver: '목표 대비 초과',
   calorieStatusNone: '기록 없음',
   calorieTooltipMacros: (proteinG: number, carbG: number, fatG: number) =>
     `단백질 ${proteinG}g · 탄수 ${carbG}g · 지방 ${fatG}g`,
-  calorieBarA11y: (day: number, kcal: number) => `${day}일, ${kcal} 킬로칼로리`,
+  calorieBarA11y: (day: number, kcal: number, proteinG: number) =>
+    `${day}일, 칼로리 ${kcal} 킬로칼로리, 단백질 ${proteinG}그램`,
 } as const;

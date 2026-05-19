@@ -34,3 +34,28 @@ export async function postWeightEntry(token: string, weightKg: number): Promise<
     body: JSON.stringify({ weightKg }),
   });
 }
+
+export type WeightEntryItem = {
+  id: string;
+  recordedAt: string;
+  weightKg: number;
+};
+
+export type WeightEntryListResponse = {
+  items: WeightEntryItem[];
+  page: number;
+  size: number;
+  total: number;
+};
+
+export async function listWeightEntries(
+  token: string,
+  opts?: { page?: number; size?: number; from?: string },
+): Promise<WeightEntryListResponse> {
+  const params = new URLSearchParams();
+  if (opts?.page != null) params.set('page', String(opts.page));
+  if (opts?.size != null) params.set('size', String(opts.size));
+  if (opts?.from) params.set('from', opts.from);
+  const q = params.toString();
+  return apiFetch<WeightEntryListResponse>(`/me/weight-entries${q ? `?${q}` : ''}`, { token });
+}

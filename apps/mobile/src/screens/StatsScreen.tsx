@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 import { Segmented } from '../components/Segmented';
 import { StatsPeriodNavigator } from '../components/StatsPeriodNavigator';
 import { CalorieRangeChart } from '../components/CalorieRangeChart';
+import { StatsWeightSection } from '../components/StatsWeightSection';
 import { Banner, Card, CardTitle, ProgressBar, ScreenLayout } from '../components/ui';
 import { STATS_COPY } from '../copy/stats';
 import { fetchStats, type StatsResponse } from '../api/stats';
@@ -192,6 +193,7 @@ export function StatsScreen() {
                 daily={data.daily}
                 calorieMin={goals?.calorieGoalMinKcal ?? null}
                 calorieMax={goals?.calorieGoalMaxKcal ?? null}
+                proteinGoalMaxG={goals?.proteinGoalMaxG ?? goals?.proteinGoalG ?? null}
               />
             </Card>
           ) : null}
@@ -204,6 +206,8 @@ export function StatsScreen() {
           <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>{STATS_COPY.emptyCta}</Text>
         </Card>
       ) : null}
+
+      <StatsWeightSection />
     </>
   );
 

@@ -1,5 +1,6 @@
 import { Modal, Text, View } from 'react-native';
 import { BILLING_COPY } from '../../copy/billing';
+import { useBottomSafeInset } from '../../hooks/useBottomSafeInset';
 import { useTheme } from '../../theme';
 import { PrimaryButton } from './PrimaryButton';
 import { TextButton } from './TextButton';
@@ -16,6 +17,7 @@ export function PaywallModal({
   busy?: boolean;
 }) {
   const t = useTheme();
+  const bottomInset = useBottomSafeInset();
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
@@ -31,7 +33,9 @@ export function PaywallModal({
             backgroundColor: t.colors.surface,
             borderTopLeftRadius: t.radius.xl,
             borderTopRightRadius: t.radius.xl,
-            padding: t.spacing.xl,
+            paddingTop: t.spacing.xl,
+            paddingHorizontal: t.spacing.xl,
+            paddingBottom: t.spacing.xl + bottomInset,
             gap: t.spacing.md,
             borderWidth: 1,
             borderColor: t.colors.border,

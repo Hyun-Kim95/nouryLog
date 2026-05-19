@@ -15,7 +15,7 @@ import {
 import { Banner, ScreenLayout } from '../components/ui';
 import { socialAdapter } from '../social';
 import { consumeLoginNotice } from '../authSession';
-import { saveTokens } from '../authStorage';
+import { getOnboardingDone, parseUserIdFromAccessToken, saveTokens } from '../authStorage';
 import { resolveOnboardingComplete } from '../lib/onboardingGate';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
@@ -51,7 +51,12 @@ export function LoginScreen({ navigation }: Props) {
   const goAfterLogin = async (accessToken: string) => {
     let done = false;
     try {
-      done = await resolveOnboardingComplete(accessToken);
+      const userId = parseUserIdFromAccessToken(accessToken);
+      if (userId && (await getOnboardingDone(userId))) {
+        done = true;
+      } else {
+        done = await resolveOnboardingComplete(accessToken);
+      }
     } catch (e) {
       if (__DEV__) console.warn('[Login] onboarding resolve failed', e);
     }
