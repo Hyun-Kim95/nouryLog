@@ -5,7 +5,8 @@ import { resolvedReferenceAmount } from '../lib/foodTemplateReference.js';
 import { computeScaledNutritionFromGrams } from '../lib/mealFromTemplate.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
-import { OCR_FREE_LIMIT, STATS_STALE_HOURS } from '../lib/config.js';
+import { OCR_FREE_LIMIT } from '../lib/config.js';
+import { userStatsAggregationMeta } from '../lib/userStatsAggregationMeta.js';
 import { detectNutrition } from '../services/ocrService.js';
 import {
   calculateRecommendationFull,
@@ -1235,11 +1236,7 @@ meRouter.get('/stats', async (req, res) => {
     return;
   }
 
-  const batch = await prisma.statsBatch.findUnique({ where: { id: 'singleton' } });
-  const aggregatedAt = batch?.lastRunAt ?? new Date();
-  const staleMs = Date.now() - aggregatedAt.getTime();
-  const staleHours = staleMs / (1000 * 60 * 60);
-  const isStale = staleHours > STATS_STALE_HOURS;
+  const { aggregatedAt, isStale, staleHours } = userStatsAggregationMeta(now);
 
   const agg = await prisma.meal.aggregate({
     where: {

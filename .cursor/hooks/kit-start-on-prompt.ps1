@@ -1,4 +1,4 @@
-# beforeSubmitPrompt: /start-setting (onboard) | /start (pull + sync)
+# beforeSubmitPrompt: /start-setting (onboard) | /start | /kit-start (pull + sync)
 # Windows PowerShell 5.1 + UTF-8 stdout for Cursor
 $ErrorActionPreference = "Stop"
 
@@ -131,8 +131,9 @@ try {
     if ([string]::IsNullOrWhiteSpace($prompt)) { exit 0 }
 
     $isSetting = ($prompt -match '^\s*/start-setting(\s+|$)')
-    $isStart = (-not $isSetting) -and ($prompt -match '^\s*/start(\s+|$)')
-    if (-not $isSetting -and -not $isStart) { exit 0 }
+    $isKitStart = ($prompt -match '^\s*/kit-start(\s+|$)')
+    $isStart = (-not $isSetting) -and (-not $isKitStart) -and ($prompt -match '^\s*/start(\s+|$)')
+    if (-not $isSetting -and -not $isStart -and -not $isKitStart) { exit 0 }
 
     if ($isSetting) {
         $kitRoot = Resolve-KitScriptsRoot -Root $projectRoot
