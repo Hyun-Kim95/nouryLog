@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  useWindowDimensions,
-  type LayoutChangeEvent,
-} from 'react-native';
+import { Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import type { FulfillmentStatus } from '../lib/goalFulfillment';
 import type { Theme } from '../theme';
 import { STATS_COPY } from '../copy/stats';
@@ -37,11 +30,11 @@ type Props = {
 
 const PANEL_HEIGHT = 108;
 const DAY_LABEL_HEIGHT = 36;
-const COL_WIDTH = 52;
-const BAR_WIDTH = 14;
-const LABEL_GUTTER = 56;
+const BAR_WIDTH_MAX = 14;
+const LABEL_GUTTER = 64;
 const TOOLTIP_SLOT_HEIGHT = 88;
 const PROTEIN_TITLE_HEIGHT = 22;
+const MIN_GUTTER_LABEL_GAP = 28;
 
 type PanelGoals = {
   low: number | null;
@@ -182,36 +175,68 @@ function PanelGutterLabels({
   const bandBottomY =
     low != null && low > 0 ? PANEL_HEIGHT - valueToHeight(low, scaleMax) : null;
 
+  if (high == null || high <= 0 || bandTopY == null) return null;
+
+  if (low == null || low <= 0 || low === high || bandBottomY == null) {
+    return (
+      <Text
+        style={{
+          position: 'absolute',
+          right: 0,
+          top: panelTop + Math.max(0, bandTopY - 8),
+          color,
+          fontSize: 10,
+        }}
+      >
+        {Math.round(high)}
+        {unit}
+      </Text>
+    );
+  }
+
+  const bandHeight = bandBottomY - bandTopY;
+  if (bandHeight < MIN_GUTTER_LABEL_GAP) {
+    return (
+      <Text
+        style={{
+          position: 'absolute',
+          right: 0,
+          top: panelTop + bandTopY + bandHeight / 2 - 8,
+          color,
+          fontSize: 10,
+        }}
+      >
+        {STATS_COPY.goalRangeLabel(Math.round(low), Math.round(high), unit)}
+      </Text>
+    );
+  }
+
   return (
     <>
-      {high != null && high > 0 && bandTopY != null ? (
-        <Text
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: panelTop + Math.max(0, bandTopY - 8),
-            color,
-            fontSize: 10,
-          }}
-        >
-          {Math.round(high)}
-          {unit}
-        </Text>
-      ) : null}
-      {low != null && low > 0 && bandBottomY != null && low !== high ? (
-        <Text
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: panelTop + Math.min(PANEL_HEIGHT - 12, Math.max(0, bandBottomY - 8)),
-            color,
-            fontSize: 10,
-          }}
-        >
-          {Math.round(low)}
-          {unit}
-        </Text>
-      ) : null}
+      <Text
+        style={{
+          position: 'absolute',
+          right: 0,
+          top: panelTop + Math.max(0, bandTopY - 8),
+          color,
+          fontSize: 10,
+        }}
+      >
+        {Math.round(high)}
+        {unit}
+      </Text>
+      <Text
+        style={{
+          position: 'absolute',
+          right: 0,
+          top: panelTop + Math.min(PANEL_HEIGHT - 12, Math.max(0, bandBottomY - 8)),
+          color,
+          fontSize: 10,
+        }}
+      >
+        {Math.round(low)}
+        {unit}
+      </Text>
     </>
   );
 }
@@ -285,9 +310,8 @@ export function CalorieRangeChart({
   proteinGoalMaxG,
 }: Props) {
   const t = useTheme();
-  const { width: windowWidth } = useWindowDimensions();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [chartWidth, setChartWidth] = useState(0);
+  const [plotInnerWidth, setPlotInnerWidth] = useState(0);
 
   useEffect(() => {
     setSelectedDate(null);
@@ -327,76 +351,21 @@ export function CalorieRangeChart({
 
   if (!daily.length) return null;
 
-  const contentMinWidth = Math.max(
-    daily.length * COL_WIDTH,
-    Math.max(0, windowWidth - t.spacing.lg * 2 - LABEL_GUTTER - 32),
-  );
-
   const selected = daily.find((d) => d.date === selectedDate) ?? null;
-
   const calorieGoals: PanelGoals = { low: calorieLow, high: calorieHigh, scaleMax: calorieScaleMax };
   const proteinGoals: PanelGoals = { low: proteinLow, high: proteinHigh, scaleMax: proteinScaleMax };
 
-  const onChartLayout = (e: LayoutChangeEvent) => {
+  const onPlotLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
-    if (w > 0) setChartWidth(w);
+    if (w > 0) setPlotInnerWidth(w);
   };
 
-  const plotWidth = chartWidth > 0 ? chartWidth : contentMinWidth;
+  const colWidth = plotInnerWidth > 0 ? Math.floor(plotInnerWidth / daily.length) : 0;
+  const barWidth = colWidth > 0 ? Math.min(BAR_WIDTH_MAX, Math.max(8, Math.floor(colWidth * 0.45))) : BAR_WIDTH_MAX;
+  const plotWidth = plotInnerWidth > 0 ? plotInnerWidth : colWidth * daily.length;
   const proteinPanelTop = PANEL_HEIGHT + PROTEIN_TITLE_HEIGHT;
-  const labelsTop = proteinPanelTop + PANEL_HEIGHT;
-  const plotBlockHeight = labelsTop + DAY_LABEL_HEIGHT;
-
-  const renderBars = (
-    metric: 'calorie' | 'protein',
-    scaleMax: number,
-  ) => (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        height: PANEL_HEIGHT,
-        position: 'absolute',
-        left: 0,
-        bottom: 0,
-        width: plotWidth,
-      }}
-      pointerEvents="box-none"
-    >
-      {daily.map((p) => {
-        const kcal = Number(p.summary?.calories ?? 0);
-        const proteinG = Number(p.summary?.protein ?? 0);
-        const value = metric === 'calorie' ? kcal : proteinG;
-        const barH = p.hasRecords ? Math.max(6, valueToHeight(value, scaleMax)) : 6;
-        const status = normalizeStatus(p.calorieStatus, p.hasRecords);
-        const barColor =
-          metric === 'calorie'
-            ? statusColor(status, p.hasRecords, t)
-            : p.hasRecords
-              ? t.colors.info
-              : t.colors.border;
-        const isSelected = p.date === selectedDate;
-
-        return (
-          <View
-            key={`${p.date}-${metric}`}
-            style={{ width: COL_WIDTH, alignItems: 'center', justifyContent: 'flex-end', height: PANEL_HEIGHT }}
-            pointerEvents="none"
-          >
-            <View
-              style={{
-                width: BAR_WIDTH,
-                height: barH,
-                borderRadius: 4,
-                backgroundColor: barColor,
-                opacity: isSelected ? 1 : 0.92,
-              }}
-            />
-          </View>
-        );
-      })}
-    </View>
-  );
+  const columnBlockHeight = PANEL_HEIGHT + PROTEIN_TITLE_HEIGHT + PANEL_HEIGHT + DAY_LABEL_HEIGHT;
+  const plotBlockHeight = columnBlockHeight;
 
   return (
     <View style={{ gap: t.spacing.sm }}>
@@ -419,116 +388,171 @@ export function CalorieRangeChart({
             {STATS_COPY.caloriePanelTitle}
           </Text>
 
-          <ScrollView
-            horizontal
-            nestedScrollEnabled
-            showsHorizontalScrollIndicator={false}
-            style={{ flexGrow: 0 }}
-          >
-            <View style={{ minWidth: contentMinWidth }} onLayout={onChartLayout}>
-              <View style={{ height: plotBlockHeight, width: plotWidth, position: 'relative' }}>
-                <View style={{ height: PANEL_HEIGHT, position: 'relative' }}>
-                  <PanelBands
-                    goals={calorieGoals}
-                    plotWidth={plotWidth}
-                    bandColor={t.colors.primary}
-                    lineHighColor={t.colors.info}
-                    lineLowColor={t.colors.info}
-                  />
-                  {renderBars('calorie', calorieScaleMax)}
-                </View>
+          <View style={{ width: '100%' }} onLayout={onPlotLayout}>
+            <View style={{ height: plotBlockHeight, width: plotWidth || '100%', position: 'relative' }}>
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: plotWidth,
+                  height: PANEL_HEIGHT,
+                }}
+              >
+                <PanelBands
+                  goals={calorieGoals}
+                  plotWidth={plotWidth}
+                  bandColor={t.colors.primary}
+                  lineHighColor={t.colors.info}
+                  lineLowColor={t.colors.info}
+                />
+              </View>
 
-                <Text
-                  style={{
-                    position: 'absolute',
-                    top: PANEL_HEIGHT,
-                    left: 0,
-                    color: t.colors.fgMuted,
-                    fontSize: t.fontSize.caption,
-                    fontWeight: '600',
-                    height: PROTEIN_TITLE_HEIGHT,
-                    lineHeight: PROTEIN_TITLE_HEIGHT,
-                  }}
-                >
-                  {STATS_COPY.proteinPanelTitle}
-                </Text>
+              <Text
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: PANEL_HEIGHT,
+                  left: 0,
+                  color: t.colors.fgMuted,
+                  fontSize: t.fontSize.caption,
+                  fontWeight: '600',
+                  height: PROTEIN_TITLE_HEIGHT,
+                  lineHeight: PROTEIN_TITLE_HEIGHT,
+                }}
+              >
+                {STATS_COPY.proteinPanelTitle}
+              </Text>
 
-                <View
-                  style={{
-                    position: 'absolute',
-                    top: proteinPanelTop,
-                    left: 0,
-                    height: PANEL_HEIGHT,
-                    width: plotWidth,
-                  }}
-                >
-                  <PanelBands
-                    goals={proteinGoals}
-                    plotWidth={plotWidth}
-                    bandColor={t.colors.info}
-                    lineHighColor={t.colors.info}
-                    lineLowColor={t.colors.fgMuted}
-                  />
-                  {renderBars('protein', proteinScaleMax)}
-                </View>
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: proteinPanelTop,
+                  left: 0,
+                  width: plotWidth,
+                  height: PANEL_HEIGHT,
+                }}
+              >
+                <PanelBands
+                  goals={proteinGoals}
+                  plotWidth={plotWidth}
+                  bandColor={t.colors.info}
+                  lineHighColor={t.colors.info}
+                  lineLowColor={t.colors.fgMuted}
+                />
+              </View>
 
-                <View
-                  style={{
-                    position: 'absolute',
-                    top: labelsTop,
-                    left: 0,
-                    flexDirection: 'row',
-                    height: DAY_LABEL_HEIGHT,
-                    alignItems: 'center',
-                  }}
-                >
-                  {daily.map((p) => {
-                    const isSelected = p.date === selectedDate;
-                    const kcal = Math.round(Number(p.summary?.calories ?? 0));
-                    const proteinG = Math.round(Number(p.summary?.protein ?? 0));
-                    return (
-                      <Pressable
-                        key={p.date}
-                        onPress={() => setSelectedDate((prev) => (prev === p.date ? null : p.date))}
-                        style={{ width: COL_WIDTH, alignItems: 'center', paddingHorizontal: 2 }}
-                        accessibilityRole="button"
-                        accessibilityLabel={STATS_COPY.calorieBarA11y(
-                          dayOfMonth(p.date) || 0,
-                          kcal,
-                          proteinG,
-                        )}
-                      >
-                        <View
-                          style={{
-                            minWidth: 26,
-                            minHeight: 26,
-                            paddingHorizontal: 4,
-                            paddingVertical: 2,
-                            borderRadius: 13,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: isSelected ? t.colors.primary : 'transparent',
-                          }}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  height: columnBlockHeight,
+                  width: plotWidth || '100%',
+                }}
+              >
+                {colWidth > 0
+                  ? daily.map((p) => {
+                      const kcal = Number(p.summary?.calories ?? 0);
+                      const proteinG = Number(p.summary?.protein ?? 0);
+                      const status = normalizeStatus(p.calorieStatus, p.hasRecords);
+                      const kcalBarH = p.hasRecords
+                        ? Math.max(6, valueToHeight(kcal, calorieScaleMax))
+                        : 6;
+                      const proteinBarH = p.hasRecords
+                        ? Math.max(6, valueToHeight(proteinG, proteinScaleMax))
+                        : 6;
+                      const isSelected = p.date === selectedDate;
+
+                      return (
+                        <Pressable
+                          key={p.date}
+                          onPress={() => setSelectedDate((prev) => (prev === p.date ? null : p.date))}
+                          style={{ width: colWidth, height: columnBlockHeight }}
+                          accessibilityRole="button"
+                          accessibilityLabel={STATS_COPY.calorieBarA11y(
+                            dayOfMonth(p.date) || 0,
+                            Math.round(kcal),
+                            Math.round(proteinG),
+                          )}
                         >
-                          <Text
+                          <View
                             style={{
-                              color: isSelected ? t.colors.primaryFg : t.colors.fgSubtle,
-                              fontSize: 10,
-                              fontWeight: isSelected ? '700' : '500',
-                              textAlign: 'center',
+                              height: PANEL_HEIGHT,
+                              justifyContent: 'flex-end',
+                              alignItems: 'center',
                             }}
-                            numberOfLines={2}
                           >
-                            {axisLabel(p)}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                            <View
+                              style={{
+                                width: barWidth,
+                                height: kcalBarH,
+                                borderRadius: 4,
+                                backgroundColor: statusColor(status, p.hasRecords, t),
+                                opacity: isSelected ? 1 : 0.92,
+                              }}
+                            />
+                          </View>
+                          <View style={{ height: PROTEIN_TITLE_HEIGHT }} />
+                          <View
+                            style={{
+                              height: PANEL_HEIGHT,
+                              justifyContent: 'flex-end',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <View
+                              style={{
+                                width: barWidth,
+                                height: proteinBarH,
+                                borderRadius: 4,
+                                backgroundColor: p.hasRecords ? t.colors.info : t.colors.border,
+                                opacity: isSelected ? 1 : 0.92,
+                              }}
+                            />
+                          </View>
+                          <View
+                            style={{
+                              height: DAY_LABEL_HEIGHT,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              paddingHorizontal: 2,
+                            }}
+                          >
+                            <View
+                              style={{
+                                minWidth: 22,
+                                minHeight: 24,
+                                paddingHorizontal: 3,
+                                paddingVertical: 2,
+                                borderRadius: 12,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: isSelected ? t.colors.primary : 'transparent',
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: isSelected ? t.colors.primaryFg : t.colors.fgSubtle,
+                                  fontSize: 9,
+                                  fontWeight: isSelected ? '700' : '500',
+                                  textAlign: 'center',
+                                }}
+                                numberOfLines={2}
+                                adjustsFontSizeToFit
+                                minimumFontScale={0.75}
+                              >
+                                {axisLabel(p)}
+                              </Text>
+                            </View>
+                          </View>
+                        </Pressable>
+                      );
+                    })
+                  : null}
               </View>
             </View>
-          </ScrollView>
+          </View>
         </View>
 
         <View

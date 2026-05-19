@@ -4,6 +4,7 @@ import {
   STATS_WINDOW_SIZE,
   bucketGoalDate,
   listStatsBuckets,
+  todayAnchorKst,
   type StatsBucket,
   type StatsPeriodBounds,
 } from './statsPeriod.js';
@@ -48,6 +49,17 @@ function roundNutritionSum(sum: NutritionSum): NutritionSum {
 
 export function averageNutritionSum(sum: NutritionSum, recordedDays: number): NutritionSum {
   return roundNutritionSum(divideNutritionSum(sum, recordedDays));
+}
+
+/** 차트 `daily[].summary`: 일=합계, 주·월=버킷 내 기록일 일평균 */
+export function bucketChartSummary(
+  range: 'day' | 'week' | 'month',
+  bucketSum: NutritionSum,
+  recordedDaysInBucket: number,
+): NutritionSum {
+  if (recordedDaysInBucket <= 0) return { ...ZERO };
+  if (range === 'day') return bucketSum;
+  return averageNutritionSum(bucketSum, recordedDaysInBucket);
 }
 
 export function averageByMealSlot(
@@ -124,10 +136,12 @@ export async function buildStatsSeries(
   const byMealSlot: Record<string, NutritionSum> = {};
   const bucketSums = new Map<string, NutritionSum>();
   const bucketHasRecords = new Map<string, boolean>();
+  const bucketRecordedDays = new Map<string, Set<string>>();
 
   for (const b of buckets) {
     bucketSums.set(b.date, { ...ZERO });
     bucketHasRecords.set(b.date, false);
+    bucketRecordedDays.set(b.date, new Set());
   }
 
   for (const m of meals) {
@@ -138,7 +152,14 @@ export async function buildStatsSeries(
     if (!bucketKey) continue;
     bucketSums.set(bucketKey, addSum(bucketSums.get(bucketKey) ?? { ...ZERO }, m));
     bucketHasRecords.set(bucketKey, true);
+    bucketRecordedDays.get(bucketKey)!.add(todayAnchorKst(m.consumedAt));
   }
+
+  const bucketSummary = (bucketDate: string): NutritionSum => {
+    const raw = bucketSums.get(bucketDate) ?? { ...ZERO };
+    const days = bucketRecordedDays.get(bucketDate)?.size ?? 0;
+    return bucketChartSummary(range, raw, days);
+  };
 
   const goalDates = buckets.map((b) => bucketGoalDate(b, range));
 
@@ -157,7 +178,7 @@ export async function buildStatsSeries(
   let countedBuckets = 0;
 
   const daily: StatsSeriesPoint[] = buckets.map((b) => {
-    const summary = bucketSums.get(b.date) ?? { ...ZERO };
+    const summary = bucketSummary(b.date);
     const hasRecords = bucketHasRecords.get(b.date) === true;
     const goalDate = bucketGoalDate(b, range);
     const goals = effectiveByDate.get(goalDate) ?? null;
