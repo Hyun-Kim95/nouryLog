@@ -13,7 +13,7 @@ export type StatsPeriodBounds = {
 };
 
 export type StatsBucket = {
-  /** 버킷 키: YYYY-MM-DD (일·주 월요일) 또는 YYYY-MM-01 (월) */
+  /** 버킷 키: YYYY-MM-DD (일·주 일요일) 또는 YYYY-MM-01 (월) */
   date: string;
   label: string;
   from: Date;
@@ -104,26 +104,26 @@ function formatShortMdSlash(ymd: string): string {
   return `${m}/${d}`;
 }
 
-export function mondayOfWeekYmd(anchorYmd: string): string {
+/** 앵커가 속한 주의 일요일(주 시작) YMD */
+export function sundayOfWeekYmd(anchorYmd: string): string {
   const { y, m, d } = parseYmdParts(anchorYmd);
   const dow = weekdaySun0(y, m, d);
-  const daysFromMonday = (dow + 6) % 7;
-  return addDaysYmd(anchorYmd, -daysFromMonday);
+  return addDaysYmd(anchorYmd, -dow);
 }
 
-/** 월요일이 속한 달 기준 N번째 월요일 → `4월 5주차` */
-export function formatWeekLabelKst(mondayYmd: string): string {
-  const { y, m } = parseYmdParts(mondayYmd);
-  if (weekdaySun0(y, m, parseYmdParts(mondayYmd).d) !== 1) {
-    throw new Error('not_monday');
+/** 일요일이 속한 달 기준 N번째 일요일 → `4월 5주차` */
+export function formatWeekLabelKst(sundayYmd: string): string {
+  const { y, m, d } = parseYmdParts(sundayYmd);
+  if (weekdaySun0(y, m, d) !== 0) {
+    throw new Error('not_sunday');
   }
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
   let weekIndex = 0;
   for (let day = 1; day <= lastDay; day++) {
-    if (weekdaySun0(y, m, day) === 1) {
+    if (weekdaySun0(y, m, day) === 0) {
       weekIndex += 1;
       const ymd = formatYmd(y, m, day);
-      if (ymd === mondayYmd) {
+      if (ymd === sundayYmd) {
         return `${m}월 ${weekIndex}주차`;
       }
     }
@@ -160,10 +160,10 @@ export function listStatsBuckets(range: 'day' | 'week' | 'month', anchorYmd: str
   }
 
   if (range === 'week') {
-    const endMonday = mondayOfWeekYmd(anchorYmd);
-    const startMonday = addDaysYmd(endMonday, -(STATS_WINDOW_SIZE - 1) * 7);
+    const endSunday = sundayOfWeekYmd(anchorYmd);
+    const startSunday = addDaysYmd(endSunday, -(STATS_WINDOW_SIZE - 1) * 7);
     const buckets: StatsBucket[] = [];
-    let cursor = startMonday;
+    let cursor = startSunday;
     for (let i = 0; i < STATS_WINDOW_SIZE; i++) {
       const mp = parseYmdParts(cursor);
       const from = kstMidnightUtc(mp.y, mp.m, mp.d);
@@ -262,17 +262,17 @@ export function boundsForRange(range: 'day' | 'week' | 'month', anchorYmd: strin
   }
 
   if (range === 'week') {
-    const monday = mondayOfWeekYmd(anchorYmd);
-    const sunday = addDaysYmd(monday, 6);
-    const mp = parseYmdParts(monday);
-    const from = kstMidnightUtc(mp.y, mp.m, mp.d);
-    const nextWeek = parseYmdParts(addDaysYmd(monday, 7));
+    const weekStart = sundayOfWeekYmd(anchorYmd);
+    const saturday = addDaysYmd(weekStart, 6);
+    const sp = parseYmdParts(weekStart);
+    const from = kstMidnightUtc(sp.y, sp.m, sp.d);
+    const nextWeek = parseYmdParts(addDaysYmd(weekStart, 7));
     const toExclusive = kstMidnightUtc(nextWeek.y, nextWeek.m, nextWeek.d);
     return {
       anchor: anchorYmd,
       from,
       toExclusive,
-      label: `${formatShortMd(monday)} – ${formatShortMd(sunday)}`,
+      label: `${formatShortMd(weekStart)} – ${formatShortMd(saturday)}`,
     };
   }
 

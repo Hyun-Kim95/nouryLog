@@ -9,7 +9,7 @@ import {
   isPeriodInFuture,
   kstMidnightUtc,
   listStatsBuckets,
-  mondayOfWeekYmd,
+  sundayOfWeekYmd,
   parseAnchorDate,
   todayAnchorKst,
 } from './statsPeriod.js';
@@ -36,11 +36,16 @@ describe('statsPeriod', () => {
     assert.match(b.label, /2026년 5월 16일/);
   });
 
-  it('boundsForRange week is Mon–Sun containing anchor', () => {
+  it('boundsForRange week is Sun–Sat containing anchor', () => {
     const b = boundsForRange('week', '2026-05-16');
-    assert.equal(b.from.toISOString(), '2026-05-10T15:00:00.000Z');
-    assert.equal(b.toExclusive.toISOString(), '2026-05-17T15:00:00.000Z');
-    assert.match(b.label, /5월 11일 – 5월 17일/);
+    assert.equal(b.from.toISOString(), '2026-05-09T15:00:00.000Z');
+    assert.equal(b.toExclusive.toISOString(), '2026-05-16T15:00:00.000Z');
+    assert.match(b.label, /5월 10일 – 5월 16일/);
+  });
+
+  it('sundayOfWeekYmd returns Sunday for anchor in same week', () => {
+    assert.equal(sundayOfWeekYmd('2026-05-19'), '2026-05-17');
+    assert.equal(sundayOfWeekYmd('2026-05-17'), '2026-05-17');
   });
 
   it('boundsForRange month covers full KST month', () => {
@@ -50,9 +55,10 @@ describe('statsPeriod', () => {
     assert.equal(b.label, '2026년 5월');
   });
 
-  it('formatWeekLabelKst uses Monday index within month', () => {
-    assert.equal(formatWeekLabelKst('2026-04-27'), '4월 4주차');
-    assert.equal(formatWeekLabelKst('2026-05-04'), '5월 1주차');
+  it('formatWeekLabelKst uses Sunday index within month', () => {
+    assert.equal(formatWeekLabelKst('2026-04-26'), '4월 4주차');
+    assert.equal(formatWeekLabelKst('2026-05-03'), '5월 1주차');
+    assert.equal(formatWeekLabelKst('2026-05-17'), '5월 3주차');
   });
 
   it('listStatsBuckets day returns 6 days ending at anchor', () => {
@@ -65,10 +71,16 @@ describe('statsPeriod', () => {
   it('listStatsBuckets week returns 6 weeks ending at anchor week', () => {
     const buckets = listStatsBuckets('week', '2026-05-16');
     assert.equal(buckets.length, STATS_WINDOW_SIZE);
-    assert.equal(buckets[5]!.date, mondayOfWeekYmd('2026-05-16'));
+    assert.equal(buckets[5]!.date, sundayOfWeekYmd('2026-05-16'));
     assert.equal(buckets[0]!.date, addDaysYmd(buckets[5]!.date, -35));
     assert.equal(buckets[0]!.label, '4월 1주차');
     assert.equal(buckets[5]!.label, '5월 2주차');
+  });
+
+  it('listStatsBuckets week for May 19 anchor ends on week of May 17', () => {
+    const buckets = listStatsBuckets('week', '2026-05-19');
+    assert.equal(buckets[5]!.date, '2026-05-17');
+    assert.equal(buckets[5]!.label, '5월 3주차');
   });
 
   it('listStatsBuckets month returns 6 months ending at anchor month', () => {

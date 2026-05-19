@@ -73,6 +73,11 @@ export function averageByMealSlot(
   return out;
 }
 
+/** 윈도우 내 distinct KST 기록 일수 */
+export function countWindowRecordedDays(mealYmds: Iterable<string>): number {
+  return new Set(mealYmds).size;
+}
+
 type ProfileGoals = GoalSnapshot;
 
 function profileToSnapshot(profile: ProfileGoals | null): GoalSnapshot | null {
@@ -137,6 +142,8 @@ export async function buildStatsSeries(
   const bucketSums = new Map<string, NutritionSum>();
   const bucketHasRecords = new Map<string, boolean>();
   const bucketRecordedDays = new Map<string, Set<string>>();
+  const windowRecordedDays = new Set<string>();
+  const dailySums = new Map<string, NutritionSum>();
 
   for (const b of buckets) {
     bucketSums.set(b.date, { ...ZERO });
@@ -148,11 +155,15 @@ export async function buildStatsSeries(
     const slotKey = m.mealSlot ?? 'UNSPECIFIED';
     byMealSlot[slotKey] = addSum(byMealSlot[slotKey] ?? { ...ZERO }, m);
 
+    const ymd = todayAnchorKst(m.consumedAt);
+    windowRecordedDays.add(ymd);
+    dailySums.set(ymd, addSum(dailySums.get(ymd) ?? { ...ZERO }, m));
+
     const bucketKey = findBucketForInstant(buckets, m.consumedAt);
     if (!bucketKey) continue;
     bucketSums.set(bucketKey, addSum(bucketSums.get(bucketKey) ?? { ...ZERO }, m));
     bucketHasRecords.set(bucketKey, true);
-    bucketRecordedDays.get(bucketKey)!.add(todayAnchorKst(m.consumedAt));
+    bucketRecordedDays.get(bucketKey)!.add(ymd);
   }
 
   const bucketSummary = (bucketDate: string): NutritionSum => {
@@ -173,10 +184,6 @@ export async function buildStatsSeries(
     profileToSnapshot(profile),
   );
 
-  let calorieMetBuckets = 0;
-  let proteinMetBuckets = 0;
-  let countedBuckets = 0;
-
   const daily: StatsSeriesPoint[] = buckets.map((b) => {
     const summary = bucketSummary(b.date);
     const hasRecords = bucketHasRecords.get(b.date) === true;
@@ -196,16 +203,13 @@ export async function buildStatsSeries(
     let proteinMet = false;
     let calorieStatus: FulfillmentStatus = 'none';
     if (hasRecords) {
-      countedBuckets += 1;
       if (calorieGoal != null) {
         const f = computeFulfillment('calorie', summary.calories, calorieGoal, profileCtx, calorieBounds);
         calorieStatus = f.status;
         calorieMet = f.status === 'met';
-        if (calorieMet) calorieMetBuckets += 1;
       }
       if (proteinGoal != null) {
         proteinMet = isGoalMet('protein', summary.protein, proteinGoal, profileCtx, proteinBounds);
-        if (proteinMet) proteinMetBuckets += 1;
       }
     }
     return {
@@ -220,20 +224,55 @@ export async function buildStatsSeries(
 
   const pct = (met: number, counted: number) => (counted > 0 ? Math.round((met / counted) * 100) : 0);
 
+  const dayGoalDates = [...windowRecordedDays].sort();
+  const dayGoalsByDate = buildEffectiveGoalsByDate(
+    entriesAsc,
+    dayGoalDates,
+    profileToSnapshot(profile),
+  );
+
+  let calorieMetDays = 0;
+  let proteinMetDays = 0;
+  const countedDays = dayGoalDates.length;
+
+  for (const ymd of dayGoalDates) {
+    const sum = dailySums.get(ymd) ?? { ...ZERO };
+    const goals = dayGoalsByDate.get(ymd) ?? null;
+    const profileCtx = goals ? { goal: goals.goal } : null;
+    const calorieGoal = goals?.calorieGoalKcal ?? null;
+    const proteinGoal = goals?.proteinGoalG ?? null;
+    const calorieBounds = goals
+      ? { min: goals.calorieGoalMinKcal, max: goals.calorieGoalMaxKcal }
+      : undefined;
+    const proteinBounds = goals
+      ? { min: goals.proteinGoalMinG, max: goals.proteinGoalMaxG }
+      : undefined;
+
+    if (calorieGoal != null) {
+      const f = computeFulfillment('calorie', sum.calories, calorieGoal, profileCtx, calorieBounds);
+      if (f.status === 'met') calorieMetDays += 1;
+    }
+    if (proteinGoal != null) {
+      if (isGoalMet('protein', sum.protein, proteinGoal, profileCtx, proteinBounds)) {
+        proteinMetDays += 1;
+      }
+    }
+  }
+
   return {
     byMealSlot,
     daily,
-    periodMeta: { recordedDays: countedBuckets, calendarDays: STATS_WINDOW_SIZE },
+    periodMeta: { recordedDays: windowRecordedDays.size, calendarDays: STATS_WINDOW_SIZE },
     goalAchievement: {
       calorie: {
-        metDays: calorieMetBuckets,
-        countedDays: countedBuckets,
-        pct: pct(calorieMetBuckets, countedBuckets),
+        metDays: calorieMetDays,
+        countedDays,
+        pct: pct(calorieMetDays, countedDays),
       },
       protein: {
-        metDays: proteinMetBuckets,
-        countedDays: countedBuckets,
-        pct: pct(proteinMetBuckets, countedBuckets),
+        metDays: proteinMetDays,
+        countedDays,
+        pct: pct(proteinMetDays, countedDays),
       },
     },
   };

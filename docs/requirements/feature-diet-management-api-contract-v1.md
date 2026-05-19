@@ -139,7 +139,7 @@ tags: [api, contract, backend, frontend]
 - `anchor` (선택): `YYYY-MM-DD`, **Asia/Seoul** 달력 날짜. 생략 시 KST “오늘”. `day`/`week`/`month`에서 anchor가 속한 달력 기간을 집계한다.
 - `meal`: 최근 24시간 롤링(anchor 무시)
 - `day`: anchor 날짜 하루(00:00~다음날 00:00 KST, `toExclusive` 미포함)
-- `week`: anchor가 포함된 주 **월요일~일요일** (KST)
+- `week`: anchor가 포함된 주 **일요일~토요일** (KST)
 - `month`: anchor가 속한 달 **1일~다음달 1일** (KST)
 - 집계: `consumedAt >= period.from` AND `consumedAt < period.toExclusive`
 - 미래 기간: `period.from`이 KST 내일 00:00 이후이면 `422`, `field: anchor`
