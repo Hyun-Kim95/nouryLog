@@ -11,6 +11,7 @@ import { isAccessTokenValid } from './src/lib/sessionBootstrap';
 import { ThemeProvider } from './src/theme';
 import { DevTogglesProvider } from './src/dev/devToggles';
 import { ToastProvider } from './src/toast/ToastProvider';
+import { ensureMobileAdsInitialized } from './src/ads/initMobileAds';
 import { setupNotifications } from './src/notifications/setup';
 
 export default function App() {
@@ -21,6 +22,9 @@ export default function App() {
     void (async () => {
       try {
         await setupNotifications();
+        await ensureMobileAdsInitialized().catch((e) => {
+          if (__DEV__) console.warn('[App] AdMob init failed', e);
+        });
         let token = await getAccessToken();
         if (!token) {
           setInitialRoute('Login');

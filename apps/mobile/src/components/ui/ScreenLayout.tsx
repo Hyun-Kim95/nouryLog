@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
@@ -10,6 +11,8 @@ export function ScreenLayout({
   scroll = true,
   loading,
   headerRight,
+  onScroll,
+  scrollEventThrottle = 16,
 }: {
   title?: string;
   subtitle?: string;
@@ -17,6 +20,8 @@ export function ScreenLayout({
   scroll?: boolean;
   loading?: boolean;
   headerRight?: ReactNode;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  scrollEventThrottle?: number;
 }) {
   const t = useTheme();
 
@@ -53,7 +58,11 @@ export function ScreenLayout({
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.bg }} edges={['top', 'left', 'right']}>
       {scroll ? (
-        <ScrollView contentContainerStyle={contentStyle}>
+        <ScrollView
+          contentContainerStyle={contentStyle}
+          onScroll={onScroll}
+          scrollEventThrottle={scrollEventThrottle}
+        >
           {header}
           {body}
         </ScrollView>

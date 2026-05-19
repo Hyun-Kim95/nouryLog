@@ -35,6 +35,7 @@ export const LOG_COPY = {
   todayTitle: '오늘',
   todayEmpty: '오늘 기록이 없어요.',
   pastTitle: '이전 기록',
+  pastLoadingMore: '이전 기록을 불러오는 중…',
   sectionRecent: '최근 먹은 음식',
   recentHint: '탭하면 아래 입력란에 채워져요.',
   protein: '단백질 (g)',

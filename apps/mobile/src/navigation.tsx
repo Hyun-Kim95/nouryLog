@@ -1,7 +1,12 @@
 import type { ComponentProps } from 'react';
+import { useCallback } from 'react';
+import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useFocusEffect } from '@react-navigation/native';
+import { AdsGateProvider, useAdsGate } from './ads/AdsGateContext';
+import { BottomBannerAd } from './ads/BottomBannerAd';
 import { LoginScreen } from './screens/LoginScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { LogScreen } from './screens/LogScreen';
@@ -47,11 +52,20 @@ const TAB_ICON: Record<string, { focused: IoniconName; unfocused: IoniconName }>
   Settings: { focused: 'settings', unfocused: 'settings-outline' },
 };
 
-function MainTabs() {
+function MainTabsInner() {
   const t = useTheme();
+  const { showBottomBanner, refresh } = useAdsGate();
+
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
+
   return (
     <Tabs.Navigator
       screenOptions={({ route }) => ({
+        headerShown: false,
         tabBarIcon: ({ focused, color, size }) => {
           const pair = TAB_ICON[route.name];
           const name = pair ? (focused ? pair.focused : pair.unfocused) : 'ellipse-outline';
@@ -65,6 +79,12 @@ function MainTabs() {
           borderTopColor: t.colors.border,
         },
       })}
+      tabBar={(props) => (
+        <View>
+          {showBottomBanner ? <BottomBannerAd /> : null}
+          <BottomTabBar {...props} />
+        </View>
+      )}
     >
       <Tabs.Screen name="Home" component={HomeScreen} options={{ title: '홈' }} />
       <Tabs.Screen name="Log" component={LogScreen} options={{ title: '기록' }} />
@@ -72,6 +92,14 @@ function MainTabs() {
       <Tabs.Screen name="Sub" component={SubscriptionScreen} options={{ title: '구독' }} />
       <Tabs.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
     </Tabs.Navigator>
+  );
+}
+
+function MainTabs() {
+  return (
+    <AdsGateProvider>
+      <MainTabsInner />
+    </AdsGateProvider>
   );
 }
 

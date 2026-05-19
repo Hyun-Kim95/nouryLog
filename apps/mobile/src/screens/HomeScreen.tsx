@@ -29,8 +29,6 @@ type Ent = {
   nextPaywallTrigger: 'none' | 'ocr_remaining_1' | 'ocr_exhausted';
 };
 
-type Ads = { showBottomBanner: boolean; reason: string };
-
 export function HomeScreen() {
   const t = useTheme();
   const toast = useToast();
@@ -38,7 +36,6 @@ export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [ent, setEnt] = useState<Ent | null>(null);
-  const [ads, setAds] = useState<Ads | null>(null);
   const [intake, setIntake] = useState<Awaited<ReturnType<typeof fetchTodayIntake>> | null>(null);
   const [goals, setGoals] = useState<Awaited<ReturnType<typeof fetchTodayGoals>> | null>(null);
   const [todayMeals, setTodayMeals] = useState<MealRow[]>([]);
@@ -58,7 +55,6 @@ export function HomeScreen() {
       const [settled, weightR, dismissedYmd] = await Promise.all([
         Promise.allSettled([
           apiFetch<Ent>('/me/billing/entitlements', { token }),
-          apiFetch<Ads>('/me/ads/status', { token }),
           fetchTodayIntake(token),
           fetchTodayGoals(token),
           listMeals(token, { page: 1, size: 100, from, to }),
@@ -67,12 +63,11 @@ export function HomeScreen() {
         getWeightPromptDismissedYmd(),
       ]);
 
-      const [entR, adsR, intakeR, goalsR, mealsR] = settled;
-      const rejected = [entR, adsR, intakeR, goalsR, mealsR].filter((r) => r.status === 'rejected');
+      const [entR, intakeR, goalsR, mealsR] = settled;
+      const rejected = [entR, intakeR, goalsR, mealsR].filter((r) => r.status === 'rejected');
       if (rejected.some((r) => r.status === 'rejected' && isAuthDenied(r.reason))) return;
 
       if (entR.status === 'fulfilled') setEnt(entR.value);
-      if (adsR.status === 'fulfilled') setAds(adsR.value);
       if (intakeR.status === 'fulfilled') setIntake(intakeR.value);
       if (goalsR.status === 'fulfilled') setGoals(goalsR.value);
       if (mealsR.status === 'fulfilled') setTodayMeals(mealsR.value.items ?? []);
@@ -84,7 +79,7 @@ export function HomeScreen() {
         setWeightModalVisible(showModal);
       }
 
-      if (rejected.length === 5) {
+      if (rejected.length === 4) {
         const reason = rejected[0].reason;
         setErr(reason instanceof Error ? reason.message : HOME_COPY.loadError);
       }
@@ -213,15 +208,6 @@ export function HomeScreen() {
         <Card>
           <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{HOME_COPY.emptyGoals}</Text>
           <PrimaryButton title={HOME_COPY.profileCta} onPress={() => navigation.navigate('ProfileEdit')} />
-        </Card>
-      ) : null}
-
-      {ads ? (
-        <Card dashed={ads.showBottomBanner}>
-          <CardTitle>광고</CardTitle>
-          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
-            {ads.showBottomBanner ? HOME_COPY.adBanner : HOME_COPY.adHidden}
-          </Text>
         </Card>
       ) : null}
 

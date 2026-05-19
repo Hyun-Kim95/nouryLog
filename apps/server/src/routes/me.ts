@@ -1475,8 +1475,8 @@ meRouter.post('/me/billing/checkout', async (req, res) => {
   }
   await prisma.billing.upsert({
     where: { userId },
-    create: { userId, ocrPaidEnabled: true },
-    update: { ocrPaidEnabled: true },
+    create: { userId, ocrPaidEnabled: true, adFreeEnabled: true },
+    update: { ocrPaidEnabled: true, adFreeEnabled: true },
   });
   res.json({ ok: true });
 });

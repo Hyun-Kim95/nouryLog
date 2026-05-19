@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -6,6 +6,8 @@ import {
   Pressable,
   Text,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { apiFetch, isAuthDenied } from '../api';
@@ -38,11 +40,8 @@ import { LOG_COPY } from '../copy/log';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { formatMacroLine } from '../lib/formatNutrition';
 import { parseManualNutrition } from '../lib/manualNutrition';
-import {
-  filterOlderThanToday,
-  groupMealsForTodayTimeline,
-  mealRowSubtitle,
-} from '../lib/mealTimeline';
+import { localDayBounds, localDayStartExclusiveUpperBound } from '../lib/dateRange';
+import { groupMealsForTodayTimeline, mealRowSubtitle } from '../lib/mealTimeline';
 import {
   defaultMealSlotForNow,
   defaultSnackPlacementForNow,
@@ -79,6 +78,8 @@ function baselineSummary(tpl: FoodTemplateItem): string {
   return `${tpl.referenceAmount}${unitHint(tpl)}`;
 }
 
+const PAST_PAGE_SIZE = 10;
+
 const EMPTY_FORM = {
   name: '',
   calories: '',
@@ -96,6 +97,11 @@ export function LogScreen() {
   const t = useTheme();
   const toast = useToast();
   const [items, setItems] = useState<MealRow[]>([]);
+  const [pastMeals, setPastMeals] = useState<MealRow[]>([]);
+  const [pastPage, setPastPage] = useState(1);
+  const [pastHasMore, setPastHasMore] = useState(false);
+  const [pastLoadingMore, setPastLoadingMore] = useState(false);
+  const pastLoadMoreLock = useRef(false);
   const [recentMeals, setRecentMeals] = useState<MealRow[]>([]);
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
@@ -166,9 +172,18 @@ export function LogScreen() {
     const token = await ensureAccessToken();
     if (!token) return;
     try {
-      const all = await listMeals(token, { page: 1, size: 100 });
-      setItems(all.items ?? []);
-      const recent = await listMeals(token, { page: 1, size: 30, excludeFoodTemplate: true });
+      const { from, to } = localDayBounds();
+      const pastTo = localDayStartExclusiveUpperBound();
+      const [todayRes, pastRes, recent] = await Promise.all([
+        listMeals(token, { page: 1, size: 100, from, to }),
+        listMeals(token, { page: 1, size: PAST_PAGE_SIZE, to: pastTo }),
+        listMeals(token, { page: 1, size: 30, excludeFoodTemplate: true }),
+      ]);
+      setItems(todayRes.items ?? []);
+      const pastItems = pastRes.items ?? [];
+      setPastMeals(pastItems);
+      setPastPage(1);
+      setPastHasMore(pastItems.length < (pastRes.total ?? 0));
       const seen = new Set<string>();
       const deduped: MealRow[] = [];
       for (const m of recent.items ?? []) {
@@ -182,9 +197,49 @@ export function LogScreen() {
     } catch (e) {
       if (isAuthDenied(e)) return;
       setItems([]);
+      setPastMeals([]);
+      setPastHasMore(false);
       setRecentMeals([]);
     }
   }, []);
+
+  const loadMorePast = useCallback(async () => {
+    if (pastLoadMoreLock.current || !pastHasMore) return;
+    const token = await getAccessToken();
+    if (!token) return;
+    pastLoadMoreLock.current = true;
+    setPastLoadingMore(true);
+    try {
+      const nextPage = pastPage + 1;
+      const res = await listMeals(token, {
+        page: nextPage,
+        size: PAST_PAGE_SIZE,
+        to: localDayStartExclusiveUpperBound(),
+      });
+      const newItems = res.items ?? [];
+      setPastMeals((prev) => {
+        const merged = [...prev, ...newItems];
+        setPastHasMore(merged.length < (res.total ?? 0));
+        return merged;
+      });
+      setPastPage(nextPage);
+    } catch (e) {
+      if (isAuthDenied(e)) return;
+    } finally {
+      setPastLoadingMore(false);
+      pastLoadMoreLock.current = false;
+    }
+  }, [pastHasMore, pastPage]);
+
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (!pastHasMore || pastLoadingMore) return;
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      const nearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 120;
+      if (nearBottom) void loadMorePast();
+    },
+    [pastHasMore, pastLoadingMore, loadMorePast],
+  );
 
   useFocusReload(
     useCallback(
@@ -567,7 +622,7 @@ export function LogScreen() {
 
   return (
     <>
-      <ScreenLayout title={LOG_COPY.title} subtitle={LOG_COPY.subtitle}>
+      <ScreenLayout title={LOG_COPY.title} subtitle={LOG_COPY.subtitle} onScroll={handleScroll}>
         {ent ? <Chip label={LOG_COPY.photoAnalysisChip(ent.ocrQuotaUsed, ent.ocrQuotaLimit)} /> : null}
 
         {ent?.nextPaywallTrigger === 'ocr_remaining_1' ? (
@@ -738,7 +793,6 @@ export function LogScreen() {
         {(() => {
           const timeline = groupMealsForTodayTimeline(items);
           const hasToday = timeline.some((s) => s.items.length > 0);
-          const pastItems = filterOlderThanToday(items).slice(0, 20);
           return (
             <>
               <Card>
@@ -782,10 +836,10 @@ export function LogScreen() {
                   )
                 )}
               </Card>
-              {pastItems.length > 0 ? (
+              {pastMeals.length > 0 ? (
                 <Card>
                   <CardTitle>{LOG_COPY.pastTitle}</CardTitle>
-                  {pastItems.map((item) => (
+                  {pastMeals.map((item) => (
                     <Pressable
                       key={item.mealId}
                       onPress={() => startEditMeal(item)}
@@ -803,6 +857,14 @@ export function LogScreen() {
                       </Text>
                     </Pressable>
                   ))}
+                  {pastLoadingMore ? (
+                    <View style={{ paddingTop: t.spacing.sm, alignItems: 'center' }}>
+                      <ActivityIndicator color={t.colors.primary} />
+                      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, marginTop: t.spacing.xs }}>
+                        {LOG_COPY.pastLoadingMore}
+                      </Text>
+                    </View>
+                  ) : null}
                 </Card>
               ) : null}
             </>

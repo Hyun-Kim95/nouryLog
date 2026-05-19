@@ -63,14 +63,14 @@ export async function listMeals(
     to?: string;
     excludeFoodTemplate?: boolean;
   },
-): Promise<{ items: MealRow[] }> {
+): Promise<{ items: MealRow[]; page: number; size: number; total: number }> {
   const q = new URLSearchParams();
   q.set('page', String(params.page ?? 1));
   q.set('size', String(params.size ?? 15));
   if (params.from) q.set('from', params.from);
   if (params.to) q.set('to', params.to);
   if (params.excludeFoodTemplate) q.set('excludeFoodTemplate', 'true');
-  return apiFetch<{ items: MealRow[] }>(`/meals?${q}`, { token });
+  return apiFetch<{ items: MealRow[]; page: number; size: number; total: number }>(`/meals?${q}`, { token });
 }
 
 export async function createMeal(token: string, body: Record<string, unknown>): Promise<void> {

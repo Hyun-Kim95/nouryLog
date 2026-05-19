@@ -4,6 +4,7 @@ import { apiFetch, isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
 import { Banner, Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
 import { BILLING_COPY } from '../copy/billing';
+import { useAdsGate } from '../ads/AdsGateContext';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
@@ -18,6 +19,7 @@ type Ent = {
 export function SubscriptionScreen() {
   const t = useTheme();
   const toast = useToast();
+  const { refresh: refreshAds } = useAdsGate();
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [ent, setEnt] = useState<Ent | null>(null);
@@ -55,6 +57,7 @@ export function SubscriptionScreen() {
       });
       toast.show({ kind: 'success', message: BILLING_COPY.subscribeSuccess });
       await load({ silent: true });
+      await refreshAds();
     } catch (e) {
       if (isAuthDenied(e)) return;
       toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });

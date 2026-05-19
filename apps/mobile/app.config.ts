@@ -8,9 +8,15 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
  *   - apps/mobile/.env 의 EXPO_PUBLIC_* 값
  *   - 없으면 빌드 실패 대신 placeholder 유지(개발 편의). 실제 빌드 전엔 반드시 채워야 한다.
  */
+/** Google 공식 샘플 App ID — AdMob 콘솔 값 채우기 전 로컬 prebuild/개발용 */
+const ADMOB_SAMPLE_ANDROID_APP_ID = 'ca-app-pub-3940256099942544~3347511713';
+const ADMOB_SAMPLE_IOS_APP_ID = 'ca-app-pub-3940256099942544~1458002511';
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const naverIosUrlScheme = process.env.EXPO_PUBLIC_NAVER_IOS_URL_SCHEME ?? 'naverlogin-nourylog';
   const kakaoAppKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY ?? '';
+  const admobAndroidAppId = process.env.ADMOB_ANDROID_APP_ID ?? ADMOB_SAMPLE_ANDROID_APP_ID;
+  const admobIosAppId = process.env.ADMOB_IOS_APP_ID ?? ADMOB_SAMPLE_IOS_APP_ID;
 
   const plugins: ExpoConfig['plugins'] = [
     'expo-secure-store',
@@ -38,6 +44,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
     ],
     ['@react-native-google-signin/google-signin'],
+    [
+      'react-native-google-mobile-ads',
+      {
+        androidAppId: admobAndroidAppId,
+        iosAppId: admobIosAppId,
+      },
+    ],
   ];
 
   return {
