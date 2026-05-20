@@ -28,6 +28,8 @@ model User {
   /// 비활성화 사유 자유 입력(최대 500자). `etc` 코드일 때 필수, 그 외엔 선택.
   deactivationReason     String?
   createdAt     DateTime  @default(now())
+  /// Asia/Seoul YYYY-MM. 해당 월 OCR 무료 사용 횟수 집계 기준.
+  freeOcrMonth  String?
   freeOcrUsed   Int       @default(0)
 
   profile       Profile?

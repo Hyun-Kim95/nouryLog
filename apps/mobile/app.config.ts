@@ -14,6 +14,8 @@ const ADMOB_SAMPLE_IOS_APP_ID = 'ca-app-pub-3940256099942544~1458002511';
 
 const APP_DISPLAY_NAME = 'nouryLog';
 
+const isPlayBillingEnabled = process.env.EXPO_PUBLIC_PLAY_BILLING_ENABLED === 'true';
+
 function assertProductionBuildConfig(): void {
   const profile = process.env.EAS_BUILD_PROFILE;
   const isProduction = profile === 'production' || process.env.NODE_ENV === 'production';
@@ -84,8 +86,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         iosAppId: admobIosAppId,
       },
     ],
-    'react-native-iap',
   ];
+
+  if (isPlayBillingEnabled) {
+    plugins.push('react-native-iap');
+  }
 
   return {
     ...(config as ExpoConfig),

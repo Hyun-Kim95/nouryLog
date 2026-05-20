@@ -106,7 +106,7 @@ export const handlers = [
   http.get('/me/billing/entitlements', ({ request }) => {
     if (!bearerOk(request)) return err(401, 'AUTH_UNAUTHORIZED', '인증이 필요합니다.');
     return HttpResponse.json({
-      ocrQuotaLimit: 5,
+      ocrQuotaLimit: 10,
       ocrQuotaUsed: 3,
       ocrPaidEnabled: false,
       adFreeEnabled: false,

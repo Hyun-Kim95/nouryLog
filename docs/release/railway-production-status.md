@@ -52,7 +52,8 @@ npx @railway/cli run --service Postgres -- cmd /c "set DATABASE_URL=%DATABASE_PU
 
 ### 이미 있음 (이름만)
 
-`DATABASE_URL`, `OCR_*`, `NAVER_*`, `KAKAO_*`, `GOOGLE_CLIENT_*`, `OAUTH_*`, `NODE_ENV` 등.
+`DATABASE_URL`, `OCR_API_*`, `OCR_FREE_LIMIT_NORMAL`/`REDUCED`/`USER_THRESHOLD`, `NAVER_*`, `KAKAO_*`, `GOOGLE_CLIENT_*`, `OAUTH_*`, `NODE_ENV` 등.  
+구 `OCR_FREE_LIMIT` 는 제거. 배포 후 `20260519140000_ocr_monthly_quota` migrate 필요.
 
 `BILLING_SKIP_VERIFY` 는 production 에 **넣지 않음**.
 

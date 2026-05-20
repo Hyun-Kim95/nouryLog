@@ -5,7 +5,11 @@ import { resolvedReferenceAmount } from '../lib/foodTemplateReference.js';
 import { computeScaledNutritionFromGrams } from '../lib/mealFromTemplate.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
-import { OCR_FREE_LIMIT } from '../lib/config.js';
+import {
+  ensureOcrPeriod,
+  getOcrFreeLimitForMonth,
+  nextPaywallTriggerForQuota,
+} from '../lib/ocrQuota.js';
 import { userStatsAggregationMeta } from '../lib/userStatsAggregationMeta.js';
 import { detectNutrition } from '../services/ocrService.js';
 import {
@@ -1217,20 +1221,23 @@ meRouter.post('/nutrition/ocr', async (req, res) => {
     return;
   }
   const paid = user.billing?.ocrPaidEnabled ?? false;
-  if (!paid && user.freeOcrUsed >= OCR_FREE_LIMIT) {
+  const period = await ensureOcrPeriod(user);
+  const limit = await getOcrFreeLimitForMonth();
+  const used = period.freeOcrUsed;
+  if (!paid && used >= limit) {
     sendError(res, 402, ErrorCodes.OCR_FREE_QUOTA_EXCEEDED, '무료 OCR 한도를 초과했습니다.', {
-      limit: OCR_FREE_LIMIT,
+      limit,
     });
     return;
   }
-  let remainingFreeQuota = OCR_FREE_LIMIT;
+  let remainingFreeQuota = limit;
   if (!paid) {
     const updated = await prisma.user.update({
       where: { id: userId },
       data: { freeOcrUsed: { increment: 1 } },
       select: { freeOcrUsed: true },
     });
-    remainingFreeQuota = Math.max(0, OCR_FREE_LIMIT - updated.freeOcrUsed);
+    remainingFreeQuota = Math.max(0, limit - updated.freeOcrUsed);
   }
   const body = req.body as { imageBase64?: string; imageUrl?: string };
   try {
@@ -1549,14 +1556,12 @@ meRouter.get('/me/billing/entitlements', async (req, res) => {
   }
   const ocrPaid = user.billing?.ocrPaidEnabled ?? false;
   const adFree = user.billing?.adFreeEnabled ?? false;
-  let nextPaywallTrigger: 'none' | 'ocr_remaining_1' | 'ocr_exhausted' = 'none';
-  if (!ocrPaid) {
-    if (user.freeOcrUsed >= OCR_FREE_LIMIT) nextPaywallTrigger = 'ocr_exhausted';
-    else if (user.freeOcrUsed >= OCR_FREE_LIMIT - 1) nextPaywallTrigger = 'ocr_remaining_1';
-  }
+  const period = await ensureOcrPeriod(user);
+  const limit = await getOcrFreeLimitForMonth();
+  const nextPaywallTrigger = nextPaywallTriggerForQuota(ocrPaid, period.freeOcrUsed, limit);
   res.json({
-    ocrQuotaLimit: OCR_FREE_LIMIT,
-    ocrQuotaUsed: user.freeOcrUsed,
+    ocrQuotaLimit: limit,
+    ocrQuotaUsed: period.freeOcrUsed,
     ocrPaidEnabled: ocrPaid,
     adFreeEnabled: adFree,
     nextPaywallTrigger,

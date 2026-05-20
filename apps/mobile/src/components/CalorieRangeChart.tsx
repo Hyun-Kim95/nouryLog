@@ -26,6 +26,8 @@ type Props = {
   calorieMax: number | null;
   proteinGoalMinG?: number | null;
   proteinGoalMaxG?: number | null;
+  /** 막대 미선택 시 안내 (주·월은 달력 안내 문구) */
+  chartTapHint?: string;
 };
 
 const PANEL_HEIGHT = 108;
@@ -244,9 +246,11 @@ function PanelGutterLabels({
 function TooltipSlot({
   selected,
   t,
+  chartTapHint,
 }: {
   selected: CalorieDailyPoint | null;
   t: Theme;
+  chartTapHint: string;
 }) {
   return (
     <View
@@ -295,7 +299,7 @@ function TooltipSlot({
         </View>
       ) : (
         <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption, textAlign: 'center' }}>
-          {STATS_COPY.calorieChartTapHint}
+          {chartTapHint}
         </Text>
       )}
     </View>
@@ -308,6 +312,7 @@ export function CalorieRangeChart({
   calorieMax,
   proteinGoalMinG,
   proteinGoalMaxG,
+  chartTapHint = STATS_COPY.calorieChartTapHint,
 }: Props) {
   const t = useTheme();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -375,7 +380,7 @@ export function CalorieRangeChart({
 
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <TooltipSlot selected={selected} t={t} />
+          <TooltipSlot selected={selected} t={t} chartTapHint={chartTapHint} />
 
           <Text
             style={{

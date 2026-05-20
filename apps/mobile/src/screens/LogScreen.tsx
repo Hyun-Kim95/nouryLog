@@ -7,9 +7,9 @@ import {
   ScrollView,
   Text,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { resolveImagePickerBase64 } from '../lib/imagePickerBase64';
 import { apiFetch, isAuthDenied } from '../api';
@@ -38,6 +38,7 @@ import {
   TextButton,
 } from '../components/ui';
 import { checkoutPremiumWithPlay } from '../billing/checkoutPremium';
+import { isPlayBillingEnabled } from '../billing/feature';
 import { BILLING_COPY } from '../copy/billing';
 import { LOG_COPY } from '../copy/log';
 import { useFocusReload } from '../hooks/useFocusReload';
@@ -53,6 +54,7 @@ import {
   type MealSlot,
   type SnackPlacement,
 } from '../lib/mealSlot';
+import type { RootStackParamList } from '../navigation';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 
@@ -134,12 +136,9 @@ const EMPTY_FORM = {
 export function LogScreen() {
   const t = useTheme();
   const toast = useToast();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [items, setItems] = useState<MealRow[]>([]);
   const [pastMeals, setPastMeals] = useState<MealRow[]>([]);
-  const [pastPage, setPastPage] = useState(1);
-  const [pastHasMore, setPastHasMore] = useState(false);
-  const [pastLoadingMore, setPastLoadingMore] = useState(false);
-  const pastLoadMoreLock = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
   const entrySectionY = useRef(0);
   const [recentMeals, setRecentMeals] = useState<MealRow[]>([]);
@@ -254,8 +253,6 @@ export function LogScreen() {
       setItems(todayRes.items ?? []);
       const pastItems = pastRes.items ?? [];
       setPastMeals(pastItems);
-      setPastPage(1);
-      setPastHasMore(pastItems.length < (pastRes.total ?? 0));
       const seen = new Set<string>();
       const deduped: MealRow[] = [];
       for (const m of recent.items ?? []) {
@@ -270,48 +267,9 @@ export function LogScreen() {
       if (isAuthDenied(e)) return;
       setItems([]);
       setPastMeals([]);
-      setPastHasMore(false);
       setRecentMeals([]);
     }
   }, []);
-
-  const loadMorePast = useCallback(async () => {
-    if (pastLoadMoreLock.current || !pastHasMore) return;
-    const token = await getAccessToken();
-    if (!token) return;
-    pastLoadMoreLock.current = true;
-    setPastLoadingMore(true);
-    try {
-      const nextPage = pastPage + 1;
-      const res = await listMeals(token, {
-        page: nextPage,
-        size: PAST_PAGE_SIZE,
-        to: localDayStartExclusiveUpperBound(),
-      });
-      const newItems = res.items ?? [];
-      setPastMeals((prev) => {
-        const merged = [...prev, ...newItems];
-        setPastHasMore(merged.length < (res.total ?? 0));
-        return merged;
-      });
-      setPastPage(nextPage);
-    } catch (e) {
-      if (isAuthDenied(e)) return;
-    } finally {
-      setPastLoadingMore(false);
-      pastLoadMoreLock.current = false;
-    }
-  }, [pastHasMore, pastPage]);
-
-  const handleScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (!pastHasMore || pastLoadingMore) return;
-      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-      const nearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 120;
-      if (nearBottom) void loadMorePast();
-    },
-    [pastHasMore, pastLoadingMore, loadMorePast],
-  );
 
   useFocusReload(
     useCallback(
@@ -799,7 +757,6 @@ export function LogScreen() {
       <ScreenLayout
         title={LOG_COPY.title}
         subtitle={LOG_COPY.subtitle}
-        onScroll={handleScroll}
         scrollRef={scrollRef}
         keyboardAvoiding
         contentPaddingBottomExtra={120}
@@ -978,7 +935,7 @@ export function LogScreen() {
                     variant="secondary"
                     loading={saveBusy}
                   />
-                  <TextButton title={LOG_COPY.cancelEdit} onPress={resetForm} />
+                  <PrimaryButton title={LOG_COPY.cancelEdit} onPress={resetForm} variant="secondary" />
                 </>
               ) : null}
             </View>
@@ -1031,37 +988,11 @@ export function LogScreen() {
                   )
                 )}
               </Card>
-              {pastMeals.length > 0 ? (
-                <Card>
-                  <CardTitle>{LOG_COPY.pastTitle}</CardTitle>
-                  {pastMeals.map((item) => (
-                    <Pressable
-                      key={item.mealId}
-                      onPress={() => startEditMeal(item)}
-                      style={{
-                        paddingVertical: t.spacing.sm,
-                        borderBottomWidth: 1,
-                        borderBottomColor: t.colors.border,
-                      }}
-                    >
-                      <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
-                        {mealRowSubtitle(item)}
-                      </Text>
-                      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                        {item.calories} kcal · {formatMacroLine(item)} · {item.consumedAt.slice(0, 10)}
-                      </Text>
-                    </Pressable>
-                  ))}
-                  {pastLoadingMore ? (
-                    <View style={{ paddingTop: t.spacing.sm, alignItems: 'center' }}>
-                      <ActivityIndicator color={t.colors.primary} />
-                      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, marginTop: t.spacing.xs }}>
-                        {LOG_COPY.pastLoadingMore}
-                      </Text>
-                    </View>
-                  ) : null}
-                </Card>
-              ) : null}
+              <PrimaryButton
+                title={LOG_COPY.pastBrowseCta}
+                onPress={() => navigation.navigate('PastMealBrowse')}
+                variant="secondary"
+              />
             </>
           );
         })()}
@@ -1069,7 +1000,7 @@ export function LogScreen() {
 
       <PaywallModal
         visible={paywallOpen}
-        onSubscribe={() => void checkout()}
+        onSubscribe={isPlayBillingEnabled ? () => void checkout() : undefined}
         onDismiss={() => setPaywallOpen(false)}
         busy={checkoutBusy}
       />

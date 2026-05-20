@@ -26,7 +26,12 @@ export const STATS_COPY = {
   slotLine: (label: string, kcal: number, proteinG: number) => `${label} · ${kcal} kcal · 단백질 ${proteinG}g`,
   calorieRangeChartTitle: '목표 구간 · 칼로리 · 단백질',
   goalRangeLabel: (low: number, high: number, unit: string) => `${low}–${high}${unit}`,
-  calorieChartTapHint: '막대를 탭하면 해당 날짜 상세가 표시돼요.',
+  calorieChartTapHint: '막대를 탭하면 해당 날짜 합계가 표시돼요.',
+  calorieChartTapHintWeekMonth: '달력에서 날짜를 선택하면 해당 구간으로 이동해요.',
+  calendarOpen: '달력에서 기간 선택',
+  calendarTitle: '날짜 선택',
+  calendarClose: '닫기',
+  calendarHint: '날짜를 탭하면 그 날짜가 포함된 통계 구간으로 이동해요.',
   calorieRangeLegend:
     '막대: 일별=해당일 합계, 주·월별=기록일 일평균. 연한 영역·점선=하루 목표 구간.',
   caloriePanelTitle: '칼로리',

@@ -269,7 +269,7 @@ MVP 상품 정책:
 - 타 계정에 연결된 토큰: `RESOURCE_CONFLICT` (409)
 
 권장 응답 필드:
-- `ocrQuotaLimit` (기본 5)
+- `ocrQuotaLimit` (월 한도: 활성 USER ≤100 → 기본 10, >100 → 5; Asia/Seoul 월 기준)
 - `ocrQuotaUsed`
 - `ocrPaidEnabled` (boolean)
 - `adFreeEnabled` (boolean)

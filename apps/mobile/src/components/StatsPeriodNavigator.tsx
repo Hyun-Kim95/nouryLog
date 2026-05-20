@@ -10,6 +10,7 @@ type Props = {
   canGoNext: boolean;
   onPrev: () => void;
   onNext: () => void;
+  onOpenCalendar?: () => void;
   children: ReactNode;
 };
 
@@ -19,6 +20,7 @@ export function StatsPeriodNavigator({
   canGoNext,
   onPrev,
   onNext,
+  onOpenCalendar,
   children,
 }: Props) {
   const t = useTheme();
@@ -64,6 +66,23 @@ export function StatsPeriodNavigator({
         >
           {label}
         </Text>
+        {onOpenCalendar ? (
+          <Pressable
+            onPress={onOpenCalendar}
+            accessibilityRole="button"
+            accessibilityLabel={STATS_COPY.calendarOpen}
+            hitSlop={8}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: t.radius.md,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name="calendar-outline" size={22} color={t.colors.fg} />
+          </Pressable>
+        ) : null}
         {navBtn('next', canGoNext, onNext)}
       </View>
       <View style={{ gap: t.spacing.md }}>{children}</View>

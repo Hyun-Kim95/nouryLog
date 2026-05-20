@@ -16,6 +16,8 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import { ProfileEditScreen } from './screens/ProfileEditScreen';
 import { WeightHistoryScreen } from './screens/WeightHistoryScreen';
+import { PastMealBrowseScreen } from './screens/PastMealBrowseScreen';
+import { LOG_COPY } from './copy/log';
 import { PolicyViewScreen } from './screens/PolicyViewScreen';
 import { NoticeListScreen } from './screens/support/NoticeListScreen';
 import { NoticeDetailScreen } from './screens/support/NoticeDetailScreen';
@@ -31,6 +33,7 @@ export type RootStackParamList = {
   Main: undefined;
   ProfileEdit: undefined;
   WeightHistory: undefined;
+  PastMealBrowse: undefined;
   PolicyView: { kind: 'terms' | 'privacy' };
   NoticeList: undefined;
   NoticeDetail: { id: string };
@@ -89,7 +92,7 @@ function MainTabsInner() {
       <Tabs.Screen name="Home" component={HomeScreen} options={{ title: '홈' }} />
       <Tabs.Screen name="Log" component={LogScreen} options={{ title: '기록' }} />
       <Tabs.Screen name="Stats" component={StatsScreen} options={{ title: '통계' }} />
-      <Tabs.Screen name="Sub" component={SubscriptionScreen} options={{ title: '구독' }} />
+      <Tabs.Screen name="Sub" component={SubscriptionScreen} options={{ title: '플랜' }} />
       <Tabs.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
     </Tabs.Navigator>
   );
@@ -121,6 +124,11 @@ export function RootNavigator({ initialRoute }: { initialRoute: InitialRoute }) 
         name="WeightHistory"
         component={WeightHistoryScreen}
         options={{ ...themed, headerShown: true, title: '체중 추이' }}
+      />
+      <Stack.Screen
+        name="PastMealBrowse"
+        component={PastMealBrowseScreen}
+        options={{ ...themed, headerShown: true, title: LOG_COPY.pastBrowseTitle }}
       />
       <Stack.Screen
         name="PolicyView"

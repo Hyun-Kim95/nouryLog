@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { StatsCalendarModal } from '../components/StatsCalendarModal';
 import { Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -13,7 +14,7 @@ import { isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { mealSlotLabel, type MealSlot } from '../lib/mealSlot';
-import { shiftAnchor, todayAnchorKst, type StatsRange } from '../lib/statsPeriod';
+import { periodOffsetForKstDate, shiftAnchor, todayAnchorKst, type StatsRange } from '../lib/statsPeriod';
 import { fetchTodayGoals } from '../lib/todayNutrition';
 import { useTheme } from '../theme';
 
@@ -28,6 +29,7 @@ export function StatsScreen() {
   const [periodOffset, setPeriodOffset] = useState(0);
   const [data, setData] = useState<StatsResponse | null>(null);
   const [goals, setGoals] = useState<Awaited<ReturnType<typeof fetchTodayGoals>> | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const load = useCallback(
     async ({ silent }: { silent: boolean }) => {
@@ -164,6 +166,9 @@ export function StatsScreen() {
                 calorieMax={goals?.calorieGoalMaxKcal ?? null}
                 proteinGoalMinG={goals?.proteinGoalMinG ?? null}
                 proteinGoalMaxG={goals?.proteinGoalMaxG ?? goals?.proteinGoalG ?? null}
+                chartTapHint={
+                  range === 'day' ? STATS_COPY.calorieChartTapHint : STATS_COPY.calorieChartTapHintWeekMonth
+                }
               />
             </Card>
           ) : null}
@@ -208,10 +213,21 @@ export function StatsScreen() {
           canGoNext={canGoNext}
           onPrev={goPrev}
           onNext={goNext}
+          onOpenCalendar={() => setCalendarOpen(true)}
         >
           {statsBody}
         </StatsPeriodNavigator>
       ) : null}
+
+      <StatsCalendarModal
+        visible={calendarOpen}
+        onClose={() => setCalendarOpen(false)}
+        onSelectYmd={(ymd) => {
+          const today = todayAnchorKst();
+          if (ymd > today) return;
+          setPeriodOffset(periodOffsetForKstDate(range, ymd, today));
+        }}
+      />
     </ScreenLayout>
   );
 }

@@ -90,12 +90,11 @@ function sumSection(items: MealRow[]) {
   return { summaryKcal: Math.round(summaryKcal), summaryProteinG: Math.round(summaryProteinG) };
 }
 
-export function groupMealsForTodayTimeline(meals: MealRow[]): TimelineSection[] {
-  const today = meals.filter((m) => isTodayMeal(m.consumedAt));
+export function groupMealsBySlotTimeline(meals: MealRow[]): TimelineSection[] {
   const buckets = new Map<TimelineSectionKind, MealRow[]>();
   for (const kind of SECTION_ORDER) buckets.set(kind, []);
 
-  for (const m of today) {
+  for (const m of meals) {
     const kind = mealToSection(m);
     buckets.get(kind)!.push(m);
   }
@@ -109,6 +108,11 @@ export function groupMealsForTodayTimeline(meals: MealRow[]): TimelineSection[] 
     const { summaryKcal, summaryProteinG } = sumSection(items);
     return { kind, title: SECTION_TITLES[kind], items, summaryKcal, summaryProteinG };
   });
+}
+
+export function groupMealsForTodayTimeline(meals: MealRow[]): TimelineSection[] {
+  const today = meals.filter((m) => isTodayMeal(m.consumedAt));
+  return groupMealsBySlotTimeline(today);
 }
 
 export function summarizeByMealSlot(meals: MealRow[]): Array<{

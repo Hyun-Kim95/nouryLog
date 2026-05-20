@@ -2,8 +2,9 @@ import { useCallback, useState } from 'react';
 import { Text, View } from 'react-native';
 import { apiFetch, isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
-import { Banner, Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
 import { checkoutPremiumWithPlay, restorePremiumWithPlay } from '../billing/checkoutPremium';
+import { isPlayBillingEnabled } from '../billing/feature';
+import { Banner, Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
 import { BILLING_COPY } from '../copy/billing';
 import { useAdsGate } from '../ads/AdsGateContext';
 import { useFocusReload } from '../hooks/useFocusReload';
@@ -20,6 +21,7 @@ type Ent = {
 export function SubscriptionScreen() {
   const t = useTheme();
   const toast = useToast();
+  const billingOn = isPlayBillingEnabled;
   const { refresh: refreshAds } = useAdsGate();
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -122,23 +124,31 @@ export function SubscriptionScreen() {
 
       <Card>
         <CardTitle>프리미엄</CardTitle>
-        <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
-          {BILLING_COPY.premiumPrice}
-        </Text>
-        <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>{BILLING_COPY.skuLabel}</Text>
+        {billingOn ? (
+          <>
+            <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
+              {BILLING_COPY.premiumPrice}
+            </Text>
+            <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>{BILLING_COPY.skuLabel}</Text>
+          </>
+        ) : (
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{BILLING_COPY.premiumComingSoon}</Text>
+        )}
         <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>· {BILLING_COPY.premiumBenefit1}</Text>
         <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>· {BILLING_COPY.premiumBenefit2}</Text>
       </Card>
 
-      {!isPremium ? (
+      {billingOn && !isPremium ? (
         <PrimaryButton title={BILLING_COPY.subscribeCta} onPress={() => void checkout()} loading={busy} />
       ) : null}
-      <PrimaryButton
-        title={BILLING_COPY.restoreCta}
-        onPress={() => void restore()}
-        loading={busy}
-        variant="secondary"
-      />
+      {billingOn ? (
+        <PrimaryButton
+          title={BILLING_COPY.restoreCta}
+          onPress={() => void restore()}
+          loading={busy}
+          variant="secondary"
+        />
+      ) : null}
     </ScreenLayout>
   );
 }
