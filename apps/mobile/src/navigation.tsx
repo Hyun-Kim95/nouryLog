@@ -11,6 +11,7 @@ import { LoginScreen } from './screens/LoginScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { LogScreen } from './screens/LogScreen';
 import { StatsScreen } from './screens/StatsScreen';
+import { isPlayBillingEnabled } from './billing/feature';
 import { SubscriptionScreen } from './screens/SubscriptionScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
@@ -92,7 +93,9 @@ function MainTabsInner() {
       <Tabs.Screen name="Home" component={HomeScreen} options={{ title: '홈' }} />
       <Tabs.Screen name="Log" component={LogScreen} options={{ title: '기록' }} />
       <Tabs.Screen name="Stats" component={StatsScreen} options={{ title: '통계' }} />
-      <Tabs.Screen name="Sub" component={SubscriptionScreen} options={{ title: '플랜' }} />
+      {isPlayBillingEnabled ? (
+        <Tabs.Screen name="Sub" component={SubscriptionScreen} options={{ title: '플랜' }} />
+      ) : null}
       <Tabs.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
     </Tabs.Navigator>
   );
