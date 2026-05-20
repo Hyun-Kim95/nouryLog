@@ -47,4 +47,5 @@ export const LOG_COPY = {
   carb: '탄수화물 (g)',
   fat: '지방 (g)',
   calories: '칼로리 (kcal)',
+  switchToManual: '직접 입력',
 } as const;

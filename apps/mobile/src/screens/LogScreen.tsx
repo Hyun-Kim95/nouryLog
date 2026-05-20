@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Pressable,
+  ScrollView,
   Text,
   View,
   type NativeScrollEvent,
@@ -79,6 +80,28 @@ function baselineSummary(tpl: FoodTemplateItem): string {
   return `${tpl.referenceAmount}${unitHint(tpl)}`;
 }
 
+function formatTplAmount(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const rounded = Math.round(n * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+function defaultTplAmount(tpl: FoodTemplateItem, mode: TemplateInputMode): string {
+  if (mode === 'TOTAL_GRAMS') return formatTplAmount(tpl.servingGrams) || '1';
+  return '1';
+}
+
+function tplAmountFromMeal(m: MealRow, tpl: FoodTemplateItem): string {
+  const mode = m.mealInputMode === 'TOTAL_GRAMS' ? 'TOTAL_GRAMS' : 'PORTION_COUNT';
+  if (mode === 'PORTION_COUNT' && m.portionQuantity != null) {
+    return formatTplAmount(m.portionQuantity) || '1';
+  }
+  if (mode === 'TOTAL_GRAMS' && m.grams != null && m.grams > 0) {
+    return formatTplAmount(m.grams);
+  }
+  return defaultTplAmount(tpl, mode);
+}
+
 const PAST_PAGE_SIZE = 10;
 const NAME_SUGGEST_LIMIT = 8;
 
@@ -116,6 +139,8 @@ export function LogScreen() {
   const [pastHasMore, setPastHasMore] = useState(false);
   const [pastLoadingMore, setPastLoadingMore] = useState(false);
   const pastLoadMoreLock = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const entrySectionY = useRef(0);
   const [recentMeals, setRecentMeals] = useState<MealRow[]>([]);
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
@@ -139,6 +164,37 @@ export function LogScreen() {
   const [tplAmount, setTplAmount] = useState('1');
   const [editingMealId, setEditingMealId] = useState<string | null>(null);
   const [nameFocused, setNameFocused] = useState(false);
+
+  const scrollToEntrySection = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({
+          y: Math.max(0, entrySectionY.current - 12),
+          animated: true,
+        });
+      });
+    });
+  }, []);
+
+  const scheduleScrollToEntry = useCallback(() => {
+    scrollToEntrySection();
+  }, [scrollToEntrySection]);
+
+  const focusEntryField = useCallback(() => {
+    scheduleScrollToEntry();
+  }, [scheduleScrollToEntry]);
+
+  const switchToManualEntry = useCallback(() => {
+    setSelectedTpl(null);
+    setMealInputMode('PORTION_COUNT');
+    setTplAmount('1');
+    setName('');
+    setCalories('');
+    setProtein('');
+    setCarbohydrate('');
+    setFat('');
+    setLastOcrMeta(null);
+  }, []);
 
   const resetForm = useCallback(() => {
     setEditingMealId(null);
@@ -401,6 +457,7 @@ export function LogScreen() {
       kind: 'info',
       message: LOG_COPY.ocrDoneToast(res.remainingFreeQuota),
     });
+    scheduleScrollToEntry();
   };
 
   const pickImage = async (source: 'camera' | 'library') => {
@@ -500,6 +557,7 @@ export function LogScreen() {
     if (m.mealSlot) setMealSlot(m.mealSlot);
     if (m.snackPlacement) setSnackPlacement(m.snackPlacement);
     toast.show({ kind: 'info', message: '입력란에 불러왔어요. 확인 후 저장해 주세요.' });
+    scheduleScrollToEntry();
   };
 
   const applyRecentMeal = (m: MealRow) => {
@@ -507,12 +565,9 @@ export function LogScreen() {
       const tpl = templates.find((x) => x.id === m.foodTemplateId);
       if (tpl) {
         setSelectedTpl(tpl);
-        setMealInputMode(m.mealInputMode === 'TOTAL_GRAMS' ? 'TOTAL_GRAMS' : 'PORTION_COUNT');
-        setTplAmount(
-          m.mealInputMode === 'PORTION_COUNT' && m.portionQuantity != null
-            ? String(m.portionQuantity)
-            : '1',
-        );
+        const mode = m.mealInputMode === 'TOTAL_GRAMS' ? 'TOTAL_GRAMS' : 'PORTION_COUNT';
+        setMealInputMode(mode);
+        setTplAmount(tplAmountFromMeal(m, tpl));
         setName('');
         setCalories('');
         setProtein('');
@@ -522,6 +577,7 @@ export function LogScreen() {
         if (m.snackPlacement) setSnackPlacement(m.snackPlacement);
         setLastOcrMeta(null);
         toast.show({ kind: 'info', message: '템플릿으로 불러왔어요.' });
+        scheduleScrollToEntry();
         return;
       }
     }
@@ -540,12 +596,9 @@ export function LogScreen() {
       const tpl = templates.find((x) => x.id === item.foodTemplateId);
       if (tpl) {
         setSelectedTpl(tpl);
-        setMealInputMode(item.mealInputMode === 'TOTAL_GRAMS' ? 'TOTAL_GRAMS' : 'PORTION_COUNT');
-        setTplAmount(
-          item.mealInputMode === 'PORTION_COUNT' && item.portionQuantity != null
-            ? String(item.portionQuantity)
-            : '1',
-        );
+        const mode = item.mealInputMode === 'TOTAL_GRAMS' ? 'TOTAL_GRAMS' : 'PORTION_COUNT';
+        setMealInputMode(mode);
+        setTplAmount(tplAmountFromMeal(item, tpl));
         setName('');
         setCalories('');
         setProtein('');
@@ -565,13 +618,19 @@ export function LogScreen() {
 
   const selectTemplate = (item: FoodTemplateItem) => {
     setSelectedTpl(item);
-    setTplAmount('1');
     setMealInputMode('PORTION_COUNT');
+    setTplAmount(defaultTplAmount(item, 'PORTION_COUNT'));
     setName('');
     setCalories('');
     setProtein('');
     setCarbohydrate('');
     setFat('');
+    scheduleScrollToEntry();
+  };
+
+  const handleMealInputModeChange = (mode: TemplateInputMode) => {
+    setMealInputMode(mode);
+    if (selectedTpl) setTplAmount(defaultTplAmount(selectedTpl, mode));
   };
 
   const previewKcal =
@@ -584,6 +643,17 @@ export function LogScreen() {
           return Math.round(selectedTpl.calories * scale);
         })()
       : null;
+
+  const formHasPrefill = useMemo(() => {
+    if (editingMealId || selectedTpl) return false;
+    return (
+      name.trim().length > 0 ||
+      calories.trim().length > 0 ||
+      protein.trim().length > 0 ||
+      carbohydrate.trim().length > 0 ||
+      fat.trim().length > 0
+    );
+  }, [editingMealId, selectedTpl, name, calories, protein, carbohydrate, fat]);
 
   const nameSuggestions = useMemo(() => {
     if (!nameFocused || selectedTpl) return [];
@@ -601,7 +671,10 @@ export function LogScreen() {
           value={name}
           onChangeText={setName}
           placeholder="예: 닭가슴살 샐러드"
-          onFocus={() => setNameFocused(true)}
+          onFocus={() => {
+            setNameFocused(true);
+            focusEntryField();
+          }}
           onBlur={() => {
             setTimeout(() => setNameFocused(false), 200);
           }}
@@ -658,6 +731,7 @@ export function LogScreen() {
         onChangeText={setCalories}
         keyboardType="numeric"
         placeholder="0"
+        onFocus={focusEntryField}
       />
       <LabeledField
         label="단백질 (g)"
@@ -665,6 +739,7 @@ export function LogScreen() {
         onChangeText={setProtein}
         keyboardType="numeric"
         placeholder="0"
+        onFocus={focusEntryField}
       />
       <LabeledField
         label="탄수화물 (g)"
@@ -672,8 +747,16 @@ export function LogScreen() {
         onChangeText={setCarbohydrate}
         keyboardType="numeric"
         placeholder="0"
+        onFocus={focusEntryField}
       />
-      <LabeledField label="지방 (g)" value={fat} onChangeText={setFat} keyboardType="numeric" placeholder="0" />
+      <LabeledField
+        label="지방 (g)"
+        value={fat}
+        onChangeText={setFat}
+        keyboardType="numeric"
+        placeholder="0"
+        onFocus={focusEntryField}
+      />
     </View>
   );
 
@@ -716,7 +799,14 @@ export function LogScreen() {
 
   return (
     <>
-      <ScreenLayout title={LOG_COPY.title} subtitle={LOG_COPY.subtitle} onScroll={handleScroll}>
+      <ScreenLayout
+        title={LOG_COPY.title}
+        subtitle={LOG_COPY.subtitle}
+        onScroll={handleScroll}
+        scrollRef={scrollRef}
+        keyboardAvoiding
+        contentPaddingBottomExtra={120}
+      >
         {ent ? <Chip label={LOG_COPY.photoAnalysisChip(ent.ocrQuotaUsed, ent.ocrQuotaLimit)} /> : null}
 
         {ent?.nextPaywallTrigger === 'ocr_remaining_1' ? (
@@ -790,46 +880,59 @@ export function LogScreen() {
           </Card>
         ) : null}
 
-        <Card>
-          <CardTitle>{LOG_COPY.sectionSlot}</CardTitle>
-          {editingMealId ? (
-            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, marginBottom: t.spacing.sm }}>
-              {LOG_COPY.slotEditHint}
-            </Text>
-          ) : null}
-          <Segmented<MealSlot>
-            options={MEAL_SLOT_OPTIONS}
-            value={mealSlot}
-            onChange={(next) => {
-              setMealSlot(next);
-              if (next === 'SNACK' && !snackPlacement) setSnackPlacement(defaultSnackPlacementForNow());
-            }}
-          />
-          {mealSlot === 'SNACK' ? (
-            <View style={{ marginTop: t.spacing.md, gap: t.spacing.sm }}>
-              <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
-                {LOG_COPY.sectionSnackWhen}
+        <View
+          style={{ gap: t.spacing.md }}
+          onLayout={(e) => {
+            entrySectionY.current = e.nativeEvent.layout.y;
+          }}
+        >
+          <Card>
+            <CardTitle>{LOG_COPY.sectionSlot}</CardTitle>
+            {editingMealId ? (
+              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, marginBottom: t.spacing.sm }}>
+                {LOG_COPY.slotEditHint}
               </Text>
-              <RadioGroup
-                options={SNACK_PLACEMENT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                value={snackPlacement}
-                onChange={(v) => {
-                  if (v) setSnackPlacement(v);
-                }}
+            ) : null}
+            <Segmented<MealSlot>
+              options={MEAL_SLOT_OPTIONS}
+              value={mealSlot}
+              onChange={(next) => {
+                setMealSlot(next);
+                if (next === 'SNACK' && !snackPlacement) setSnackPlacement(defaultSnackPlacementForNow());
+              }}
+            />
+            {mealSlot === 'SNACK' ? (
+              <View style={{ marginTop: t.spacing.md, gap: t.spacing.sm }}>
+                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
+                  {LOG_COPY.sectionSnackWhen}
+                </Text>
+                <RadioGroup
+                  options={SNACK_PLACEMENT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  value={snackPlacement}
+                  onChange={(v) => {
+                    if (v) setSnackPlacement(v);
+                  }}
+                />
+              </View>
+            ) : null}
+          </Card>
+
+          <Card>
+            {editingMealId ? (
+              <Banner variant="info">{LOG_COPY.editBanner(name.trim() || selectedTpl?.name || '식사')}</Banner>
+            ) : null}
+            {lastOcrMeta && lastOcrMeta.confidence < 0.6 ? (
+              <Banner variant="warn">{LOG_COPY.ocrLowConfidence}</Banner>
+            ) : null}
+            {!editingMealId && (selectedTpl || formHasPrefill) ? (
+              <PrimaryButton
+                title={LOG_COPY.switchToManual}
+                onPress={switchToManualEntry}
+                variant="secondary"
               />
-            </View>
-          ) : null}
-        </Card>
+            ) : null}
 
-        <Card>
-          {editingMealId ? (
-            <Banner variant="info">{LOG_COPY.editBanner(name.trim() || selectedTpl?.name || '식사')}</Banner>
-          ) : null}
-          {lastOcrMeta && lastOcrMeta.confidence < 0.6 ? (
-            <Banner variant="warn">{LOG_COPY.ocrLowConfidence}</Banner>
-          ) : null}
-
-          {selectedTpl ? (
+            {selectedTpl ? (
             <View style={{ gap: t.spacing.sm, marginBottom: t.spacing.sm }}>
               <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
                 {selectedTpl.name}
@@ -844,7 +947,7 @@ export function LogScreen() {
                   { value: 'TOTAL_GRAMS', label: '총 g' },
                 ]}
                 value={mealInputMode}
-                onChange={setMealInputMode}
+                onChange={handleMealInputModeChange}
               />
               <LabeledField
                 label={mealInputMode === 'PORTION_COUNT' ? `분량 (${unitHint(selectedTpl)})` : '총 중량 (g)'}
@@ -852,37 +955,38 @@ export function LogScreen() {
                 onChangeText={setTplAmount}
                 keyboardType="decimal-pad"
                 placeholder={mealInputMode === 'PORTION_COUNT' ? `몇 ${unitHint(selectedTpl)}?` : '총 몇 g?'}
+                onFocus={focusEntryField}
               />
               {previewKcal != null ? (
                 <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                   예상 칼로리 약 {previewKcal} kcal
                 </Text>
               ) : null}
-              <TextButton title="직접 입력으로 전환" onPress={() => setSelectedTpl(null)} />
             </View>
           ) : (
             macroFields
           )}
 
-          <View style={{ gap: t.spacing.sm, marginTop: t.spacing.sm }}>
-            <PrimaryButton
-              title={editingMealId ? LOG_COPY.saveEdit : LOG_COPY.addMeal}
-              onPress={() => void saveMeal()}
-              loading={saveBusy}
-            />
-            {editingMealId ? (
-              <>
-                <PrimaryButton
-                  title={LOG_COPY.deleteMeal}
-                  onPress={confirmDelete}
-                  variant="secondary"
-                  loading={saveBusy}
-                />
-                <TextButton title={LOG_COPY.cancelEdit} onPress={resetForm} />
-              </>
-            ) : null}
-          </View>
-        </Card>
+            <View style={{ gap: t.spacing.sm, marginTop: t.spacing.sm }}>
+              <PrimaryButton
+                title={editingMealId ? LOG_COPY.saveEdit : LOG_COPY.addMeal}
+                onPress={() => void saveMeal()}
+                loading={saveBusy}
+              />
+              {editingMealId ? (
+                <>
+                  <PrimaryButton
+                    title={LOG_COPY.deleteMeal}
+                    onPress={confirmDelete}
+                    variant="secondary"
+                    loading={saveBusy}
+                  />
+                  <TextButton title={LOG_COPY.cancelEdit} onPress={resetForm} />
+                </>
+              ) : null}
+            </View>
+          </Card>
+        </View>
 
         {(() => {
           const timeline = groupMealsForTodayTimeline(items);

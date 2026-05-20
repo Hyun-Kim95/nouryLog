@@ -1,6 +1,13 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 
@@ -13,6 +20,10 @@ export function ScreenLayout({
   headerRight,
   onScroll,
   scrollEventThrottle = 16,
+  scrollRef,
+  keyboardAvoiding = false,
+  contentPaddingBottomExtra = 0,
+  keyboardShouldPersistTaps = 'handled',
 }: {
   title?: string;
   subtitle?: string;
@@ -22,6 +33,10 @@ export function ScreenLayout({
   headerRight?: ReactNode;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   scrollEventThrottle?: number;
+  scrollRef?: RefObject<ScrollView | null>;
+  keyboardAvoiding?: boolean;
+  contentPaddingBottomExtra?: number;
+  keyboardShouldPersistTaps?: 'always' | 'never' | 'handled';
 }) {
   const t = useTheme();
 
@@ -51,21 +66,36 @@ export function ScreenLayout({
   const contentStyle = {
     paddingHorizontal: t.spacing.lg,
     paddingTop: t.spacing.lg,
-    paddingBottom: t.spacing.xxl,
+    paddingBottom: t.spacing.xxl + contentPaddingBottomExtra,
     gap: t.spacing.md,
   };
+
+  const scrollView = scroll ? (
+    <ScrollView
+      ref={scrollRef}
+      contentContainerStyle={contentStyle}
+      onScroll={onScroll}
+      scrollEventThrottle={scrollEventThrottle}
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
+    >
+      {header}
+      {body}
+    </ScrollView>
+  ) : null;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.bg }} edges={['top', 'left', 'right']}>
       {scroll ? (
-        <ScrollView
-          contentContainerStyle={contentStyle}
-          onScroll={onScroll}
-          scrollEventThrottle={scrollEventThrottle}
-        >
-          {header}
-          {body}
-        </ScrollView>
+        keyboardAvoiding ? (
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            {scrollView}
+          </KeyboardAvoidingView>
+        ) : (
+          scrollView
+        )
       ) : (
         <View style={[{ flex: 1 }, contentStyle]}>
           {header}

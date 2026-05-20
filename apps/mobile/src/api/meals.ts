@@ -19,6 +19,7 @@ export type FoodTemplateItem = {
 export type MealRow = {
   mealId: string;
   name: string;
+  grams?: number | null;
   calories: number;
   protein: number;
   carbohydrate: number;
