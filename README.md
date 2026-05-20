@@ -62,3 +62,7 @@ npm run dev:mobile
 
 `docs/qa/native-sns-sdk-regression.md` 의 3사 × 4 시나리오를 통과해야 합니다.
 
+## Play Store 출시 (Android)
+
+0단계 체크리스트·EAS Secret·Play Billing: [`docs/release/play-store-phase0.md`](docs/release/play-store-phase0.md)
+

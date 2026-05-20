@@ -26,6 +26,7 @@ import {
   snackPlacementPatchFromBody,
   validateMealSlotSnackCombo,
 } from '../lib/snackPlacement.js';
+import { processBillingCheckout, processBillingRestore } from '../lib/billingPlaySync.js';
 import {
   averageByMealSlot,
   averageNutritionSum,
@@ -1568,21 +1569,48 @@ meRouter.post('/me/billing/checkout', async (req, res) => {
     sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 결제할 수 있습니다.');
     return;
   }
-  const pt = (req.body as { productType?: string })?.productType;
-  if (pt !== 'premium_monthly') {
-    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'productType은 premium_monthly 여야 합니다.');
-    return;
+  try {
+    await processBillingCheckout(userId, (req.body ?? {}) as Record<string, unknown>);
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'UNKNOWN';
+    if (msg === 'INVALID_PRODUCT_TYPE' || msg === 'PURCHASE_TOKEN_REQUIRED' || msg === 'PACKAGE_NAME_MISMATCH') {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '요청 형식이 올바르지 않습니다.', { reason: msg });
+      return;
+    }
+    if (msg === 'PURCHASE_TOKEN_OWNED_BY_OTHER_USER') {
+      sendError(res, 409, ErrorCodes.RESOURCE_CONFLICT, '이미 다른 계정에 연결된 구매입니다.');
+      return;
+    }
+    if (msg === 'PLAY_BILLING_NOT_CONFIGURED' || msg === 'PRODUCT_ID_MISMATCH') {
+      sendError(res, 503, ErrorCodes.BILLING_NOT_AVAILABLE, '결제 검증을 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
+    if (msg.includes('PLAY_BILLING') || msg.includes('GOOGLE_PLAY')) {
+      sendError(res, 503, ErrorCodes.BILLING_NOT_AVAILABLE, 'Google Play 결제 검증에 실패했습니다.');
+      return;
+    }
+    sendError(res, 503, ErrorCodes.BILLING_NOT_AVAILABLE, '결제를 처리하지 못했습니다.');
   }
-  await prisma.billing.upsert({
-    where: { userId },
-    create: { userId, ocrPaidEnabled: true, adFreeEnabled: true },
-    update: { ocrPaidEnabled: true, adFreeEnabled: true },
-  });
-  res.json({ ok: true });
 });
 
-meRouter.post('/me/billing/restore', async (_req, res) => {
-  res.json({ ok: true });
+meRouter.post('/me/billing/restore', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 복구할 수 있습니다.');
+    return;
+  }
+  try {
+    await processBillingRestore(userId, (req.body ?? {}) as Record<string, unknown>);
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'UNKNOWN';
+    if (msg === 'PLAY_BILLING_NOT_CONFIGURED') {
+      sendError(res, 503, ErrorCodes.BILLING_NOT_AVAILABLE, '구매 복구를 사용할 수 없습니다.');
+      return;
+    }
+    sendError(res, 503, ErrorCodes.BILLING_NOT_AVAILABLE, '구매 복구에 실패했습니다.');
+  }
 });
 
 meRouter.get('/me/ads/status', async (req, res) => {

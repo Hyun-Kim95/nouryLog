@@ -37,6 +37,7 @@ import {
   ScreenLayout,
   TextButton,
 } from '../components/ui';
+import { checkoutPremiumWithPlay } from '../billing/checkoutPremium';
 import { BILLING_COPY } from '../copy/billing';
 import { LOG_COPY } from '../copy/log';
 import { useFocusReload } from '../hooks/useFocusReload';
@@ -530,11 +531,7 @@ export function LogScreen() {
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('로그인 필요');
-      await apiFetch('/me/billing/checkout', {
-        method: 'POST',
-        token,
-        body: JSON.stringify({ productType: 'premium_monthly' }),
-      });
+      await checkoutPremiumWithPlay(token);
       toast.show({ kind: 'success', message: BILLING_COPY.subscribeSuccess });
       setPaywallOpen(false);
       await loadEntitlements();

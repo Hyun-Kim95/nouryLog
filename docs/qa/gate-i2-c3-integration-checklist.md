@@ -45,8 +45,8 @@ SSOT: `docs/requirements/feature-diet-management-implementation-split-plan-v1.md
 | POST | /nutrition/ocr | ✅ | `LogScreen` `runOcr` | |
 | GET | /stats | ✅ | `apps/mobile/src/screens/StatsScreen.tsx` | `range` 필수 |
 | GET | /me/billing/entitlements | ✅ | `apps/mobile/src/screens/HomeScreen.tsx` | |
-| POST | /me/billing/checkout | ✅ | `apps/mobile/src/screens/SubscriptionScreen.tsx` | body `productType` |
-| POST | /me/billing/restore | ✅ | `SubscriptionScreen` `restore` | |
+| POST | /me/billing/checkout | ✅ | `apps/mobile/src/billing/checkoutPremium.ts` | body `productType`, `purchaseToken`, `packageName` (Play Billing) |
+| POST | /me/billing/restore | ✅ | `checkoutPremium.ts` `restorePremiumWithPlay` | body `purchases[]` |
 | GET | /me/ads/status | ✅ | `HomeScreen` | |
 | GET | /admin/dashboard | ✅ | `apps/admin-web/src/pages/DashboardPage.tsx` | 관리자 Bearer |
 | POST | /admin/stats/reaggregate | ✅ | `DashboardPage` `reaggregate` | 202 |

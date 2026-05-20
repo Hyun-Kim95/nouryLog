@@ -249,9 +249,24 @@ KPI 계산 기준:
 - `POST /me/billing/restore`
 
 MVP 상품 정책:
-- `productType`: `premium_monthly` 단일 SKU
-- `POST /me/billing/checkout` 요청 필드: `productType` (`premium_monthly`)
+- `productType`: `premium_monthly` 단일 SKU (Google Play Console 구독 ID 와 동일)
 - 기준 가격(초안): `premium_monthly` 월 4,900원
+- **Play 검증 필수(운영)**: 클라이언트는 Google Play Billing 으로 구매 후 서버에 토큰 전달. 스텁(토큰 없이 DB 만 갱신)은 운영에서 사용하지 않는다.
+
+`POST /me/billing/checkout` 요청 필드:
+- `productType` (required): `premium_monthly`
+- `purchaseToken` (required, 운영): Google Play `purchaseToken`
+- `packageName` (optional): 기본 `com.nourylog.app`
+
+`POST /me/billing/restore` 요청 필드:
+- `purchases` (array): `{ productId, purchaseToken }[]` — `getAvailablePurchases` 등으로 조회한 목록
+
+로컬 전용: 서버 `BILLING_SKIP_VERIFY=1` 이면 토큰 없이 개발용 활성화 가능(`NODE_ENV=production` 에서는 무시 권장).
+
+오류:
+- 검증 불가·Play API 미설정: `BILLING_NOT_AVAILABLE` (503)
+- 토큰·productType 형식 오류: `VALIDATION_FAILED` (422)
+- 타 계정에 연결된 토큰: `RESOURCE_CONFLICT` (409)
 
 권장 응답 필드:
 - `ocrQuotaLimit` (기본 5)

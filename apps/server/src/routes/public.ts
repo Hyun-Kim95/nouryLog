@@ -12,6 +12,7 @@ import {
   verifyConflictToken,
 } from '../lib/socialAuth.js';
 import { publishedNoticeWhere } from '../lib/noticePublish.js';
+import { renderPolicyHtmlPage } from '../lib/policyHtml.js';
 
 export const publicRouter = Router();
 
@@ -488,6 +489,31 @@ publicRouter.get('/public/notices/:id', async (req, res) => {
     return;
   }
   res.json(serializePublicNoticeDetail(notice));
+});
+
+publicRouter.get('/public/policies/:kind/page', async (req, res) => {
+  const kind = req.params.kind;
+  if (!isPublicPolicyKind(kind)) {
+    sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_FAILED,
+      `kind는 ${PUBLIC_POLICY_KINDS.join(' | ')} 중 하나여야 합니다.`,
+      { allowed: [...PUBLIC_POLICY_KINDS] },
+    );
+    return;
+  }
+  const doc = await prisma.policyDocument.findUnique({ where: { kind } });
+  if (!doc || !doc.publishedAt) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '게시된 문서를 찾을 수 없습니다.');
+    return;
+  }
+  const html = renderPolicyHtmlPage(kind, doc.body, {
+    version: doc.version,
+    publishedAt: doc.publishedAt.toISOString(),
+    updatedAt: doc.updatedAt.toISOString(),
+  });
+  res.type('html').send(html);
 });
 
 publicRouter.get('/public/policies/:kind', async (req, res) => {

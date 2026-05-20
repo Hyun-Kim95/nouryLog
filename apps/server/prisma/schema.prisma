@@ -34,6 +34,7 @@ model User {
   meals         Meal[]
   weightEntries WeightEntry[]
   billing Billing?
+  playSubscriptionPurchases PlaySubscriptionPurchase[]
   socialAccounts SocialAccount[]
   consents UserConsent[]
 }
@@ -219,6 +220,22 @@ model Billing {
   adFreeEnabled  Boolean @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Google Play 구독 purchaseToken 검증 이력 (토큰당 1회, 사용자 귀속)
+model PlaySubscriptionPurchase {
+  id             String    @id @default(cuid())
+  userId         String
+  purchaseToken  String    @unique
+  productId      String
+  expiryTime     DateTime?
+  acknowledgedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model StatsBatch {

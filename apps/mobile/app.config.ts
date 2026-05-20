@@ -12,7 +12,40 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
 const ADMOB_SAMPLE_ANDROID_APP_ID = 'ca-app-pub-3940256099942544~3347511713';
 const ADMOB_SAMPLE_IOS_APP_ID = 'ca-app-pub-3940256099942544~1458002511';
 
+const APP_DISPLAY_NAME = 'nouryLog';
+
+function assertProductionBuildConfig(): void {
+  const profile = process.env.EAS_BUILD_PROFILE;
+  const isProduction = profile === 'production' || process.env.NODE_ENV === 'production';
+  if (!isProduction) return;
+
+  const apiUrl = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
+  if (!apiUrl || !/^https:\/\//i.test(apiUrl)) {
+    throw new Error(
+      'production 빌드: EXPO_PUBLIC_API_URL 은 https 프로덕션 API URL 이어야 합니다. EAS Secret 을 확인하세요.',
+    );
+  }
+  if (/localhost|127\.0\.0\.1/i.test(apiUrl)) {
+    throw new Error('production 빌드: EXPO_PUBLIC_API_URL 에 localhost 를 사용할 수 없습니다.');
+  }
+
+  const admobAndroid = process.env.ADMOB_ANDROID_APP_ID ?? ADMOB_SAMPLE_ANDROID_APP_ID;
+  if (admobAndroid === ADMOB_SAMPLE_ANDROID_APP_ID) {
+    throw new Error(
+      'production 빌드: ADMOB_ANDROID_APP_ID 가 Google 샘플 ID 입니다. AdMob 콘솔 앱 ID 를 EAS Secret 에 등록하세요.',
+    );
+  }
+
+  const kakaoKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY ?? '';
+  if (!kakaoKey || kakaoKey.startsWith('PLACEHOLDER_')) {
+    throw new Error(
+      'production 빌드: EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY 가 비어 있거나 placeholder 입니다.',
+    );
+  }
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
+  assertProductionBuildConfig();
   const naverIosUrlScheme = process.env.EXPO_PUBLIC_NAVER_IOS_URL_SCHEME ?? 'naverlogin-nourylog';
   const kakaoAppKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY ?? '';
   const admobAndroidAppId = process.env.ADMOB_ANDROID_APP_ID ?? ADMOB_SAMPLE_ANDROID_APP_ID;
@@ -51,11 +84,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         iosAppId: admobIosAppId,
       },
     ],
+    'react-native-iap',
   ];
 
   return {
     ...(config as ExpoConfig),
-    name: 'mobile',
+    name: APP_DISPLAY_NAME,
     slug: 'mobile',
     scheme: 'dietmobile',
     version: '1.0.0',

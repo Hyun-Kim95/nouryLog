@@ -3,6 +3,7 @@ import { Text, View } from 'react-native';
 import { apiFetch, isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
 import { Banner, Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
+import { checkoutPremiumWithPlay, restorePremiumWithPlay } from '../billing/checkoutPremium';
 import { BILLING_COPY } from '../copy/billing';
 import { useAdsGate } from '../ads/AdsGateContext';
 import { useFocusReload } from '../hooks/useFocusReload';
@@ -50,11 +51,7 @@ export function SubscriptionScreen() {
     try {
       const token = await ensureAccessToken();
       if (!token) return;
-      await apiFetch('/me/billing/checkout', {
-        method: 'POST',
-        token,
-        body: JSON.stringify({ productType: 'premium_monthly' }),
-      });
+      await checkoutPremiumWithPlay(token);
       toast.show({ kind: 'success', message: BILLING_COPY.subscribeSuccess });
       await load({ silent: true });
       await refreshAds();
@@ -71,7 +68,7 @@ export function SubscriptionScreen() {
     try {
       const token = await ensureAccessToken();
       if (!token) return;
-      await apiFetch('/me/billing/restore', { method: 'POST', token, body: JSON.stringify({}) });
+      await restorePremiumWithPlay(token);
       toast.show({ kind: 'success', message: BILLING_COPY.restoreSuccess });
       await load({ silent: true });
     } catch (e) {
