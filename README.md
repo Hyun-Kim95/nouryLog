@@ -64,5 +64,6 @@ npm run dev:mobile
 
 ## Play Store 출시 (Android)
 
-0단계 체크리스트·EAS Secret·Play Billing: [`docs/release/play-store-phase0.md`](docs/release/play-store-phase0.md)
+0단계 체크리스트·EAS Secret·Play Billing: [`docs/release/play-store-phase0.md`](docs/release/play-store-phase0.md)  
+Railway production 상태·env: [`docs/release/railway-production-status.md`](docs/release/railway-production-status.md)
 
