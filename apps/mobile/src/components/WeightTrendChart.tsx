@@ -7,11 +7,11 @@ import {
   useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
-import Svg, { Circle, Polyline } from 'react-native-svg';
 import type { WeightEntryItem } from '../api/weightEntries';
 import { WEIGHT_COPY } from '../copy/weight';
 import { useTheme } from '../theme';
 import type { Theme } from '../theme';
+import { LineSegment, PlotDot } from './chart/linePlot';
 import {
   PanelBands,
   PanelGutterLabels,
@@ -160,19 +160,13 @@ export function WeightTrendChart({ entries, weightKgMin = null, weightKgMax = nu
 
   const colWidth = plotInnerWidth > 0 ? Math.floor(plotInnerWidth / points.length) : COL_WIDTH;
   const plotWidth = plotInnerWidth > 0 ? plotInnerWidth : points.length * COL_WIDTH;
+  const canDrawPlot = plotWidth > 0;
 
   const coords = points.map((p, i) => ({
     ...p,
     x: (i + 0.5) * (colWidth || COL_WIDTH),
     y: plotY(p.weightKg, scaleMax),
   }));
-
-  const polylinePoints =
-    coords.length >= 2
-      ? coords.map((c) => `${c.x},${c.y}`).join(' ')
-      : coords.length === 1
-        ? `${coords[0].x},${coords[0].y} ${coords[0].x},${coords[0].y}`
-        : '';
 
   return (
     <View style={{ gap: t.spacing.sm }}>
@@ -185,68 +179,70 @@ export function WeightTrendChart({ entries, weightKgMin = null, weightKgMax = nu
           <WeightTooltipSlot selected={selected} t={t} />
 
           <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
-            <View style={{ minWidth: contentMinWidth, width: plotWidth }} onLayout={onPlotLayout}>
-              <View style={{ height: columnBlockHeight, width: plotWidth, position: 'relative' }}>
-                <View
-                  pointerEvents="none"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: plotWidth,
-                    height: RANGE_PANEL_HEIGHT,
-                  }}
-                >
-                  <PanelBands
-                    goals={goals}
-                    plotWidth={plotWidth}
-                    bandColor={t.colors.primary}
-                    lineHighColor={t.colors.info}
-                    lineLowColor={t.colors.info}
-                  />
-                </View>
-
-                <View
-                  pointerEvents="none"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: plotWidth,
-                    height: RANGE_PANEL_HEIGHT,
-                  }}
-                >
-                  <Svg width={plotWidth} height={RANGE_PANEL_HEIGHT}>
-                    {coords.length >= 2 ? (
-                      <Polyline
-                        points={polylinePoints}
-                        fill="none"
-                        stroke={t.colors.primary}
-                        strokeWidth={2}
-                        strokeLinejoin="round"
-                        strokeLinecap="round"
-                        opacity={0.85}
-                      />
-                    ) : null}
+            <View style={{ minWidth: contentMinWidth, width: plotWidth || contentMinWidth }} onLayout={onPlotLayout}>
+              <View
+                style={{
+                  height: columnBlockHeight,
+                  width: plotWidth || contentMinWidth,
+                  position: 'relative',
+                }}
+              >
+                {canDrawPlot ? (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: plotWidth,
+                      height: RANGE_PANEL_HEIGHT,
+                    }}
+                  >
+                    <PanelBands
+                      goals={goals}
+                      plotWidth={plotWidth}
+                      bandColor={t.colors.primary}
+                      lineHighColor={t.colors.info}
+                      lineLowColor={t.colors.info}
+                    />
+                    {coords.slice(1).map((c, i) => {
+                      const prev = coords[i];
+                      return (
+                        <LineSegment
+                          key={`seg-${prev.id}-${c.id}`}
+                          x1={prev.x}
+                          y1={prev.y}
+                          x2={c.x}
+                          y2={c.y}
+                          color={t.colors.primary}
+                        />
+                      );
+                    })}
                     {coords.map((c) => {
                       const isSelected = c.id === selectedId;
                       const r = isSelected ? POINT_RADIUS_SELECTED : POINT_RADIUS;
                       return (
-                        <Circle
+                        <PlotDot
                           key={c.id}
                           cx={c.x}
                           cy={c.y}
-                          r={r}
+                          radius={r}
                           fill={t.colors.primary}
-                          stroke={isSelected ? t.colors.surface : t.colors.primaryFg}
+                          stroke={isSelected ? t.colors.surface : undefined}
                           strokeWidth={isSelected ? 2 : 0}
                         />
                       );
                     })}
-                  </Svg>
-                </View>
+                  </View>
+                ) : null}
 
-                <View style={{ flexDirection: 'row', height: columnBlockHeight, width: plotWidth }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    height: columnBlockHeight,
+                    width: plotWidth || contentMinWidth,
+                  }}
+                >
                   {coords.map((c) => {
                     const isSelected = c.id === selectedId;
                     return (
