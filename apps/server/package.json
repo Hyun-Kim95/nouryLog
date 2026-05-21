@@ -12,7 +12,7 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
-    "test": "node --import tsx --test ./src/config.test.ts ./src/ocrQuota.test.ts ./src/lib/mealFromTemplate.test.ts ./src/lib/mealSlot.test.ts ./src/lib/snackPlacement.test.ts ./src/lib/goalFulfillment.test.ts ./src/lib/statsPeriod.test.ts ./src/lib/statsAggregate.test.ts ./src/lib/userStatsAggregationMeta.test.ts ./src/lib/recommendation.test.ts ./src/lib/referenceWeight.test.ts"
+    "test": "node --import tsx --test ./src/config.test.ts ./src/ocrQuota.test.ts ./src/lib/policyHtml.test.ts ./src/lib/mealFromTemplate.test.ts ./src/lib/mealSlot.test.ts ./src/lib/snackPlacement.test.ts ./src/lib/goalFulfillment.test.ts ./src/lib/statsPeriod.test.ts ./src/lib/statsAggregate.test.ts ./src/lib/userStatsAggregationMeta.test.ts ./src/lib/recommendation.test.ts ./src/lib/referenceWeight.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
@@ -22,6 +22,7 @@
     "express": "^4.21.2",
     "googleapis": "^144.0.0",
     "jsonwebtoken": "^9.0.3",
+    "markdown-it": "^10.0.0",
     "multer": "^1.4.5-lts.2"
   },
   "devDependencies": {
@@ -29,6 +30,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/markdown-it": "^14.1.2",
     "@types/multer": "^1.4.13",
     "@types/node": "^22.10.1",
     "prisma": "^6.19.2",
