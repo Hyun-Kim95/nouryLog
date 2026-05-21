@@ -47,9 +47,30 @@ import {
   validateHeightForReference,
 } from '../lib/referenceWeight.js';
 import type { MealSlot, SnackPlacement } from '@prisma/client';
+import { softDeactivateFields } from '../lib/retention.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
+
+meRouter.use(async (req, res, next) => {
+  if (req.auth!.role !== 'USER') {
+    next();
+    return;
+  }
+  if (req.method === 'PATCH' && req.path === '/me/deactivate') {
+    next();
+    return;
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: req.auth!.userId },
+    select: { active: true },
+  });
+  if (!user?.active) {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '비활성화된 계정입니다.');
+    return;
+  }
+  next();
+});
 
 const PORTION_QTY_MIN = 0.25;
 const PORTION_QTY_MAX = 50;
@@ -1202,7 +1223,33 @@ meRouter.patch('/meals/:mealId/deactivate', async (req, res) => {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '기록을 찾을 수 없습니다.');
     return;
   }
-  await prisma.meal.update({ where: { id: mealId }, data: { active: false } });
+  await prisma.meal.update({ where: { id: mealId }, data: softDeactivateFields() });
+  res.json({ ok: true });
+});
+
+meRouter.patch('/me/deactivate', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 탈퇴할 수 있습니다.');
+    return;
+  }
+  const user = await prisma.user.findFirst({ where: { id: userId, role: 'USER' } });
+  if (!user) {
+    sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '회원을 찾을 수 없습니다.');
+    return;
+  }
+  if (!user.active) {
+    res.json({ ok: true });
+    return;
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...softDeactivateFields(),
+      deactivationReasonCode: null,
+      deactivationReason: null,
+    },
+  });
   res.json({ ok: true });
 });
 

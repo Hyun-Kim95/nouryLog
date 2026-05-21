@@ -4,7 +4,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Segmented } from '../components/Segmented';
 import { Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
 import { useTheme, useUserThemeMode, type ThemeMode } from '../theme';
-import { clearTokens } from '../authStorage';
+import { clearTokens, getAccessToken } from '../authStorage';
+import { deactivateAccount } from '../api';
 import { useToast } from '../toast/useToast';
 import type { RootStackParamList } from '../navigation';
 import { NotificationCard } from './settings/NotificationCard';
@@ -21,6 +22,39 @@ export function SettingsScreen() {
   const { userMode, setUserMode } = useUserThemeMode();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const toast = useToast();
+
+  const onWithdraw = () => {
+    Alert.alert(
+      '회원 탈퇴',
+      '탈퇴하면 계정은 즉시 이용할 수 없게 됩니다. 데이터는 비활성화 후 1년이 지나면 완전히 삭제됩니다. 계속할까요?',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '탈퇴',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                const token = await getAccessToken();
+                if (!token) {
+                  toast.show({ kind: 'error', message: '로그인 정보가 없어요. 다시 로그인해 주세요.' });
+                  return;
+                }
+                await deactivateAccount(token);
+                await clearTokens();
+                toast.show({ kind: 'info', message: '탈퇴가 완료되었어요.' });
+                navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : '탈퇴 처리 중 오류가 발생했어요.';
+                toast.show({ kind: 'error', message: msg });
+              }
+            })();
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  };
 
   const onLogout = () => {
     Alert.alert(
@@ -159,9 +193,13 @@ export function SettingsScreen() {
       <Card>
         <CardTitle>계정</CardTitle>
         <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
-          로그인된 계정에서 로그아웃해요. 다음 진입 시 로그인 화면이 표시됩니다.
+          로그아웃은 다음 진입 시 로그인 화면이 표시됩니다. 탈퇴 시 계정은 즉시 이용할 수 없으며, 데이터는 비활성화 후 1년이 지나면
+          완전히 삭제됩니다. 자세한 내용은 개인정보처리방침을 참고해 주세요.
         </Text>
-        <PrimaryButton title="로그아웃" onPress={onLogout} variant="danger" />
+        <View style={{ gap: t.spacing.sm }}>
+          <PrimaryButton title="로그아웃" onPress={onLogout} variant="danger" />
+          <PrimaryButton title="회원 탈퇴" onPress={onWithdraw} variant="danger" />
+        </View>
       </Card>
     </ScreenLayout>
   );

@@ -5,6 +5,8 @@ import { resolvedReferenceAmount } from '../lib/foodTemplateReference.js';
 import { normalizePortionLabel, resolvePortionUnit, validatePortionLabelForUnit } from '../lib/portionUnit.js';
 import { requireAdmin } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
+import { runPurgeInactive } from '../lib/purgeInactive.js';
+import { softActivateFields, softDeactivateFields } from '../lib/retention.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -334,8 +336,7 @@ adminRouter.patch('/admin/users/:id/deactivate', async (req, res) => {
   await prisma.user.update({
     where: { id },
     data: {
-      active: false,
-      deactivatedAt: new Date(),
+      ...softDeactivateFields(),
       deactivationReasonCode: reasonCode,
       deactivationReason: reasonText || null,
     },
@@ -353,8 +354,7 @@ adminRouter.patch('/admin/users/:id/activate', async (req, res) => {
   await prisma.user.update({
     where: { id },
     data: {
-      active: true,
-      deactivatedAt: null,
+      ...softActivateFields(),
       deactivationReasonCode: null,
       deactivationReason: null,
     },
@@ -660,7 +660,7 @@ adminRouter.patch('/admin/foods/:id/deactivate', async (req, res) => {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '음식을 찾을 수 없습니다.');
     return;
   }
-  await prisma.foodTemplate.update({ where: { id }, data: { active: false } });
+  await prisma.foodTemplate.update({ where: { id }, data: softDeactivateFields() });
   res.json({ ok: true });
 });
 
@@ -671,7 +671,7 @@ adminRouter.patch('/admin/foods/:id/activate', async (req, res) => {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '음식을 찾을 수 없습니다.');
     return;
   }
-  await prisma.foodTemplate.update({ where: { id }, data: { active: true } });
+  await prisma.foodTemplate.update({ where: { id }, data: softActivateFields() });
   res.json({ ok: true });
 });
 
@@ -834,7 +834,7 @@ adminRouter.patch('/admin/inquiries/:id/deactivate', async (req, res) => {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '문의를 찾을 수 없습니다.');
     return;
   }
-  await prisma.inquiry.update({ where: { id }, data: { active: false } });
+  await prisma.inquiry.update({ where: { id }, data: softDeactivateFields() });
   res.json({ ok: true });
 });
 
@@ -1055,7 +1055,7 @@ adminRouter.patch('/admin/notices/:id/deactivate', async (req, res) => {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '공지를 찾을 수 없습니다.');
     return;
   }
-  await prisma.notice.update({ where: { id }, data: { active: false } });
+  await prisma.notice.update({ where: { id }, data: softDeactivateFields() });
   res.json({ ok: true });
 });
 
@@ -1066,8 +1066,21 @@ adminRouter.patch('/admin/notices/:id/activate', async (req, res) => {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '공지를 찾을 수 없습니다.');
     return;
   }
-  await prisma.notice.update({ where: { id }, data: { active: true } });
+  await prisma.notice.update({ where: { id }, data: softActivateFields() });
   res.json({ ok: true });
+});
+
+adminRouter.post('/admin/jobs/purge-inactive', async (_req, res) => {
+  try {
+    const result = await runPurgeInactive(prisma);
+    res.status(202).json({ accepted: true, ...result });
+  } catch (e) {
+    const traceId = (_req as Request & { traceId?: string }).traceId;
+    console.error('[purge-inactive]', traceId, e);
+    sendError(res, 500, ErrorCodes.INTERNAL_SERVER_ERROR, '비활성 데이터 영구 삭제 작업에 실패했습니다.', {
+      traceId,
+    });
+  }
 });
 
 const POLICY_KINDS = ['terms', 'privacy'] as const;

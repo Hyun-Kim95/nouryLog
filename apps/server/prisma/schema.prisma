@@ -141,8 +141,9 @@ model Meal {
   protein      Float
   fat          Float
   imageUrl     String?
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  active         Boolean   @default(true)
+  deactivatedAt  DateTime?
+  createdAt      DateTime  @default(now())
 
   foodTemplateId  String?
   mealInputMode   MealInputMode?
@@ -179,8 +180,9 @@ model FoodTemplate {
   fat          Float?
   /// 기준 분량당 탄수화물(g). 신규/수정 시 필수.
   carbohydrate Float?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  active         Boolean   @default(true)
+  deactivatedAt  DateTime?
+  createdAt      DateTime  @default(now())
 
   meals Meal[]
 
@@ -193,11 +195,12 @@ model Inquiry {
   subject     String
   body        String
   status      String    @default("pending")
-  active      Boolean   @default(true)
-  answer      String?
-  answeredAt  DateTime?
-  answeredBy  String?
-  createdAt   DateTime  @default(now())
+  active         Boolean   @default(true)
+  deactivatedAt  DateTime?
+  answer         String?
+  answeredAt     DateTime?
+  answeredBy     String?
+  createdAt      DateTime  @default(now())
 
   @@index([status, active])
 }
@@ -206,9 +209,10 @@ model Notice {
   id        String   @id @default(cuid())
   title     String
   body      String
-  active    Boolean  @default(true)
+  active         Boolean   @default(true)
+  deactivatedAt  DateTime?
   /// 상단 고정 여부. true면 목록 정렬 우선.
-  pinned    Boolean  @default(false)
+  pinned         Boolean   @default(false)
   /// 게시 시작 시각(선택). 둘 다 있을 때만 start <= end 검증.
   publishStart DateTime?
   /// 게시 종료 시각(선택). null이면 무기한.

@@ -285,8 +285,12 @@ MVP 상품 정책:
 ## 6) 배치/보존 계약
 - soft delete 적용 대상: 회원/음식 템플릿/식사 기록/문의/공지
 - hard delete 기준: `deactivatedAt + 1년`
-- purge 배치 실패 시 재시도 큐에 적재, `traceId`로 추적
-- 감사/운영 로그 보존기간: 5년
+- `PATCH /me/deactivate`: 회원 자진 탈퇴(비활성화, `deactivatedAt` 기록)
+- `POST /admin/jobs/purge-inactive`: 보존 기간 경과 비활성 데이터 영구 삭제(관리자)
+- `npm run purge:inactive` (서버): 동일 purge 작업 CLI
+- 재활성화 시 `deactivatedAt` null로 초기화(보존 시계 리셋)
+- purge 배치 실패 시 로그 + `traceId`로 추적, 일 단위 재시도 권장
+- 감사/운영 로그 보존기간: 5년(별도 테이블, purge 대상 제외)
 
 ## 7) 표준 에러 코드 카탈로그
 - 인증/권한: `AUTH_UNAUTHORIZED`, `AUTH_FORBIDDEN`, `AUTH_TOKEN_EXPIRED`

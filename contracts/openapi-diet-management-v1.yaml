@@ -213,6 +213,15 @@ paths:
       responses:
         '200': { description: OK }
 
+  /me/deactivate:
+    patch:
+      tags: [Me]
+      summary: 회원 탈퇴(비활성화)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+        '403': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
   /me/food-templates:
     get:
       tags: [Meals]
@@ -596,6 +605,14 @@ paths:
   /admin/stats/reaggregate:
     post:
       tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '202': { description: Accepted }
+
+  /admin/jobs/purge-inactive:
+    post:
+      tags: [Admin]
+      summary: 비활성 데이터 영구 삭제 배치(1년 경과)
       security: [{ BearerAuth: [] }]
       responses:
         '202': { description: Accepted }

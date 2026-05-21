@@ -71,6 +71,10 @@ export async function getPolicyDocument(kind: PolicyKind): Promise<PolicyDocumen
   return apiFetch<PolicyDocument>(`/public/policies/${kind}`);
 }
 
+export async function deactivateAccount(token: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/me/deactivate', { method: 'PATCH', token });
+}
+
 export async function postConsents(
   token: string,
   body: {
