@@ -285,7 +285,7 @@ MVP 상품 정책:
 ## 6) 배치/보존 계약
 - soft delete 적용 대상: 회원/음식 템플릿/식사 기록/문의/공지
 - hard delete 기준: `deactivatedAt + 1년`
-- `PATCH /me/deactivate`: 회원 자진 탈퇴(비활성화, `deactivatedAt` 기록)
+- `PATCH /me/deactivate`: 회원 자진 탈퇴(비활성화, `deactivatedAt` 기록). 요청 body `{ reasonCode, reasonText? }` — `reasonCode`: `not_using` | `alternative_app` | `hard_to_use` | `privacy` | `etc`; `etc`일 때 `reasonText` 필수(500자 이하). 저장 필드: `deactivationReasonCode`, `deactivationReason`
 - `POST /admin/jobs/purge-inactive`: 보존 기간 경과 비활성 데이터 영구 삭제(관리자)
 - `npm run purge:inactive` (서버): 동일 purge 작업 CLI
 - 재활성화 시 `deactivatedAt` null로 초기화(보존 시계 리셋)

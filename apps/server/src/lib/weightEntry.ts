@@ -1,5 +1,5 @@
 import type { WeightEntry } from '@prisma/client';
-import { addDaysYmd, kstMidnightUtc, parseYmdParts } from './statsPeriod.js';
+import { addDaysYmd, kstMidnightUtc, parseYmdParts, todayAnchorKst } from './statsPeriod.js';
 
 export const WEIGHT_CHECKIN_INTERVAL_DAYS = 7;
 
@@ -60,4 +60,15 @@ export function daysSinceRecordedAt(recordedAt: Date, now = new Date()): number 
 export function isWeightCheckInDue(lastRecordedAt: Date | null, now = new Date()): boolean {
   if (!lastRecordedAt) return true;
   return daysSinceRecordedAt(lastRecordedAt, now) >= WEIGHT_CHECKIN_INTERVAL_DAYS;
+}
+
+/** KST calendar day bounds for `recordedAt` filtering [start, end). */
+export function kstDayBoundsForInstant(at: Date): { ymd: string; start: Date; endExclusive: Date } {
+  const ymd = todayAnchorKst(at);
+  const { y, m, d } = parseYmdParts(ymd);
+  const start = kstMidnightUtc(y, m, d);
+  const next = addDaysYmd(ymd, 1);
+  const { y: ny, m: nm, d: nd } = parseYmdParts(next);
+  const endExclusive = kstMidnightUtc(ny, nm, nd);
+  return { ymd, start, endExclusive };
 }

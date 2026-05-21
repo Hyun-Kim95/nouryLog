@@ -42,7 +42,14 @@
 - 404: 프로필 없음
 - 422: 신장 미설정/범위 밖
 
+## `POST /me/weight-entries` (동일 KST 일 1건)
+
+- 인증: USER
+- Body: `{ "weightKg": number }` (20~300, 소수 1자리)
+- 동작: 프로필 체중·권장 목표 갱신 후 `WeightEntry` 생성
+- **동일 KST 달력일**에 기존 기록이 있으면 **선삭제** 후 새 기록 1건만 유지(재저장 시 마지막 값이 남음)
+- 응답 201: `{ entry, goalsBefore, goalsAfter }` (기존과 동일)
+
 ## 기존 (변경 없음)
 
 - `GET /me/weight-entries/status`
-- `POST /me/weight-entries`

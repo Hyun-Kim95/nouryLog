@@ -172,6 +172,7 @@ WCAG AA: 본 팔레트에서 `fg / bg`, `fg-muted / bg`, `primary / primary-fg`,
   - **API 시뮬레이션**: `saveProfile 5xx 강제`, `recalcRecommendation 실패 강제` 토글. 실제 서버 호출 직전에 `ProfileApiError(500, code: FORCED_5XX)`로 던져진다(`api/profile.ts` `maybeForceFail`).
   - **흐름 트리거**: `온보딩 재진입`(SecureStore 플래그 제거 + Onboarding으로 reset), `강제 로그아웃`(토큰·플래그 제거 + Login으로 reset).
 - 운영 빌드 보호: `DevPanel` 컴포넌트는 `isDevBuild()`(`__DEV__`)가 false일 때 `null`을 반환한다. `maybeForceFail` 또한 동일 가드를 거쳐 prod에서는 분기 자체가 비활성화된다.
+- 설정 화면에는 개발자 카드를 두지 않는다. dev 도구는 우상단 **DEV** 핀(`DevPanel`)으로만 진입한다.
 
 ## 10) 변경 이력
 

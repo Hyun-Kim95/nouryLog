@@ -36,13 +36,13 @@ version: 0.1
 
 ### WeightHistory 스택 화면
 - 루트 스택 `WeightHistory`, 네이티브 헤더(뒤로), 제목 「체중 추이」
-- 본문: `StatsWeightSection`(차트 + 최근 20건 + 「체중 기록」 + `WeightCheckInModal`)
+- 본문: `StatsWeightSection`(차트 + 툴팁(탭) + 「체중 기록」 + `WeightCheckInModal`)
 
 | 상태 | UI |
 |------|-----|
 | 로딩 | Card 내 ActivityIndicator |
 | 빈 | 안내 문구 + 「체중 기록」 PrimaryButton |
-| 기본 | WeightTrendChart + 목록(날짜·kg) |
+| 기본 | WeightTrendChart(꺾은선) + 툴팁(점 탭) |
 | 오류 | Banner + 재시도 |
 
 ## 3) WeightTrendChart

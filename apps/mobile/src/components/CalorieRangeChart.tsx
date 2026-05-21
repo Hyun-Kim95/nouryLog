@@ -4,6 +4,17 @@ import type { FulfillmentStatus } from '../lib/goalFulfillment';
 import type { Theme } from '../theme';
 import { STATS_COPY } from '../copy/stats';
 import { useTheme } from '../theme';
+import {
+  PanelBands,
+  PanelGutterLabels,
+  RANGE_BAR_WIDTH_MAX,
+  RANGE_DAY_LABEL_HEIGHT,
+  RANGE_LABEL_GUTTER,
+  RANGE_PANEL_HEIGHT,
+  RANGE_TOOLTIP_SLOT_HEIGHT,
+  valueToHeight,
+  type PanelGoals,
+} from './chart/rangePanel';
 
 type NutritionSum = {
   calories: number;
@@ -30,19 +41,7 @@ type Props = {
   chartTapHint?: string;
 };
 
-const PANEL_HEIGHT = 108;
-const DAY_LABEL_HEIGHT = 36;
-const BAR_WIDTH_MAX = 14;
-const LABEL_GUTTER = 64;
-const TOOLTIP_SLOT_HEIGHT = 88;
 const PROTEIN_TITLE_HEIGHT = 22;
-const MIN_GUTTER_LABEL_GAP = 28;
-
-type PanelGoals = {
-  low: number | null;
-  high: number | null;
-  scaleMax: number;
-};
 
 function dayOfMonth(ymd: string): number {
   const parts = ymd.split('-');
@@ -89,160 +88,6 @@ function statusColor(status: FulfillmentStatus, hasRecords: boolean, t: Theme): 
   return t.colors.fgMuted;
 }
 
-function valueToHeight(value: number, scaleMax: number): number {
-  if (!Number.isFinite(value) || scaleMax <= 0) return 0;
-  return Math.max(0, (value / scaleMax) * PANEL_HEIGHT);
-}
-
-function DashedGuideLine({ top, width, color }: { top: number; width: number; color: string }) {
-  return (
-    <View
-      pointerEvents="none"
-      style={{
-        position: 'absolute',
-        left: 0,
-        top,
-        width,
-        height: 0,
-        borderTopWidth: 1,
-        borderStyle: 'dashed',
-        borderColor: color,
-      }}
-    />
-  );
-}
-
-function PanelBands({
-  goals,
-  plotWidth,
-  bandColor,
-  lineHighColor,
-  lineLowColor,
-}: {
-  goals: PanelGoals;
-  plotWidth: number;
-  bandColor: string;
-  lineHighColor: string;
-  lineLowColor: string;
-}) {
-  const { low, high, scaleMax } = goals;
-  const bandTopY =
-    high != null && high > 0 ? PANEL_HEIGHT - valueToHeight(high, scaleMax) : null;
-  const bandBottomY =
-    low != null && low > 0 ? PANEL_HEIGHT - valueToHeight(low, scaleMax) : null;
-  const showBand =
-    low != null && high != null && low > 0 && high > 0 && bandTopY != null && bandBottomY != null;
-
-  return (
-    <>
-      {showBand ? (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            width: plotWidth,
-            top: bandTopY,
-            height: Math.max(2, bandBottomY - bandTopY),
-            backgroundColor: bandColor,
-            opacity: 0.12,
-            borderRadius: 2,
-          }}
-        />
-      ) : null}
-      {high != null && high > 0 && bandTopY != null ? (
-        <DashedGuideLine top={bandTopY} width={plotWidth} color={lineHighColor} />
-      ) : null}
-      {low != null && low > 0 && bandBottomY != null && low !== high ? (
-        <DashedGuideLine top={bandBottomY} width={plotWidth} color={lineLowColor} />
-      ) : null}
-    </>
-  );
-}
-
-function PanelGutterLabels({
-  goals,
-  unit,
-  color,
-  panelTop,
-}: {
-  goals: PanelGoals;
-  unit: string;
-  color: string;
-  panelTop: number;
-}) {
-  const { low, high, scaleMax } = goals;
-  const bandTopY =
-    high != null && high > 0 ? PANEL_HEIGHT - valueToHeight(high, scaleMax) : null;
-  const bandBottomY =
-    low != null && low > 0 ? PANEL_HEIGHT - valueToHeight(low, scaleMax) : null;
-
-  if (high == null || high <= 0 || bandTopY == null) return null;
-
-  if (low == null || low <= 0 || low === high || bandBottomY == null) {
-    return (
-      <Text
-        style={{
-          position: 'absolute',
-          right: 0,
-          top: panelTop + Math.max(0, bandTopY - 8),
-          color,
-          fontSize: 10,
-        }}
-      >
-        {Math.round(high)}
-        {unit}
-      </Text>
-    );
-  }
-
-  const bandHeight = bandBottomY - bandTopY;
-  if (bandHeight < MIN_GUTTER_LABEL_GAP) {
-    return (
-      <Text
-        style={{
-          position: 'absolute',
-          right: 0,
-          top: panelTop + bandTopY + bandHeight / 2 - 8,
-          color,
-          fontSize: 10,
-        }}
-      >
-        {STATS_COPY.goalRangeLabel(Math.round(low), Math.round(high), unit)}
-      </Text>
-    );
-  }
-
-  return (
-    <>
-      <Text
-        style={{
-          position: 'absolute',
-          right: 0,
-          top: panelTop + Math.max(0, bandTopY - 8),
-          color,
-          fontSize: 10,
-        }}
-      >
-        {Math.round(high)}
-        {unit}
-      </Text>
-      <Text
-        style={{
-          position: 'absolute',
-          right: 0,
-          top: panelTop + Math.min(PANEL_HEIGHT - 12, Math.max(0, bandBottomY - 8)),
-          color,
-          fontSize: 10,
-        }}
-      >
-        {Math.round(low)}
-        {unit}
-      </Text>
-    </>
-  );
-}
-
 function TooltipSlot({
   selected,
   t,
@@ -255,7 +100,7 @@ function TooltipSlot({
   return (
     <View
       style={{
-        height: TOOLTIP_SLOT_HEIGHT,
+        height: RANGE_TOOLTIP_SLOT_HEIGHT,
         justifyContent: 'center',
         marginBottom: t.spacing.xs,
         paddingHorizontal: t.spacing.xs,
@@ -366,10 +211,12 @@ export function CalorieRangeChart({
   };
 
   const colWidth = plotInnerWidth > 0 ? Math.floor(plotInnerWidth / daily.length) : 0;
-  const barWidth = colWidth > 0 ? Math.min(BAR_WIDTH_MAX, Math.max(8, Math.floor(colWidth * 0.45))) : BAR_WIDTH_MAX;
+  const barWidth =
+    colWidth > 0 ? Math.min(RANGE_BAR_WIDTH_MAX, Math.max(8, Math.floor(colWidth * 0.45))) : RANGE_BAR_WIDTH_MAX;
   const plotWidth = plotInnerWidth > 0 ? plotInnerWidth : colWidth * daily.length;
-  const proteinPanelTop = PANEL_HEIGHT + PROTEIN_TITLE_HEIGHT;
-  const columnBlockHeight = PANEL_HEIGHT + PROTEIN_TITLE_HEIGHT + PANEL_HEIGHT + DAY_LABEL_HEIGHT;
+  const proteinPanelTop = RANGE_PANEL_HEIGHT + PROTEIN_TITLE_HEIGHT;
+  const columnBlockHeight =
+    RANGE_PANEL_HEIGHT + PROTEIN_TITLE_HEIGHT + RANGE_PANEL_HEIGHT + RANGE_DAY_LABEL_HEIGHT;
   const plotBlockHeight = columnBlockHeight;
 
   return (
@@ -402,7 +249,7 @@ export function CalorieRangeChart({
                   top: 0,
                   left: 0,
                   width: plotWidth,
-                  height: PANEL_HEIGHT,
+                  height: RANGE_PANEL_HEIGHT,
                 }}
               >
                 <PanelBands
@@ -418,7 +265,7 @@ export function CalorieRangeChart({
                 pointerEvents="none"
                 style={{
                   position: 'absolute',
-                  top: PANEL_HEIGHT,
+                  top: RANGE_PANEL_HEIGHT,
                   left: 0,
                   color: t.colors.fgMuted,
                   fontSize: t.fontSize.caption,
@@ -437,7 +284,7 @@ export function CalorieRangeChart({
                   top: proteinPanelTop,
                   left: 0,
                   width: plotWidth,
-                  height: PANEL_HEIGHT,
+                  height: RANGE_PANEL_HEIGHT,
                 }}
               >
                 <PanelBands
@@ -462,10 +309,10 @@ export function CalorieRangeChart({
                       const proteinG = Number(p.summary?.protein ?? 0);
                       const status = normalizeStatus(p.calorieStatus, p.hasRecords);
                       const kcalBarH = p.hasRecords
-                        ? Math.max(6, valueToHeight(kcal, calorieScaleMax))
+                        ? Math.max(6, valueToHeight(kcal, calorieScaleMax, RANGE_PANEL_HEIGHT))
                         : 6;
                       const proteinBarH = p.hasRecords
-                        ? Math.max(6, valueToHeight(proteinG, proteinScaleMax))
+                        ? Math.max(6, valueToHeight(proteinG, proteinScaleMax, RANGE_PANEL_HEIGHT))
                         : 6;
                       const isSelected = p.date === selectedDate;
 
@@ -483,7 +330,7 @@ export function CalorieRangeChart({
                         >
                           <View
                             style={{
-                              height: PANEL_HEIGHT,
+                              height: RANGE_PANEL_HEIGHT,
                               justifyContent: 'flex-end',
                               alignItems: 'center',
                             }}
@@ -501,7 +348,7 @@ export function CalorieRangeChart({
                           <View style={{ height: PROTEIN_TITLE_HEIGHT }} />
                           <View
                             style={{
-                              height: PANEL_HEIGHT,
+                              height: RANGE_PANEL_HEIGHT,
                               justifyContent: 'flex-end',
                               alignItems: 'center',
                             }}
@@ -518,7 +365,7 @@ export function CalorieRangeChart({
                           </View>
                           <View
                             style={{
-                              height: DAY_LABEL_HEIGHT,
+                              height: RANGE_DAY_LABEL_HEIGHT,
                               alignItems: 'center',
                               justifyContent: 'center',
                               paddingHorizontal: 2,
@@ -562,9 +409,9 @@ export function CalorieRangeChart({
 
         <View
           style={{
-            width: LABEL_GUTTER,
+            width: RANGE_LABEL_GUTTER,
             height: plotBlockHeight,
-            marginTop: TOOLTIP_SLOT_HEIGHT + t.spacing.xs + 18,
+            marginTop: RANGE_TOOLTIP_SLOT_HEIGHT + t.spacing.xs + 18,
             position: 'relative',
           }}
         >
@@ -573,12 +420,14 @@ export function CalorieRangeChart({
             unit=" kcal"
             color={t.colors.fgMuted}
             panelTop={0}
+            formatGoalRangeLabel={STATS_COPY.goalRangeLabel}
           />
           <PanelGutterLabels
             goals={proteinGoals}
             unit="g"
             color={t.colors.info}
             panelTop={proteinPanelTop}
+            formatGoalRangeLabel={STATS_COPY.goalRangeLabel}
           />
         </View>
       </View>

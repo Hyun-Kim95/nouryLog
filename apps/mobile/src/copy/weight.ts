@@ -15,9 +15,11 @@ export const WEIGHT_COPY = {
   historyRecord: '체중 기록',
   historyLoadError: '체중 기록을 불러오지 못했어요.',
   historyRetry: '다시 시도',
+  referenceLoadError: '참고 체중 구간을 불러오지 못했어요.',
   historyEntryLine: (dateLabel: string, weightKg: number) => `${dateLabel} · ${weightKg}kg`,
   chartTitle: '체중 추이 (최근 90일)',
   chartTapHint: '점을 탭하면 해당 날짜 체중이 표시돼요.',
+  chartBandLegend: '음영·점선 구간: 키·BMI(18.5~23) 기준 참고 체중 범위입니다.',
   chartTooltip: (dateLabel: string, weightKg: number) => `${dateLabel} · ${weightKg}kg`,
   referenceTitle: '참고 체중 구간',
   referenceRange: (minKg: number, maxKg: number, bmiMin: number, bmiMax: number) =>

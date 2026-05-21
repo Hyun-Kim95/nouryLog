@@ -1,16 +1,17 @@
+import { useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Segmented } from '../components/Segmented';
+import { WithdrawReasonModal, type WithdrawReasonPayload } from '../components/WithdrawReasonModal';
 import { Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
+import { SETTINGS_COPY } from '../copy/settings';
 import { useTheme, useUserThemeMode, type ThemeMode } from '../theme';
 import { clearTokens, getAccessToken } from '../authStorage';
 import { deactivateAccount } from '../api';
 import { useToast } from '../toast/useToast';
 import type { RootStackParamList } from '../navigation';
 import { NotificationCard } from './settings/NotificationCard';
-import { DevToolsSection } from '../dev/DevPanel';
-import { isDevBuild } from '../dev/devToggles';
 
 const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'light', label: '라이트' },
@@ -22,15 +23,16 @@ export function SettingsScreen() {
   const { userMode, setUserMode } = useUserThemeMode();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const toast = useToast();
+  const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
 
-  const onWithdraw = () => {
+  const confirmWithdraw = (payload: WithdrawReasonPayload) => {
     Alert.alert(
-      '회원 탈퇴',
-      '탈퇴하면 계정은 즉시 이용할 수 없게 됩니다. 데이터는 비활성화 후 1년이 지나면 완전히 삭제됩니다. 계속할까요?',
+      SETTINGS_COPY.withdrawConfirmTitle,
+      SETTINGS_COPY.withdrawConfirmBody,
       [
-        { text: '취소', style: 'cancel' },
+        { text: SETTINGS_COPY.withdrawCancel, style: 'cancel' },
         {
-          text: '탈퇴',
+          text: SETTINGS_COPY.withdrawConfirmAction,
           style: 'destructive',
           onPress: () => {
             void (async () => {
@@ -40,8 +42,12 @@ export function SettingsScreen() {
                   toast.show({ kind: 'error', message: '로그인 정보가 없어요. 다시 로그인해 주세요.' });
                   return;
                 }
-                await deactivateAccount(token);
+                await deactivateAccount(token, {
+                  reasonCode: payload.reasonCode,
+                  reasonText: payload.reasonText,
+                });
                 await clearTokens();
+                setWithdrawModalVisible(false);
                 toast.show({ kind: 'info', message: '탈퇴가 완료되었어요.' });
                 navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
               } catch (e) {
@@ -183,13 +189,6 @@ export function SettingsScreen() {
         </View>
       </Card>
 
-      {isDevBuild() ? (
-        <Card>
-          <CardTitle>개발자</CardTitle>
-          <DevToolsSection />
-        </Card>
-      ) : null}
-
       <Card>
         <CardTitle>계정</CardTitle>
         <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
@@ -197,10 +196,19 @@ export function SettingsScreen() {
           완전히 삭제됩니다. 자세한 내용은 개인정보처리방침을 참고해 주세요.
         </Text>
         <View style={{ gap: t.spacing.sm }}>
-          <PrimaryButton title="로그아웃" onPress={onLogout} variant="danger" />
-          <PrimaryButton title="회원 탈퇴" onPress={onWithdraw} variant="danger" />
+          <PrimaryButton title="로그아웃" onPress={onLogout} variant="secondary" />
+          <PrimaryButton title="회원 탈퇴" onPress={() => setWithdrawModalVisible(true)} variant="danger" />
         </View>
       </Card>
+
+      <WithdrawReasonModal
+        visible={withdrawModalVisible}
+        onClose={() => setWithdrawModalVisible(false)}
+        onContinue={(payload) => {
+          setWithdrawModalVisible(false);
+          confirmWithdraw(payload);
+        }}
+      />
     </ScreenLayout>
   );
 }

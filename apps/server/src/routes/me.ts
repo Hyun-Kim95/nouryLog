@@ -40,12 +40,14 @@ import {
 import {
   daysSinceRecordedAt,
   isWeightCheckInDue,
+  kstDayBoundsForInstant,
   type GoalSnapshot,
 } from '../lib/weightEntry.js';
 import {
   computeReferenceWeight,
   validateHeightForReference,
 } from '../lib/referenceWeight.js';
+import { validateUserWithdrawalReason } from '../lib/deactivationReason.js';
 import type { MealSlot, SnackPlacement } from '@prisma/client';
 import { softDeactivateFields } from '../lib/retention.js';
 
@@ -597,57 +599,70 @@ meRouter.post('/me/weight-entries', async (req, res) => {
   }
 
   const goalsBefore = goalsSnapshotFromProfile(p);
+  const recordedAt = new Date();
+  const { start: dayStart, endExclusive: dayEnd } = kstDayBoundsForInstant(recordedAt);
 
-  await prisma.profile.update({
-    where: { userId },
-    data: { weightKg: weight.value! },
-  });
+  const entry = await prisma.$transaction(async (tx) => {
+    await tx.profile.update({
+      where: { userId },
+      data: { weightKg: weight.value! },
+    });
 
-  const full = calculateRecommendationFull({
-    gender: p.gender,
-    age: p.age,
-    heightCm: p.heightCm,
-    weightKg: weight.value!,
-    activityLevel: p.activityLevel,
-    goal: p.goal,
-  });
-  const ranges = computeGoalRanges(full.proteinGoalG, full.calorieGoalKcal, safeGoal(p.goal));
-
-  const updated = await prisma.profile.update({
-    where: { userId },
-    data: {
-      proteinGoalG: full.proteinGoalG,
-      calorieGoalKcal: full.calorieGoalKcal,
-      ...ranges,
-    },
-  });
-
-  const goalsAfter = goalsSnapshotFromProfile(updated);
-
-  const entry = await prisma.weightEntry.create({
-    data: {
-      userId,
-      recordedAt: new Date(),
+    const full = calculateRecommendationFull({
+      gender: p.gender,
+      age: p.age,
+      heightCm: p.heightCm,
       weightKg: weight.value!,
-      goal: p.goal,
       activityLevel: p.activityLevel,
-      proteinGoalG: goalsAfter.proteinGoalG,
-      calorieGoalKcal: goalsAfter.calorieGoalKcal,
-      proteinGoalMinG: goalsAfter.proteinGoalMinG,
-      proteinGoalMaxG: goalsAfter.proteinGoalMaxG,
-      calorieGoalMinKcal: goalsAfter.calorieGoalMinKcal,
-      calorieGoalMaxKcal: goalsAfter.calorieGoalMaxKcal,
-    },
+      goal: p.goal,
+    });
+    const ranges = computeGoalRanges(full.proteinGoalG, full.calorieGoalKcal, safeGoal(p.goal));
+
+    const updated = await tx.profile.update({
+      where: { userId },
+      data: {
+        proteinGoalG: full.proteinGoalG,
+        calorieGoalKcal: full.calorieGoalKcal,
+        ...ranges,
+      },
+    });
+
+    const goalsAfter = goalsSnapshotFromProfile(updated);
+
+    await tx.weightEntry.deleteMany({
+      where: {
+        userId,
+        recordedAt: { gte: dayStart, lt: dayEnd },
+      },
+    });
+
+    const created = await tx.weightEntry.create({
+      data: {
+        userId,
+        recordedAt,
+        weightKg: weight.value!,
+        goal: p.goal,
+        activityLevel: p.activityLevel,
+        proteinGoalG: goalsAfter.proteinGoalG,
+        calorieGoalKcal: goalsAfter.calorieGoalKcal,
+        proteinGoalMinG: goalsAfter.proteinGoalMinG,
+        proteinGoalMaxG: goalsAfter.proteinGoalMaxG,
+        calorieGoalMinKcal: goalsAfter.calorieGoalMinKcal,
+        calorieGoalMaxKcal: goalsAfter.calorieGoalMaxKcal,
+      },
+    });
+
+    return { created, goalsAfter };
   });
 
   res.status(201).json({
     entry: {
-      id: entry.id,
-      recordedAt: entry.recordedAt.toISOString(),
-      weightKg: entry.weightKg,
+      id: entry.created.id,
+      recordedAt: entry.created.recordedAt.toISOString(),
+      weightKg: entry.created.weightKg,
     },
     goalsBefore,
-    goalsAfter,
+    goalsAfter: entry.goalsAfter,
   });
 });
 
@@ -1233,6 +1248,14 @@ meRouter.patch('/me/deactivate', async (req, res) => {
     sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 탈퇴할 수 있습니다.');
     return;
   }
+  const validated = validateUserWithdrawalReason((req.body ?? {}) as {
+    reasonCode?: unknown;
+    reasonText?: unknown;
+  });
+  if (!validated.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, validated.message, { field: validated.field });
+    return;
+  }
   const user = await prisma.user.findFirst({ where: { id: userId, role: 'USER' } });
   if (!user) {
     sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '회원을 찾을 수 없습니다.');
@@ -1246,8 +1269,8 @@ meRouter.patch('/me/deactivate', async (req, res) => {
     where: { id: userId },
     data: {
       ...softDeactivateFields(),
-      deactivationReasonCode: null,
-      deactivationReason: null,
+      deactivationReasonCode: validated.reasonCode,
+      deactivationReason: validated.reasonText,
     },
   });
   res.json({ ok: true });

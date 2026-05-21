@@ -218,9 +218,25 @@ paths:
       tags: [Me]
       summary: 회원 탈퇴(비활성화)
       security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reasonCode]
+              properties:
+                reasonCode:
+                  type: string
+                  enum: [not_using, alternative_app, hard_to_use, privacy, etc]
+                reasonText:
+                  type: string
+                  maxLength: 500
+                  description: reasonCode가 etc일 때 필수
       responses:
         '200': { description: OK }
         '403': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '422': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
 
   /me/food-templates:
     get:

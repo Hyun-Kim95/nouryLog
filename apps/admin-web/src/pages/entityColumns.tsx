@@ -83,6 +83,10 @@ const DEACTIVATION_REASON_LABEL: Record<string, string> = {
   inactive_long: '장기 미접속',
   terms_violation: '약관 위반',
   etc: '기타',
+  not_using: '더 이상 이용하지 않음',
+  alternative_app: '다른 앱·서비스 이용',
+  hard_to_use: '사용이 불편함',
+  privacy: '개인정보·데이터 걱정',
 };
 
 export function deactivationReasonLabel(code: unknown): string {

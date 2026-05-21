@@ -7,20 +7,16 @@ import { requireAdmin } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
 import { runPurgeInactive } from '../lib/purgeInactive.js';
 import { softActivateFields, softDeactivateFields } from '../lib/retention.js';
+import {
+  ADMIN_DEACTIVATION_REASON_CODES,
+  validateAdminDeactivationReason,
+} from '../lib/deactivationReason.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
 
 const INQUIRY_STATUSES = ['pending', 'in_progress', 'done'] as const;
 type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
-
-const DEACTIVATION_REASON_CODES = ['spam', 'inactive_long', 'terms_violation', 'etc'] as const;
-type DeactivationReasonCode = (typeof DEACTIVATION_REASON_CODES)[number];
-const DEACTIVATION_REASON_TEXT_MAX = 500;
-
-function isDeactivationReasonCode(v: unknown): v is DeactivationReasonCode {
-  return typeof v === 'string' && (DEACTIVATION_REASON_CODES as readonly string[]).includes(v);
-}
 
 const CATEGORY_MAX_LEN = 50;
 const ANSWER_MAX_LEN = 4000;
@@ -296,36 +292,12 @@ adminRouter.get('/admin/users', async (req, res) => {
 adminRouter.patch('/admin/users/:id/deactivate', async (req, res) => {
   const id = req.params.id;
   const b = (req.body ?? {}) as { reasonCode?: unknown; reasonText?: unknown };
-  const reasonCode = b.reasonCode;
-  if (!isDeactivationReasonCode(reasonCode)) {
-    sendError(
-      res,
-      422,
-      ErrorCodes.VALIDATION_FAILED,
-      `reasonCode는 ${DEACTIVATION_REASON_CODES.join(' | ')} 중 하나여야 합니다.`,
-      { allowed: [...DEACTIVATION_REASON_CODES] },
-    );
-    return;
-  }
-  const reasonTextRaw = typeof b.reasonText === 'string' ? b.reasonText : '';
-  const reasonText = reasonTextRaw.trim();
-  if (reasonCode === 'etc' && !reasonText) {
-    sendError(
-      res,
-      422,
-      ErrorCodes.VALIDATION_FAILED,
-      "reasonCode가 'etc'일 때는 reasonText가 필요합니다.",
-    );
-    return;
-  }
-  if (reasonText.length > DEACTIVATION_REASON_TEXT_MAX) {
-    sendError(
-      res,
-      422,
-      ErrorCodes.VALIDATION_FAILED,
-      `reasonText는 ${DEACTIVATION_REASON_TEXT_MAX}자 이하여야 합니다.`,
-      { maxLength: DEACTIVATION_REASON_TEXT_MAX },
-    );
+  const validated = validateAdminDeactivationReason(b);
+  if (!validated.ok) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, validated.message, {
+      field: validated.field,
+      allowed: [...ADMIN_DEACTIVATION_REASON_CODES],
+    });
     return;
   }
   const user = await prisma.user.findFirst({ where: { id, role: 'USER' } });
@@ -337,8 +309,8 @@ adminRouter.patch('/admin/users/:id/deactivate', async (req, res) => {
     where: { id },
     data: {
       ...softDeactivateFields(),
-      deactivationReasonCode: reasonCode,
-      deactivationReason: reasonText || null,
+      deactivationReasonCode: validated.reasonCode,
+      deactivationReason: validated.reasonText,
     },
   });
   res.json({ ok: true });

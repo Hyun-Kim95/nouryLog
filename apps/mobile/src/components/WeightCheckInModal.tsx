@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, Text, View } from 'react-native';
 import { Field } from './Field';
-import { PrimaryButton, TextButton } from './ui';
+import { PrimaryButton } from './ui';
 import { postWeightEntry, type WeightCheckInStatus } from '../api/weightEntries';
 import { WEIGHT_COPY } from '../copy/weight';
 import { useBottomSafeInset } from '../hooks/useBottomSafeInset';
@@ -113,7 +113,9 @@ export function WeightCheckInModal({
             onChangeText={setWeightStr}
           />
           <PrimaryButton title={WEIGHT_COPY.save} onPress={() => void handleSave()} loading={busy} />
-          {!busy ? <TextButton title={WEIGHT_COPY.later} onPress={onDismissLater} /> : null}
+          {!busy ? (
+            <PrimaryButton title={WEIGHT_COPY.later} variant="secondary" onPress={onDismissLater} />
+          ) : null}
         </View>
       </View>
     </Modal>

@@ -3,19 +3,30 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { listWeightEntries, type WeightEntryItem } from '../api/weightEntries';
 import { ensureAccessToken } from '../authSession';
 import { postWeightEntry } from '../api/weightEntries';
+import { fetchReferenceWeight, type ReferenceWeightResponse } from '../api/referenceWeight';
 import { WEIGHT_COPY } from '../copy/weight';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { useWeightCheckIn } from '../hooks/useWeightCheckIn';
 import { WeightCheckInModal } from './WeightCheckInModal';
+import { ReferenceWeightCard } from './ReferenceWeightCard';
 import { WeightTrendChart } from './WeightTrendChart';
 import { Banner, Card, CardTitle, PrimaryButton } from './ui';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 
-function formatRecordedAt(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
+/** Latest entry per KST calendar day (defense if server still returns duplicates). */
+function latestEntryPerDay(items: WeightEntryItem[]): WeightEntryItem[] {
+  const byDate = new Map<string, WeightEntryItem>();
+  for (const e of items) {
+    const key = e.recordedAt.slice(0, 10);
+    const prev = byDate.get(key);
+    if (!prev || new Date(e.recordedAt).getTime() > new Date(prev.recordedAt).getTime()) {
+      byDate.set(key, e);
+    }
+  }
+  return [...byDate.values()].sort(
+    (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+  );
 }
 
 export function StatsWeightSection() {
@@ -34,18 +45,28 @@ export function StatsWeightSection() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [entries, setEntries] = useState<WeightEntryItem[]>([]);
+  const [reference, setReference] = useState<ReferenceWeightResponse | null>(null);
+  const [refErr, setRefErr] = useState<string | null>(null);
 
   const load = useCallback(async ({ silent }: { silent: boolean }) => {
     if (!silent) setLoading(true);
     setErr(null);
+    setRefErr(null);
     try {
       const token = await ensureAccessToken();
       if (!token) return;
       await refreshWeightStatus();
       const from = new Date();
       from.setDate(from.getDate() - 90);
-      const list = await listWeightEntries(token, { size: 100, from: from.toISOString() });
-      setEntries(list.items);
+      const [list, ref] = await Promise.all([
+        listWeightEntries(token, { size: 100, from: from.toISOString() }),
+        fetchReferenceWeight(token).catch((e) => {
+          setRefErr(e instanceof Error ? e.message : WEIGHT_COPY.referenceLoadError);
+          return null;
+        }),
+      ]);
+      setEntries(latestEntryPerDay(list.items));
+      setReference(ref);
     } catch (e) {
       setErr(e instanceof Error ? e.message : WEIGHT_COPY.historyLoadError);
     } finally {
@@ -70,6 +91,11 @@ export function StatsWeightSection() {
     });
   };
 
+  const showReference =
+    reference != null &&
+    reference.weightKgMin > 0 &&
+    reference.weightKgMax > reference.weightKgMin;
+
   return (
     <>
       <Card>
@@ -83,16 +109,22 @@ export function StatsWeightSection() {
         ) : entries.length === 0 ? (
           <View style={{ gap: t.spacing.sm }}>
             <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{WEIGHT_COPY.historyEmpty}</Text>
+            {showReference ? <ReferenceWeightCard data={reference} error={refErr} /> : null}
             <PrimaryButton title={WEIGHT_COPY.historyRecord} onPress={openWeightModal} />
           </View>
         ) : (
           <View style={{ gap: t.spacing.md }}>
-            <WeightTrendChart entries={entries} />
-            {entries.slice(0, 20).map((e) => (
-              <Text key={e.id} style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
-                {WEIGHT_COPY.historyEntryLine(formatRecordedAt(e.recordedAt), e.weightKg)}
+            {showReference ? <ReferenceWeightCard data={reference} error={refErr} /> : null}
+            {weightStatus?.lastWeightKg != null && weightStatus.daysSince != null ? (
+              <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
+                {WEIGHT_COPY.lastRecorded(weightStatus.lastWeightKg, weightStatus.daysSince)}
               </Text>
-            ))}
+            ) : null}
+            <WeightTrendChart
+              entries={entries}
+              weightKgMin={reference?.weightKgMin ?? null}
+              weightKgMax={reference?.weightKgMax ?? null}
+            />
             <PrimaryButton title={WEIGHT_COPY.historyRecord} onPress={openWeightModal} />
           </View>
         )}
