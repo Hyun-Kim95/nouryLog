@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { useTheme } from './theme';
 
 const NAV_ITEMS: { to: string; label: string; icon: string }[] = [
@@ -22,10 +23,11 @@ const PATH_TITLE: Record<string, string> = {
 };
 
 export function Layout() {
-  const { logout, isAdmin } = useAuth();
+  const { token, logout, isAdmin } = useAuth();
   const { dark, toggle } = useTheme();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
 
   useEffect(() => {
     setDrawerOpen(false);
@@ -73,6 +75,9 @@ export function Layout() {
           >
             {dark ? '☀ 라이트 모드' : '☾ 다크 모드'}
           </button>
+          <button type="button" className="btn btn-ghost" onClick={() => setPasswordModalOpen(true)}>
+            비밀번호 변경
+          </button>
           <button type="button" className="btn btn-ghost" onClick={logout}>
             로그아웃
           </button>
@@ -105,6 +110,11 @@ export function Layout() {
       </header>
 
       <Outlet />
+      <ChangePasswordModal
+        open={passwordModalOpen}
+        onClose={() => setPasswordModalOpen(false)}
+        token={token}
+      />
     </div>
   );
 }

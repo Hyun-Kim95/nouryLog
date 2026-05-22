@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { resolvedReferenceAmount } from '../lib/foodTemplateReference.js';
 import { normalizePortionLabel, resolvePortionUnit, validatePortionLabelForUnit } from '../lib/portionUnit.js';
 import { requireAdmin } from '../middleware/requireAuth.js';
+import { hashPassword, verifyPassword } from '../lib/password.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
 import { runPurgeInactive } from '../lib/purgeInactive.js';
 import { softActivateFields, softDeactivateFields } from '../lib/retention.js';
@@ -96,6 +97,50 @@ function computeStale(aggregatedAt: Date | null, now: Date) {
   const hours = Math.max(0, Math.round((diffMs / 3_600_000) * 10) / 10);
   return { isStale: hours >= STALE_THRESHOLD_HOURS, staleHours: hours };
 }
+
+adminRouter.patch('/admin/me/password', async (req, res) => {
+  const userId = adminUserId(req);
+  if (!userId) {
+    sendError(res, 401, ErrorCodes.AUTH_UNAUTHORIZED, '인증이 필요합니다.');
+    return;
+  }
+  const b = (req.body ?? {}) as { currentPassword?: unknown; newPassword?: unknown };
+  const currentPassword = String(b.currentPassword ?? '');
+  const newPassword = String(b.newPassword ?? '');
+  if (!currentPassword || !newPassword) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '현재 비밀번호와 새 비밀번호가 필요합니다.');
+    return;
+  }
+  if (newPassword.length < 6) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '새 비밀번호는 6자 이상이어야 합니다.');
+    return;
+  }
+  if (newPassword === currentPassword) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '새 비밀번호는 현재 비밀번호와 달라야 합니다.');
+    return;
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { passwordHash: true, role: true, active: true },
+  });
+  if (!user || user.role !== 'ADMIN') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '관리자 권한이 필요합니다.');
+    return;
+  }
+  if (!user.active) {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '비활성화된 계정입니다.');
+    return;
+  }
+  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+    sendError(res, 401, ErrorCodes.AUTH_UNAUTHORIZED, '현재 비밀번호가 올바르지 않습니다.');
+    return;
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await hashPassword(newPassword) },
+  });
+  res.json({ ok: true });
+});
 
 adminRouter.get('/admin/dashboard', async (req, res) => {
   const days = clampPeriodDays(req.query.periodDays);

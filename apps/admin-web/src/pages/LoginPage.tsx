@@ -11,8 +11,8 @@ export function LoginPage() {
   const location = useLocation();
   const toast = useToast();
   const sessionReason = (location.state as LoginLocationState)?.reason;
-  const [email, setEmail] = useState('admin@example.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -43,7 +43,6 @@ export function LoginPage() {
         </span>
         <span>nouryLog 관리자</span>
       </div>
-      <p className="login-subtitle">시드 계정: admin@example.com / admin123</p>
       {sessionReason === 'auth_required' ? (
         <div className="banner banner-warn">로그인이 필요합니다. 관리자 계정으로 다시 로그인해 주세요.</div>
       ) : null}
