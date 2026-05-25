@@ -39,6 +39,8 @@
     "tsx": "^4.21.0"
   },
   "overrides": {
-    "entities": "2.2.0"
+    "entities": "2.2.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   }
 }

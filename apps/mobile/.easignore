@@ -1,0 +1,5 @@
+# EAS archive (eas.json 과 같은 디렉터리). 로컬 prebuild 산출물은 업로드하지 않는다.
+/android
+/ios
+/android/**
+/ios/**

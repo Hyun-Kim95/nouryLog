@@ -69,6 +69,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         urlScheme: naverIosUrlScheme,
       },
     ],
+    './plugins/withKakaoMavenRepository',
     [
       '@react-native-seoul/kakao-login',
       {

@@ -1,0 +1,12 @@
+# EAS Build upload excludes (monorepo root archive)
+image/
+**/*.zip
+**/AppMockUp*/
+apps/server/uploads/
+mock-internal/
+scripts/stitch/out/
+**/*.db
+**/*.db-journal
+# 로컬 android/ios 가 올라가면 서버에서 prebuild 가 스킵되어 Gradle autolink 가 깨진다
+apps/mobile/android/
+apps/mobile/ios/
