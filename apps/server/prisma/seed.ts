@@ -11,7 +11,8 @@ async function upsertUser(
   const passwordHash = await bcrypt.hash(password, 10);
   return prisma.user.upsert({
     where: { email },
-    update: { passwordHash, role },
+    // 기존 계정 비밀번호는 유지(운영·UI 변경 후 시드 재실행 시 admin123으로 덮어쓰지 않음).
+    update: { role },
     create: {
       email,
       passwordHash,
