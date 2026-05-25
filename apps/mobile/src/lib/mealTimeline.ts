@@ -83,11 +83,20 @@ function isTodayMeal(consumedAt: string): boolean {
 function sumSection(items: MealRow[]) {
   let summaryKcal = 0;
   let summaryProteinG = 0;
+  let summaryCarbG = 0;
+  let summaryFatG = 0;
   for (const m of items) {
     summaryKcal += Number(m.calories ?? 0);
     summaryProteinG += Number(m.protein ?? 0);
+    summaryCarbG += Number(m.carbohydrate ?? 0);
+    summaryFatG += Number(m.fat ?? 0);
   }
-  return { summaryKcal: Math.round(summaryKcal), summaryProteinG: Math.round(summaryProteinG) };
+  return {
+    summaryKcal: Math.round(summaryKcal),
+    summaryProteinG: Math.round(summaryProteinG),
+    summaryCarbG: Math.round(summaryCarbG),
+    summaryFatG: Math.round(summaryFatG),
+  };
 }
 
 export function groupMealsBySlotTimeline(meals: MealRow[]): TimelineSection[] {
@@ -120,6 +129,8 @@ export function summarizeByMealSlot(meals: MealRow[]): Array<{
   label: string;
   summaryKcal: number;
   summaryProteinG: number;
+  summaryCarbG: number;
+  summaryFatG: number;
   count: number;
 }> {
   const today = meals.filter((m) => isTodayMeal(m.consumedAt));
@@ -129,9 +140,9 @@ export function summarizeByMealSlot(meals: MealRow[]): Array<{
       slot === 'UNSPECIFIED'
         ? today.filter((m) => !m.mealSlot)
         : today.filter((m) => m.mealSlot === slot);
-    const { summaryKcal, summaryProteinG } = sumSection(filtered);
+    const { summaryKcal, summaryProteinG, summaryCarbG, summaryFatG } = sumSection(filtered);
     const label = slot === 'UNSPECIFIED' ? '미분류' : mealSlotLabel(slot);
-    return { slot, label, summaryKcal, summaryProteinG, count: filtered.length };
+    return { slot, label, summaryKcal, summaryProteinG, summaryCarbG, summaryFatG, count: filtered.length };
   });
 }
 

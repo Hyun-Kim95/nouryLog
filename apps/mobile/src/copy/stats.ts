@@ -23,7 +23,8 @@ export const STATS_COPY = {
   periodFutureBlocked: '아직 시작하지 않은 기간이에요.',
   bySlotTitle: '끼니별 합계',
   bySlotTitleAverage: '끼니별 일평균',
-  slotLine: (label: string, kcal: number, proteinG: number) => `${label} · ${kcal} kcal · 단백질 ${proteinG}g`,
+  slotLine: (label: string, kcal: number, proteinG: number, carbG: number, fatG: number) =>
+    `${label} · ${kcal} kcal · 단백질 ${proteinG}g · 탄수 ${carbG}g · 지방 ${fatG}g`,
   calorieRangeChartTitle: '목표 구간 · 칼로리 · 단백질',
   goalRangeLabel: (low: number, high: number, unit: string) => `${low}–${high}${unit}`,
   calorieChartTapHint: '막대를 탭하면 해당 날짜 합계가 표시돼요.',
@@ -33,7 +34,7 @@ export const STATS_COPY = {
   calendarClose: '닫기',
   calendarHint: '날짜를 탭하면 그 날짜가 포함된 통계 구간으로 이동해요.',
   calorieRangeLegend:
-    '막대: 일별=해당일 합계, 주·월별=기록일 일평균. 연한 영역·점선=하루 목표 구간.',
+    '막대: 일별=해당일 합계, 주·월별=기록일 일평균. 연한 영역·점선=하루 목표 구간. 탄수·지방은 막대를 탭하면 툴팁에서 볼 수 있어요.',
   caloriePanelTitle: '칼로리',
   proteinPanelTitle: '단백질',
   calorieTooltipProtein: (proteinG: number) => `단백질 ${proteinG}g`,

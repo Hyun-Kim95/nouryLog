@@ -1,5 +1,6 @@
 import { CommonActions, createNavigationContainerRef } from '@react-navigation/native';
-import { clearTokens, getAccessToken } from './authStorage';
+import { refreshAccessToken } from './authRefresh';
+import { clearTokens, getAccessToken, isAccessTokenExpired } from './authStorage';
 import { isAuthDenied } from './lib/apiError';
 import type { RootStackParamList } from './navigation';
 
@@ -30,10 +31,20 @@ export function consumeLoginNotice(): string | null {
   return notice;
 }
 
-/** 토큰이 없으면 로그인 화면으로 보내고 null을 반환한다. */
+/** access가 없거나 만료 직전이면 refresh를 시도한다. 실패 시 로그인 화면으로 보낸다. */
 export async function ensureAccessToken(): Promise<string | null> {
-  const token = await getAccessToken();
+  let token = await getAccessToken();
   if (!token) {
+    token = await refreshAccessToken();
+    if (!token) {
+      await signOutToLogin();
+      return null;
+    }
+    return token;
+  }
+  if (isAccessTokenExpired(token)) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return refreshed;
     await signOutToLogin();
     return null;
   }

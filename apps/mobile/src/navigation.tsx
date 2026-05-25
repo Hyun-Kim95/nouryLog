@@ -28,10 +28,18 @@ import { InquiryDetailScreen } from './screens/support/InquiryDetailScreen';
 import { themedStackScreenOptions } from './navigation/themedStackOptions';
 import { useTheme } from './theme';
 
+export type MainTabParamList = {
+  Home: undefined;
+  Log: { targetYmd?: string } | undefined;
+  Stats: undefined;
+  Sub: undefined;
+  Settings: undefined;
+};
+
 export type RootStackParamList = {
   Login: undefined;
   Onboarding: undefined;
-  Main: undefined;
+  Main: { screen?: keyof MainTabParamList; params?: MainTabParamList[keyof MainTabParamList] } | undefined;
   ProfileEdit: undefined;
   WeightHistory: undefined;
   PastMealBrowse: undefined;
@@ -46,7 +54,7 @@ export type RootStackParamList = {
 export type InitialRoute = 'Login' | 'Onboarding' | 'Main';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
-const Tabs = createBottomTabNavigator();
+const Tabs = createBottomTabNavigator<MainTabParamList>();
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 

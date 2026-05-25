@@ -126,12 +126,41 @@ export function HomeScreen() {
         <Card>
           <CardTitle>{HOME_COPY.intakeTitle}</CardTitle>
           <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
-            {intake.calorieKcal} kcal
+            {Math.round(intake.calorieKcal)} kcal
           </Text>
-          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
-            {HOME_COPY.protein} {Math.round(intake.proteinG)}g · {HOME_COPY.carb}{' '}
-            {Math.round(intake.carbohydrateG)}g · {HOME_COPY.fat} {Math.round(intake.fatG)}g
-          </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              gap: t.spacing.sm,
+              marginTop: t.spacing.sm,
+            }}
+          >
+            {(
+              [
+                { label: HOME_COPY.protein, value: `${Math.round(intake.proteinG)}g` },
+                { label: HOME_COPY.carb, value: `${Math.round(intake.carbohydrateG)}g` },
+                { label: HOME_COPY.fat, value: `${Math.round(intake.fatG)}g` },
+              ] as const
+            ).map((m) => (
+              <View
+                key={m.label}
+                style={{
+                  flexGrow: 1,
+                  flexBasis: '28%',
+                  minWidth: 96,
+                  padding: t.spacing.sm,
+                  borderRadius: t.radius.md,
+                  backgroundColor: t.colors.surface2,
+                }}
+              >
+                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>{m.label}</Text>
+                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '700' }}>
+                  {m.value}
+                </Text>
+              </View>
+            ))}
+          </View>
         </Card>
       ) : null}
 
@@ -147,7 +176,13 @@ export function HomeScreen() {
             }}
           >
             {s.count > 0
-              ? HOME_COPY.mealSlotLine(s.label, s.summaryKcal, s.summaryProteinG)
+              ? HOME_COPY.mealSlotLine(
+                  s.label,
+                  s.summaryKcal,
+                  s.summaryProteinG,
+                  s.summaryCarbG,
+                  s.summaryFatG,
+                )
               : `${s.label} · ${HOME_COPY.mealSlotEmpty}`}
           </Text>
         ))}
@@ -159,7 +194,13 @@ export function HomeScreen() {
             }}
           >
             {snackSummary.count > 0
-              ? HOME_COPY.mealSlotLine(snackSummary.label, snackSummary.summaryKcal, snackSummary.summaryProteinG)
+              ? HOME_COPY.mealSlotLine(
+                  snackSummary.label,
+                  snackSummary.summaryKcal,
+                  snackSummary.summaryProteinG,
+                  snackSummary.summaryCarbG,
+                  snackSummary.summaryFatG,
+                )
               : `${snackSummary.label} · ${HOME_COPY.mealSlotEmpty}`}
           </Text>
         ) : null}

@@ -119,6 +119,23 @@ function assertNonNegativeNutrition(fields: Record<string, number>, res: Respons
   return true;
 }
 
+function parseOptionalManualPortionQuantity(
+  b: Record<string, unknown>,
+  res: Response,
+): number | null | 'invalid' {
+  if (b.portionQuantity === undefined || b.portionQuantity === null || b.portionQuantity === '') {
+    return null;
+  }
+  const q = typeof b.portionQuantity === 'number' ? b.portionQuantity : Number(b.portionQuantity);
+  if (!Number.isFinite(q) || q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, {
+      field: 'portionQuantity',
+    });
+    return 'invalid';
+  }
+  return q;
+}
+
 function isTemplateNutritionComplete(t: {
   servingGrams: number | null;
   calories: number | null;
@@ -929,6 +946,9 @@ meRouter.post('/meals', async (req, res) => {
   const fat = Number(b.fat ?? 0);
   if (!assertNonNegativeNutrition({ calories, carbohydrate, protein, fat }, res)) return;
 
+  const manualPortion = parseOptionalManualPortionQuantity(b, res);
+  if (manualPortion === 'invalid') return;
+
   const meal = await prisma.meal.create({
     data: {
       userId,
@@ -943,7 +963,7 @@ meRouter.post('/meals', async (req, res) => {
       imageUrl: b.imageUrl ? String(b.imageUrl) : null,
       foodTemplateId: null,
       mealInputMode: null,
-      portionQuantity: null,
+      portionQuantity: manualPortion,
       mealSlot,
       snackPlacement: snackForCreate,
     },
@@ -1093,12 +1113,14 @@ meRouter.put('/meals/:mealId', async (req, res) => {
       sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '음식명이 필요합니다.', { field: 'name' });
       return;
     }
+    const manualPortionClear = parseOptionalManualPortionQuantity(b, res);
+    if (manualPortionClear === 'invalid') return;
     await prisma.meal.update({
       where: { id: mealId },
       data: {
         foodTemplateId: null,
         mealInputMode: null,
-        portionQuantity: null,
+        portionQuantity: manualPortionClear,
         name: nextName,
         ...(b.consumedAt !== undefined ? { consumedAt: new Date(String(b.consumedAt)) } : {}),
         ...(b.grams !== undefined ? { grams: Number(b.grams) } : {}),
@@ -1207,6 +1229,9 @@ meRouter.put('/meals/:mealId', async (req, res) => {
     note: string;
     imageUrl: string;
   }>;
+  const manualPortionPatch = parseOptionalManualPortionQuantity(b, res);
+  if (manualPortionPatch === 'invalid') return;
+
   await prisma.meal.update({
     where: { id: mealId },
     data: {
@@ -1217,6 +1242,9 @@ meRouter.put('/meals/:mealId', async (req, res) => {
       ...(legacy.carbohydrate !== undefined ? { carbohydrate: Number(legacy.carbohydrate) } : {}),
       ...(legacy.protein !== undefined ? { protein: Number(legacy.protein) } : {}),
       ...(legacy.fat !== undefined ? { fat: Number(legacy.fat) } : {}),
+      ...(manualPortionPatch !== null || Object.prototype.hasOwnProperty.call(b, 'portionQuantity')
+        ? { portionQuantity: manualPortionPatch }
+        : {}),
       ...(legacy.note !== undefined ? { note: legacy.note ? String(legacy.note) : null } : {}),
       ...(legacy.imageUrl !== undefined ? { imageUrl: legacy.imageUrl ? String(legacy.imageUrl) : null } : {}),
       ...slotData,

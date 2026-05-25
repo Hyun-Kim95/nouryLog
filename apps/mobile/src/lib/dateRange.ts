@@ -24,6 +24,12 @@ function kstMidnightUtc(y: number, m: number, d: number): Date {
   return new Date(Date.UTC(y, m - 1, d) - KST_OFFSET_MS);
 }
 
+/** KST 해당일 12:00 — 과거 날짜 신규 기록 `consumedAt` 기본값. */
+export function kstNoonIsoFromYmd(ymd: string): string {
+  const { y, m, d } = parseYmdParts(ymd);
+  return new Date(Date.UTC(y, m - 1, d, 3, 0, 0, 0)).toISOString();
+}
+
 /** 통계 `daily[].date`(KST YMD)와 동일한 하루 경계 — GET /meals `from`/`to`(lte)용. */
 export function kstDayBoundsFromYmd(ymd: string): { from: string; to: string } {
   const { y, m, d } = parseYmdParts(ymd);

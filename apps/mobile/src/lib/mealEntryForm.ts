@@ -1,4 +1,9 @@
 import type { FoodTemplateItem, MealRow, TemplateInputMode } from '../api/meals';
+import {
+  parsePortionInput,
+  roundPerServingForForm,
+  scaleManualNutritionForSave,
+} from './manualPortion';
 import { parseManualNutrition } from './manualNutrition';
 import {
   defaultSnackPlacementForNow,
@@ -19,6 +24,7 @@ export type MealEditFormState = {
   protein: string;
   carbohydrate: string;
   fat: string;
+  manualPortion: string;
 };
 
 export function formatTplAmount(n: number): string {
@@ -71,6 +77,7 @@ export function hydrateFromMeal(meal: MealRow, templates: FoodTemplateItem[]): M
     protein: '',
     carbohydrate: '',
     fat: '',
+    manualPortion: '1',
   };
 
   if (meal.foodTemplateId) {
@@ -88,15 +95,19 @@ export function hydrateFromMeal(meal: MealRow, templates: FoodTemplateItem[]): M
     }
   }
 
+  const portionStr =
+    meal.portionQuantity != null ? formatTplAmount(meal.portionQuantity) || '1' : '1';
+
   return {
     ...base,
     mealSlot: meal.mealSlot ?? base.mealSlot,
     snackPlacement: meal.snackPlacement ?? base.snackPlacement,
     name: meal.name,
-    calories: String(Math.round(meal.calories)),
-    protein: String(Math.round(meal.protein)),
-    carbohydrate: String(Math.round(meal.carbohydrate)),
-    fat: String(Math.round(meal.fat)),
+    manualPortion: portionStr,
+    calories: roundPerServingForForm(meal.calories, meal.portionQuantity),
+    protein: roundPerServingForForm(meal.protein, meal.portionQuantity),
+    carbohydrate: roundPerServingForForm(meal.carbohydrate, meal.portionQuantity),
+    fat: roundPerServingForForm(meal.fat, meal.portionQuantity),
   };
 }
 
@@ -139,15 +150,18 @@ export function buildUpdateBody(
   }
 
   if (!state.name.trim()) throw new Error(nameRequiredMessage);
-  const nutrition = parseManualNutrition({
+  const perServing = parseManualNutrition({
     calories: state.calories,
     protein: state.protein,
     carbohydrate: state.carbohydrate,
     fat: state.fat,
   });
+  const portion = parsePortionInput(state.manualPortion);
+  const nutrition = scaleManualNutritionForSave(perServing, portion);
   return {
     ...mealBodyBase(state),
     name: state.name.trim(),
+    portionQuantity: portion,
     ...nutrition,
   };
 }

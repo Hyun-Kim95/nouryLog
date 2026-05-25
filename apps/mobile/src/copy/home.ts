@@ -14,8 +14,8 @@ export const HOME_COPY = {
   adHidden: '프리미엄 이용 중이라 광고가 숨겨져 있어요.',
   mealsBySlotTitle: '오늘의 끼니',
   mealSlotEmpty: '기록 없음',
-  mealSlotLine: (label: string, kcal: number, proteinG: number) =>
-    `${label} · ${kcal} kcal · 단백질 ${proteinG}g`,
+  mealSlotLine: (label: string, kcal: number, proteinG: number, carbG: number, fatG: number) =>
+    `${label} · ${kcal} kcal · 단백질 ${proteinG}g · 탄수 ${carbG}g · 지방 ${fatG}g`,
   emptyGoals: '권장 목표가 없어요. 프로필을 입력하면 달성률을 볼 수 있어요.',
   profileCta: '프로필 편집',
   retry: '다시 시도',

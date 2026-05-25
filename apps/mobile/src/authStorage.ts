@@ -17,7 +17,9 @@ function decodeBase64Utf8(padded: string): string | null {
   return globalThis.atob(padded);
 }
 
-export function parseUserIdFromAccessToken(token: string): string | null {
+type JwtPayloadSlice = { sub?: string; userId?: string; exp?: number };
+
+function decodeJwtPayload(token: string): JwtPayloadSlice | null {
   try {
     const part = token.split('.')[1];
     if (!part) return null;
@@ -25,13 +27,33 @@ export function parseUserIdFromAccessToken(token: string): string | null {
     const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
     const decoded = decodeBase64Utf8(padded);
     if (!decoded) return null;
-    const json = JSON.parse(decoded) as { sub?: string; userId?: string };
+    return JSON.parse(decoded) as JwtPayloadSlice;
+  } catch {
+    return null;
+  }
+}
+
+/** exp가 없거나 파싱 실패 시 false(만료 아님으로 간주) */
+export function isAccessTokenExpired(token: string, skewSec = 60): boolean {
+  const json = decodeJwtPayload(token);
+  if (json?.exp == null || !Number.isFinite(json.exp)) return false;
+  return json.exp * 1000 <= Date.now() + skewSec * 1000;
+}
+
+export function parseUserIdFromAccessToken(token: string): string | null {
+  try {
+    const json = decodeJwtPayload(token);
+    if (!json) return null;
     if (typeof json.sub === 'string' && json.sub) return json.sub;
     if (typeof json.userId === 'string' && json.userId) return json.userId;
     return null;
   } catch {
     return null;
   }
+}
+
+export async function getRefreshToken() {
+  return SecureStore.getItemAsync(REFRESH);
 }
 
 export async function rememberUserId(userId: string) {

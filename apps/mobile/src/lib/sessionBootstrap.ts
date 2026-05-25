@@ -1,3 +1,4 @@
+import { refreshAccessToken } from '../authRefresh';
 import { getProfile } from '../api/profile';
 import { isAuthDenied } from './apiError';
 
@@ -11,7 +12,10 @@ export async function isAccessTokenValid(token: string): Promise<boolean> {
     await getProfile(token, { signal: controller.signal });
     return true;
   } catch (e) {
-    if (isAuthDenied(e)) return false;
+    if (isAuthDenied(e)) {
+      const refreshed = await refreshAccessToken();
+      return refreshed != null;
+    }
     return true;
   } finally {
     clearTimeout(timer);

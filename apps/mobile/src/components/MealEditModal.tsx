@@ -209,6 +209,16 @@ export function MealEditModal({ visible, meal, onClose, onSaved }: Props) {
                       onChangeText={(name) => patch({ name })}
                       placeholder="예: 닭가슴살 샐러드"
                     />
+                    <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                      {LOG_COPY.manualPerServingHint}
+                    </Text>
+                    <LabeledField
+                      label={LOG_COPY.manualPortionLabel}
+                      value={form.manualPortion}
+                      onChangeText={(manualPortion) => patch({ manualPortion })}
+                      keyboardType="decimal-pad"
+                      placeholder="1"
+                    />
                     <LabeledField
                       label={LOG_COPY.calories}
                       value={form.calories}

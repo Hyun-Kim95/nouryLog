@@ -8,7 +8,13 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import {
+  useNavigation,
+  useRoute,
+  type CompositeNavigationProp,
+  type RouteProp,
+} from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { resolveImagePickerBase64 } from '../lib/imagePickerBase64';
@@ -43,8 +49,19 @@ import { BILLING_COPY } from '../copy/billing';
 import { LOG_COPY } from '../copy/log';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { formatMacroLine } from '../lib/formatNutrition';
+import { formatTplAmount as formatPortionAmount } from '../lib/mealEntryForm';
+import {
+  parsePortionInput,
+  roundPerServingForForm,
+  scaleManualNutritionForSave,
+} from '../lib/manualPortion';
 import { parseManualNutrition } from '../lib/manualNutrition';
-import { localDayBounds, localDayStartExclusiveUpperBound } from '../lib/dateRange';
+import {
+  formatKstDayTitle,
+  kstNoonIsoFromYmd,
+  localDayBounds,
+  localDayStartExclusiveUpperBound,
+} from '../lib/dateRange';
 import { groupMealsForTodayTimeline, mealRowSubtitle } from '../lib/mealTimeline';
 import {
   defaultMealSlotForNow,
@@ -54,7 +71,13 @@ import {
   type MealSlot,
   type SnackPlacement,
 } from '../lib/mealSlot';
-import type { RootStackParamList } from '../navigation';
+import type { MainTabParamList, RootStackParamList } from '../navigation';
+
+type LogRoute = RouteProp<MainTabParamList, 'Log'>;
+type LogNavigation = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Log'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 
@@ -108,6 +131,38 @@ function tplAmountFromMeal(m: MealRow, tpl: FoodTemplateItem): string {
 const PAST_PAGE_SIZE = 10;
 const NAME_SUGGEST_LIMIT = 8;
 
+type NameSuggestion =
+  | { kind: 'template'; tpl: FoodTemplateItem }
+  | { kind: 'meal'; meal: MealRow };
+
+function buildNameSuggestions(
+  q: string,
+  templates: FoodTemplateItem[],
+  ...mealGroups: MealRow[][]
+): NameSuggestion[] {
+  const needle = q.trim().toLowerCase();
+  if (needle.length < 1) return [];
+  const seen = new Set<string>();
+  const out: NameSuggestion[] = [];
+
+  for (const tpl of templates) {
+    const key = tpl.name.trim().toLowerCase();
+    if (!key.includes(needle) || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ kind: 'template', tpl });
+    if (out.length >= NAME_SUGGEST_LIMIT) return out;
+  }
+
+  for (const m of mealSuggestionPool(...mealGroups)) {
+    const key = m.name.trim().toLowerCase();
+    if (!key.includes(needle) || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ kind: 'meal', meal: m });
+    if (out.length >= NAME_SUGGEST_LIMIT) return out;
+  }
+  return out;
+}
+
 function mealSuggestionPool(...groups: MealRow[][]): MealRow[] {
   const byName = new Map<string, MealRow>();
   for (const group of groups) {
@@ -136,7 +191,9 @@ const EMPTY_FORM = {
 export function LogScreen() {
   const t = useTheme();
   const toast = useToast();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<LogNavigation>();
+  const route = useRoute<LogRoute>();
+  const targetYmd = route.params?.targetYmd;
   const [items, setItems] = useState<MealRow[]>([]);
   const [pastMeals, setPastMeals] = useState<MealRow[]>([]);
   const scrollRef = useRef<ScrollView>(null);
@@ -147,6 +204,7 @@ export function LogScreen() {
   const [protein, setProtein] = useState('');
   const [carbohydrate, setCarbohydrate] = useState('');
   const [fat, setFat] = useState('');
+  const [manualPortion, setManualPortion] = useState('1');
   const [mealSlot, setMealSlot] = useState<MealSlot>(() => defaultMealSlotForNow());
   const [snackPlacement, setSnackPlacement] = useState<SnackPlacement>(() => defaultSnackPlacementForNow());
   const [consumedAt, setConsumedAt] = useState(EMPTY_FORM.consumedAt);
@@ -193,6 +251,7 @@ export function LogScreen() {
     setProtein('');
     setCarbohydrate('');
     setFat('');
+    setManualPortion('1');
     setLastOcrMeta(null);
   }, []);
 
@@ -203,6 +262,7 @@ export function LogScreen() {
     setProtein(EMPTY_FORM.protein);
     setCarbohydrate(EMPTY_FORM.carbohydrate);
     setFat(EMPTY_FORM.fat);
+    setManualPortion('1');
     setMealSlot(defaultMealSlotForNow());
     setSnackPlacement(defaultSnackPlacementForNow());
     setConsumedAt(new Date().toISOString());
@@ -282,10 +342,15 @@ export function LogScreen() {
     ),
   );
 
+  const newMealConsumedAt = (): string => {
+    if (targetYmd) return kstNoonIsoFromYmd(targetYmd);
+    return new Date().toISOString();
+  };
+
   const mealBodyBase = (): Record<string, unknown> => {
     const base: Record<string, unknown> = {
       mealSlot,
-      consumedAt: editingMealId ? consumedAt : new Date().toISOString(),
+      consumedAt: editingMealId ? consumedAt : newMealConsumedAt(),
     };
     if (mealSlot === 'SNACK') {
       base.snackPlacement = snackPlacement;
@@ -329,11 +394,14 @@ export function LogScreen() {
           await createMeal(token, body);
         }
       } else {
-        const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
+        const perServing = parseManualNutrition({ calories, protein, carbohydrate, fat });
         if (!name.trim()) throw new Error(LOG_COPY.nameRequired);
+        const portion = parsePortionInput(manualPortion);
+        const nutrition = scaleManualNutritionForSave(perServing, portion);
         const body = {
           ...mealBodyBase(),
           name: name.trim(),
+          portionQuantity: portion,
           ...nutrition,
         };
         if (editingMealId) {
@@ -505,10 +573,13 @@ export function LogScreen() {
     setSelectedTpl(null);
     setLastOcrMeta(null);
     setName(m.name);
-    setCalories(String(Math.round(m.calories)));
-    setProtein(String(Math.round(m.protein)));
-    setCarbohydrate(String(Math.round(m.carbohydrate)));
-    setFat(String(Math.round(m.fat)));
+    setManualPortion(
+      m.portionQuantity != null ? formatPortionAmount(m.portionQuantity) || '1' : '1',
+    );
+    setCalories(roundPerServingForForm(m.calories, m.portionQuantity));
+    setProtein(roundPerServingForForm(m.protein, m.portionQuantity));
+    setCarbohydrate(roundPerServingForForm(m.carbohydrate, m.portionQuantity));
+    setFat(roundPerServingForForm(m.fat, m.portionQuantity));
     if (m.mealSlot) setMealSlot(m.mealSlot);
     if (m.snackPlacement) setSnackPlacement(m.snackPlacement);
     toast.show({ kind: 'info', message: '입력란에 불러왔어요. 확인 후 저장해 주세요.' });
@@ -565,16 +636,20 @@ export function LogScreen() {
 
     setSelectedTpl(null);
     setName(item.name);
-    setCalories(String(Math.round(item.calories)));
-    setProtein(String(Math.round(item.protein)));
-    setCarbohydrate(String(Math.round(item.carbohydrate)));
-    setFat(String(Math.round(item.fat)));
+    setManualPortion(
+      item.portionQuantity != null ? formatPortionAmount(item.portionQuantity) || '1' : '1',
+    );
+    setCalories(roundPerServingForForm(item.calories, item.portionQuantity));
+    setProtein(roundPerServingForForm(item.protein, item.portionQuantity));
+    setCarbohydrate(roundPerServingForForm(item.carbohydrate, item.portionQuantity));
+    setFat(roundPerServingForForm(item.fat, item.portionQuantity));
   };
 
   const selectTemplate = (item: FoodTemplateItem) => {
     setSelectedTpl(item);
     setMealInputMode('PORTION_COUNT');
     setTplAmount(defaultTplAmount(item, 'PORTION_COUNT'));
+    setManualPortion('1');
     setName('');
     setCalories('');
     setProtein('');
@@ -612,11 +687,10 @@ export function LogScreen() {
 
   const nameSuggestions = useMemo(() => {
     if (!nameFocused || selectedTpl) return [];
-    const q = name.trim().toLowerCase();
+    const q = name.trim();
     if (q.length < 1) return [];
-    const pool = mealSuggestionPool(recentMeals, pastMeals, items);
-    return pool.filter((m) => m.name.trim().toLowerCase().includes(q)).slice(0, NAME_SUGGEST_LIMIT);
-  }, [nameFocused, selectedTpl, name, recentMeals, pastMeals, items]);
+    return buildNameSuggestions(q, templates, recentMeals, pastMeals, items);
+  }, [nameFocused, selectedTpl, name, templates, recentMeals, pastMeals, items]);
 
   const macroFields = (
     <View style={{ gap: t.spacing.sm }}>
@@ -649,11 +723,15 @@ export function LogScreen() {
                 {LOG_COPY.nameSuggestEmpty}
               </Text>
             ) : (
-              nameSuggestions.map((m, idx) => (
+              nameSuggestions.map((s, idx) => (
                 <Pressable
-                  key={m.mealId}
+                  key={s.kind === 'template' ? `tpl-${s.tpl.id}` : s.meal.mealId}
                   onPress={() => {
-                    applyRecentMeal(m);
+                    if (s.kind === 'template') {
+                      selectTemplate(s.tpl);
+                    } else {
+                      applyRecentMeal(s.meal);
+                    }
                     setNameFocused(false);
                   }}
                   style={{
@@ -663,16 +741,30 @@ export function LogScreen() {
                   }}
                 >
                   <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
-                    {m.name}
+                    {s.kind === 'template' ? s.tpl.name : s.meal.name}
+                    {s.kind === 'template' ? (
+                      <Text style={{ color: t.colors.fgMuted, fontWeight: '400' }}>
+                        {' '}
+                        · {LOG_COPY.nameSuggestTemplate}
+                      </Text>
+                    ) : null}
                   </Text>
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                    {formatMacroLine({
-                      protein: m.protein,
-                      carbohydrate: m.carbohydrate,
-                      fat: m.fat,
-                    })}
-                    {' · '}
-                    {Math.round(m.calories)} kcal
+                    {s.kind === 'template' ? (
+                      <>
+                        {baselineSummary(s.tpl)} · {Math.round(s.tpl.calories)} kcal/1인분
+                      </>
+                    ) : (
+                      <>
+                        {formatMacroLine({
+                          protein: s.meal.protein,
+                          carbohydrate: s.meal.carbohydrate,
+                          fat: s.meal.fat,
+                        })}
+                        {' · '}
+                        {Math.round(s.meal.calories)} kcal
+                      </>
+                    )}
                   </Text>
                 </Pressable>
               ))
@@ -680,6 +772,17 @@ export function LogScreen() {
           </View>
         ) : null}
       </View>
+      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+        {LOG_COPY.manualPerServingHint}
+      </Text>
+      <LabeledField
+        label={LOG_COPY.manualPortionLabel}
+        value={manualPortion}
+        onChangeText={setManualPortion}
+        keyboardType="decimal-pad"
+        placeholder="1"
+        onFocus={focusEntryField}
+      />
       <LabeledField
         label="칼로리 (kcal)"
         value={calories}
@@ -762,6 +865,16 @@ export function LogScreen() {
         contentPaddingBottomExtra={120}
       >
         {ent ? <Chip label={LOG_COPY.photoAnalysisChip(ent.ocrQuotaUsed, ent.ocrQuotaLimit)} /> : null}
+
+        {targetYmd ? (
+          <Banner
+            variant="info"
+            actionLabel={LOG_COPY.pastLogSwitchToday}
+            onAction={() => navigation.setParams({ targetYmd: undefined })}
+          >
+            {LOG_COPY.pastLogBanner(formatKstDayTitle(targetYmd))}
+          </Banner>
+        ) : null}
 
         {ent?.nextPaywallTrigger === 'ocr_remaining_1' ? (
           <Banner variant="warn">{LOG_COPY.ocrBannerRemaining}</Banner>

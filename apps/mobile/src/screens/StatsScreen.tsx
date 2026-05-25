@@ -100,10 +100,19 @@ export function StatsScreen() {
     SLOT_ORDER.map((slot) => {
       const key = slot;
       const sum = data.byMealSlot![key];
-      if (!sum || (sum.calories === 0 && sum.protein === 0)) return null;
+      if (
+        !sum ||
+        (sum.calories === 0 && sum.protein === 0 && sum.carbohydrate === 0 && sum.fat === 0)
+      ) {
+        return null;
+      }
       const label = slot === 'UNSPECIFIED' ? '미분류' : mealSlotLabel(slot);
       return { key, label, sum };
-    }).filter(Boolean) as Array<{ key: string; label: string; sum: { calories: number; protein: number } }>;
+    }).filter(Boolean) as Array<{
+      key: string;
+      label: string;
+      sum: { calories: number; protein: number; carbohydrate: number; fat: number };
+    }>;
 
   const statsBody = (
     <>
@@ -146,7 +155,13 @@ export function StatsScreen() {
                   key={row.key}
                   style={{ color: t.colors.fg, fontSize: t.fontSize.body, marginBottom: t.spacing.xs }}
                 >
-                  {STATS_COPY.slotLine(row.label, Math.round(row.sum.calories), Math.round(row.sum.protein))}
+                  {STATS_COPY.slotLine(
+                    row.label,
+                    Math.round(row.sum.calories),
+                    Math.round(row.sum.protein),
+                    Math.round(row.sum.carbohydrate),
+                    Math.round(row.sum.fat),
+                  )}
                 </Text>
               ))}
             </Card>

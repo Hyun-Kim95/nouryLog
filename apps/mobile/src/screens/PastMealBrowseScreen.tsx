@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { deactivateMeal } from '../api/meals';
 import type { MealRow } from '../api/meals';
 import { isAuthDenied } from '../api';
@@ -7,7 +9,8 @@ import { ensureAccessToken } from '../authSession';
 import { KstMonthCalendar } from '../components/KstMonthCalendar';
 import { MealDayTimelineCard } from '../components/MealDayTimelineCard';
 import { MealEditModal } from '../components/MealEditModal';
-import { ScreenLayout } from '../components/ui';
+import { PrimaryButton, ScreenLayout } from '../components/ui';
+import type { RootStackParamList } from '../navigation';
 import { LOG_COPY } from '../copy/log';
 import { formatKstDayTitle, kstMonthBoundsFromYm, mealDatesKstFromRows, ymFromYmd } from '../lib/dateRange';
 import { fetchAllMealsInRange } from '../lib/fetchMealsInRange';
@@ -18,6 +21,7 @@ import { useToast } from '../toast/useToast';
 export function PastMealBrowseScreen() {
   const t = useTheme();
   const toast = useToast();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [selectedYmd, setSelectedYmd] = useState(() => todayAnchorKst());
   const [visibleYm, setVisibleYm] = useState(() => ymFromYmd(todayAnchorKst()));
   const [recordedDates, setRecordedDates] = useState<string[]>([]);
@@ -99,6 +103,17 @@ export function PastMealBrowseScreen() {
         >
           {formatKstDayTitle(selectedYmd)}
         </Text>
+        <View style={{ marginTop: t.spacing.sm }}>
+          <PrimaryButton
+            title={LOG_COPY.pastAddMealCta}
+            onPress={() =>
+              navigation.navigate('Main', {
+                screen: 'Log',
+                params: { targetYmd: selectedYmd },
+              })
+            }
+          />
+        </View>
         <View style={{ marginTop: t.spacing.sm, gap: t.spacing.md }}>
           <MealDayTimelineCard
             date={selectedYmd}

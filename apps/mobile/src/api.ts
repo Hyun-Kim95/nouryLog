@@ -1,4 +1,5 @@
 import { API_BASE } from './config';
+import { refreshAccessToken, isRefreshPath, shouldRetryWithRefresh } from './authRefresh';
 import { ApiError, type ApiErrorBody } from './lib/apiError';
 import { handleAuthFailure } from './authSession';
 
@@ -8,9 +9,16 @@ const DEFAULT_API_TIMEOUT_MS = 20_000;
 
 export async function apiFetch<T>(
   path: string,
-  init: RequestInit & { token?: string; timeoutMs?: number } = {},
+  init: RequestInit & { token?: string; timeoutMs?: number; _authRetried?: boolean } = {},
 ): Promise<T> {
-  const { token, headers, timeoutMs = DEFAULT_API_TIMEOUT_MS, signal: externalSignal, ...rest } = init;
+  const {
+    token,
+    headers,
+    timeoutMs = DEFAULT_API_TIMEOUT_MS,
+    signal: externalSignal,
+    _authRetried = false,
+    ...rest
+  } = init;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   if (externalSignal) {
@@ -51,7 +59,18 @@ export async function apiFetch<T>(
   }
   if (!res.ok) {
     const err = new ApiError(res.status, (json ?? {}) as ApiErrorBody);
-    handleAuthFailure(err);
+    const hadBearer = Boolean(token);
+    if (
+      !_authRetried &&
+      !isRefreshPath(path) &&
+      shouldRetryWithRefresh(err, hadBearer)
+    ) {
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        return apiFetch<T>(path, { ...init, token: newToken, _authRetried: true });
+      }
+    }
+    if (hadBearer) handleAuthFailure(err);
     throw err;
   }
   return json as T;
