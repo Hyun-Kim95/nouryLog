@@ -161,6 +161,10 @@ function goalRange(
   if (min != null && max != null) {
     return { low: Math.min(min, max), high: Math.max(min, max) };
   }
+  const single = min ?? max;
+  if (single != null) {
+    return { low: single, high: single };
+  }
   return { low: null, high: null };
 }
 

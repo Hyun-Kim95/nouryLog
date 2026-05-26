@@ -239,6 +239,31 @@ type StoredGoalRange = {
   fatGoalMaxG?: number | null;
 };
 
+export type MacroGoalCenters = {
+  proteinGoalG: number;
+  calorieGoalKcal: number;
+  carbohydrateGoalG: number;
+  fatGoalG: number;
+};
+
+/** DB에 없는 center goal은 자동 계산값으로 채운다. */
+export function effectiveMacroGoals(
+  stored: {
+    proteinGoalG?: number | null;
+    calorieGoalKcal?: number | null;
+    carbohydrateGoalG?: number | null;
+    fatGoalG?: number | null;
+  },
+  computed: MacroGoalCenters,
+): MacroGoalCenters {
+  return {
+    proteinGoalG: stored.proteinGoalG ?? computed.proteinGoalG,
+    calorieGoalKcal: stored.calorieGoalKcal ?? computed.calorieGoalKcal,
+    carbohydrateGoalG: stored.carbohydrateGoalG ?? computed.carbohydrateGoalG,
+    fatGoalG: stored.fatGoalG ?? computed.fatGoalG,
+  };
+}
+
 export function resolveProfileGoalRanges(
   proteinGoalG: number | null | undefined,
   calorieGoalKcal: number | null | undefined,

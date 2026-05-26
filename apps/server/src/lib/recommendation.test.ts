@@ -1,6 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateRecommendationFull, computeGoalRanges } from './recommendation.js';
+import {
+  calculateRecommendationFull,
+  computeGoalRanges,
+  effectiveMacroGoals,
+  resolveProfileGoalRanges,
+} from './recommendation.js';
 
 describe('computeGoalRanges', () => {
   it('protein uses ±5% with minimum 5g margin', () => {
@@ -33,6 +38,64 @@ describe('computeGoalRanges', () => {
     assert.equal(r.carbohydrateGoalMaxG, 275);
     assert.equal(r.fatGoalMinG, 63);
     assert.equal(r.fatGoalMaxG, 77);
+  });
+});
+
+describe('effectiveMacroGoals', () => {
+  it('fills missing stored carb/fat from computed centers', () => {
+    const computed = calculateRecommendationFull({
+      gender: 'male',
+      age: 30,
+      heightCm: 173,
+      weightKg: 79,
+      activityLevel: 'moderate',
+      goal: 'lose',
+    });
+    const effective = effectiveMacroGoals(
+      { proteinGoalG: 100, calorieGoalKcal: 2000, carbohydrateGoalG: null, fatGoalG: null },
+      computed,
+    );
+    assert.equal(effective.proteinGoalG, 100);
+    assert.equal(effective.calorieGoalKcal, 2000);
+    assert.equal(effective.carbohydrateGoalG, computed.carbohydrateGoalG);
+    assert.equal(effective.fatGoalG, computed.fatGoalG);
+  });
+});
+
+describe('resolveProfileGoalRanges', () => {
+  it('computes ranges when stored carb/fat centers are null but effective values are passed', () => {
+    const full = calculateRecommendationFull({
+      gender: 'female',
+      age: 28,
+      heightCm: 165,
+      weightKg: 60,
+      activityLevel: 'light',
+      goal: 'maintain',
+    });
+    const effective = effectiveMacroGoals(
+      { proteinGoalG: 90, calorieGoalKcal: 1800, carbohydrateGoalG: null, fatGoalG: null },
+      full,
+    );
+    const ranges = resolveProfileGoalRanges(
+      effective.proteinGoalG,
+      effective.calorieGoalKcal,
+      effective.carbohydrateGoalG,
+      effective.fatGoalG,
+      'maintain',
+      {
+        proteinGoalMinG: 85,
+        proteinGoalMaxG: 95,
+        calorieGoalMinKcal: 1620,
+        calorieGoalMaxKcal: 1980,
+        carbohydrateGoalMinG: null,
+        carbohydrateGoalMaxG: null,
+        fatGoalMinG: null,
+        fatGoalMaxG: null,
+      },
+    );
+    assert.ok(ranges);
+    assert.equal(ranges!.carbohydrateGoalMinG, Math.round(effective.carbohydrateGoalG * 0.9));
+    assert.ok(ranges!.fatGoalMaxG != null);
   });
 });
 

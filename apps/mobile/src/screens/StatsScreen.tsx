@@ -177,13 +177,13 @@ export function StatsScreen() {
                   calorieStatus: d.calorieStatus,
                   hasRecords: d.hasRecords,
                 }))}
-                calorieMin={goals?.calorieGoalMinKcal ?? null}
-                calorieMax={goals?.calorieGoalMaxKcal ?? null}
-                proteinGoalMinG={goals?.proteinGoalMinG ?? null}
+                calorieMin={goals?.calorieGoalMinKcal ?? goals?.calorieGoalKcal ?? null}
+                calorieMax={goals?.calorieGoalMaxKcal ?? goals?.calorieGoalKcal ?? null}
+                proteinGoalMinG={goals?.proteinGoalMinG ?? goals?.proteinGoalG ?? null}
                 proteinGoalMaxG={goals?.proteinGoalMaxG ?? goals?.proteinGoalG ?? null}
-                carbohydrateGoalMinG={goals?.carbohydrateGoalMinG ?? null}
+                carbohydrateGoalMinG={goals?.carbohydrateGoalMinG ?? goals?.carbohydrateGoalG ?? null}
                 carbohydrateGoalMaxG={goals?.carbohydrateGoalMaxG ?? goals?.carbohydrateGoalG ?? null}
-                fatGoalMinG={goals?.fatGoalMinG ?? null}
+                fatGoalMinG={goals?.fatGoalMinG ?? goals?.fatGoalG ?? null}
                 fatGoalMaxG={goals?.fatGoalMaxG ?? goals?.fatGoalG ?? null}
                 chartTapHint={
                   range === 'day' ? STATS_COPY.calorieChartTapHint : STATS_COPY.calorieChartTapHintWeekMonth

@@ -15,6 +15,7 @@ import { detectNutrition } from '../services/ocrService.js';
 import {
   calculateRecommendationFull,
   computeGoalRanges,
+  effectiveMacroGoals,
   resolveProfileGoalRanges,
   safeGoal,
 } from '../lib/recommendation.js';
@@ -286,25 +287,49 @@ meRouter.get('/me/profile', async (req, res) => {
     activityLevel: p.activityLevel,
     goal: p.goal,
   });
+  const effective = effectiveMacroGoals(p, full);
+  let profileForRanges = p;
+
+  const needsMacroBackfill = p.carbohydrateGoalG == null || p.fatGoalG == null;
+  if (needsMacroBackfill) {
+    const rangeData = computeGoalRanges(
+      effective.proteinGoalG,
+      effective.calorieGoalKcal,
+      effective.carbohydrateGoalG,
+      effective.fatGoalG,
+      safeGoal(p.goal),
+    );
+    profileForRanges = await prisma.profile.update({
+      where: { userId },
+      data: {
+        ...(p.proteinGoalG == null ? { proteinGoalG: effective.proteinGoalG } : {}),
+        ...(p.calorieGoalKcal == null ? { calorieGoalKcal: effective.calorieGoalKcal } : {}),
+        ...(p.carbohydrateGoalG == null ? { carbohydrateGoalG: effective.carbohydrateGoalG } : {}),
+        ...(p.fatGoalG == null ? { fatGoalG: effective.fatGoalG } : {}),
+        ...rangeData,
+      },
+    });
+  }
+
   const ranges = resolveProfileGoalRanges(
-    p.proteinGoalG,
-    p.calorieGoalKcal,
-    p.carbohydrateGoalG,
-    p.fatGoalG,
+    effective.proteinGoalG,
+    effective.calorieGoalKcal,
+    effective.carbohydrateGoalG,
+    effective.fatGoalG,
     p.goal,
-    p,
+    profileForRanges,
   );
   res.json({
-    gender: p.gender,
-    age: p.age,
-    heightCm: p.heightCm,
-    weightKg: p.weightKg,
-    activityLevel: p.activityLevel ?? null,
-    goal: p.goal ?? null,
-    proteinGoalG: p.proteinGoalG ?? undefined,
-    calorieGoalKcal: p.calorieGoalKcal ?? undefined,
-    carbohydrateGoalG: p.carbohydrateGoalG ?? undefined,
-    fatGoalG: p.fatGoalG ?? undefined,
+    gender: profileForRanges.gender,
+    age: profileForRanges.age,
+    heightCm: profileForRanges.heightCm,
+    weightKg: profileForRanges.weightKg,
+    activityLevel: profileForRanges.activityLevel ?? null,
+    goal: profileForRanges.goal ?? null,
+    proteinGoalG: effective.proteinGoalG,
+    calorieGoalKcal: effective.calorieGoalKcal,
+    carbohydrateGoalG: effective.carbohydrateGoalG,
+    fatGoalG: effective.fatGoalG,
     proteinGoalMinG: ranges?.proteinGoalMinG,
     proteinGoalMaxG: ranges?.proteinGoalMaxG,
     calorieGoalMinKcal: ranges?.calorieGoalMinKcal,
