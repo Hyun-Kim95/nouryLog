@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import type { FulfillmentStatus } from '../lib/goalFulfillment';
-import type { Theme } from '../theme';
+import type { Theme, ThemeColors } from '../theme';
 import { STATS_COPY } from '../copy/stats';
 import { useTheme } from '../theme';
 import {
@@ -41,11 +41,73 @@ type Props = {
   carbohydrateGoalMaxG?: number | null;
   fatGoalMinG?: number | null;
   fatGoalMaxG?: number | null;
-  /** 막대 미선택 시 안내 (주·월은 달력 안내 문구) */
   chartTapHint?: string;
 };
 
-const PROTEIN_TITLE_HEIGHT = 22;
+const PANEL_TITLE_HEIGHT = 22;
+const PANEL_ROW_STRIDE = RANGE_PANEL_HEIGHT + PANEL_TITLE_HEIGHT;
+const MACRO_PANEL_COUNT = 4;
+
+type MacroPanelKey = 'calorie' | 'protein' | 'carb' | 'fat';
+
+type MacroPanelDef = {
+  key: MacroPanelKey;
+  title: string;
+  summaryKey: keyof NutritionSum;
+  gutterUnit: string;
+  gutterColor: (colors: ThemeColors) => string;
+  bandColor: (colors: ThemeColors) => string;
+  lineHighColor: (colors: ThemeColors) => string;
+  lineLowColor: (colors: ThemeColors) => string;
+  barColor: (point: CalorieDailyPoint, colors: ThemeColors) => string;
+};
+
+const MACRO_PANEL_DEFS: MacroPanelDef[] = [
+  {
+    key: 'calorie',
+    title: STATS_COPY.caloriePanelTitle,
+    summaryKey: 'calories',
+    gutterUnit: ' kcal',
+    gutterColor: (c) => c.fgMuted,
+    bandColor: (c) => c.primary,
+    lineHighColor: (c) => c.info,
+    lineLowColor: (c) => c.info,
+    barColor: (p, c) => statusColor(normalizeStatus(p.calorieStatus, p.hasRecords), p.hasRecords, c),
+  },
+  {
+    key: 'protein',
+    title: STATS_COPY.proteinPanelTitle,
+    summaryKey: 'protein',
+    gutterUnit: 'g',
+    gutterColor: (c) => c.info,
+    bandColor: (c) => c.info,
+    lineHighColor: (c) => c.info,
+    lineLowColor: (c) => c.fgMuted,
+    barColor: (p, c) => (p.hasRecords ? c.info : c.border),
+  },
+  {
+    key: 'carb',
+    title: STATS_COPY.carbPanelTitle,
+    summaryKey: 'carbohydrate',
+    gutterUnit: 'g',
+    gutterColor: (c) => c.warn,
+    bandColor: (c) => c.warn,
+    lineHighColor: (c) => c.warn,
+    lineLowColor: (c) => c.fgMuted,
+    barColor: (p, c) => (p.hasRecords ? c.warn : c.border),
+  },
+  {
+    key: 'fat',
+    title: STATS_COPY.fatPanelTitle,
+    summaryKey: 'fat',
+    gutterUnit: 'g',
+    gutterColor: (c) => c.success,
+    bandColor: (c) => c.success,
+    lineHighColor: (c) => c.success,
+    lineLowColor: (c) => c.fgMuted,
+    barColor: (p, c) => (p.hasRecords ? c.success : c.border),
+  },
+];
 
 function dayOfMonth(ymd: string): number {
   const parts = ymd.split('-');
@@ -85,12 +147,46 @@ function statusLabel(status: FulfillmentStatus, hasRecords: boolean): string {
   return STATS_COPY.calorieStatusNone;
 }
 
-function statusColor(status: FulfillmentStatus, hasRecords: boolean, t: Theme): string {
-  if (!hasRecords) return t.colors.border;
-  if (status === 'met') return t.colors.primary;
-  if (status === 'under' || status === 'over') return t.colors.warn;
-  return t.colors.fgMuted;
+function statusColor(status: FulfillmentStatus, hasRecords: boolean, colors: ThemeColors): string {
+  if (!hasRecords) return colors.border;
+  if (status === 'met') return colors.primary;
+  if (status === 'under' || status === 'over') return colors.warn;
+  return colors.fgMuted;
 }
+
+function goalRange(
+  min: number | null | undefined,
+  max: number | null | undefined,
+): { low: number | null; high: number | null } {
+  if (min != null && max != null) {
+    return { low: Math.min(min, max), high: Math.max(min, max) };
+  }
+  return { low: null, high: null };
+}
+
+function scaleMaxForField(
+  daily: CalorieDailyPoint[],
+  field: keyof NutritionSum,
+  goalLow: number | null,
+  goalHigh: number | null,
+): number {
+  if (!daily.length) return 1;
+  const peaks = daily.map((d) => Number(d.summary?.[field] ?? 0));
+  const peak = Math.max(...peaks, goalHigh ?? 0, goalLow ?? 0, 1);
+  return Number.isFinite(peak) && peak > 0 ? peak * 1.08 : 1;
+}
+
+function panelContentTop(panelIndex: number): number {
+  if (panelIndex === 0) return 0;
+  return panelIndex * PANEL_ROW_STRIDE;
+}
+
+function panelTitleTop(panelIndex: number): number {
+  return RANGE_PANEL_HEIGHT + (panelIndex - 1) * PANEL_ROW_STRIDE;
+}
+
+const COLUMN_BLOCK_HEIGHT =
+  MACRO_PANEL_COUNT * RANGE_PANEL_HEIGHT + (MACRO_PANEL_COUNT - 1) * PANEL_TITLE_HEIGHT + RANGE_DAY_LABEL_HEIGHT;
 
 function TooltipSlot({
   selected,
@@ -127,17 +223,8 @@ function TooltipSlot({
           <Text style={{ color: t.colors.primary, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
             {Math.round(Number(selected.summary?.calories ?? 0))} kcal
           </Text>
-          <Text style={{ color: t.colors.info, fontSize: t.fontSize.body, fontWeight: '600' }}>
-            {STATS_COPY.calorieTooltipProtein(Math.round(Number(selected.summary?.protein ?? 0)))}
-          </Text>
-          <Text style={{ color: t.colors.fg, fontSize: t.fontSize.caption }}>
-            {statusLabel(
-              normalizeStatus(selected.calorieStatus, selected.hasRecords),
-              selected.hasRecords,
-            )}
-          </Text>
           {selected.hasRecords ? (
-            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+            <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
               {STATS_COPY.calorieTooltipMacros(
                 Math.round(Number(selected.summary?.protein ?? 0)),
                 Math.round(Number(selected.summary?.carbohydrate ?? 0)),
@@ -145,6 +232,12 @@ function TooltipSlot({
               )}
             </Text>
           ) : null}
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+            {statusLabel(
+              normalizeStatus(selected.calorieStatus, selected.hasRecords),
+              selected.hasRecords,
+            )}
+          </Text>
         </View>
       ) : (
         <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption, textAlign: 'center' }}>
@@ -175,43 +268,36 @@ export function CalorieRangeChart({
     setSelectedDate(null);
   }, [daily]);
 
-  const calorieLow =
-    calorieMin != null && calorieMax != null
-      ? Math.min(calorieMin, calorieMax)
-      : calorieMin ?? calorieMax ?? null;
-  const calorieHigh =
-    calorieMin != null && calorieMax != null
-      ? Math.max(calorieMin, calorieMax)
-      : calorieMax ?? calorieMin ?? null;
+  const calorieGoalRange = useMemo(() => goalRange(calorieMin, calorieMax), [calorieMin, calorieMax]);
+  const proteinGoalRange = useMemo(
+    () => goalRange(proteinGoalMinG, proteinGoalMaxG),
+    [proteinGoalMinG, proteinGoalMaxG],
+  );
+  const carbGoalRange = useMemo(
+    () => goalRange(carbohydrateGoalMinG, carbohydrateGoalMaxG),
+    [carbohydrateGoalMinG, carbohydrateGoalMaxG],
+  );
+  const fatGoalRange = useMemo(() => goalRange(fatGoalMinG, fatGoalMaxG), [fatGoalMinG, fatGoalMaxG]);
 
-  const proteinLow =
-    proteinGoalMinG != null && proteinGoalMaxG != null
-      ? Math.min(proteinGoalMinG, proteinGoalMaxG)
-      : null;
-  const proteinHigh =
-    proteinGoalMinG != null && proteinGoalMaxG != null
-      ? Math.max(proteinGoalMinG, proteinGoalMaxG)
-      : null;
-
-  const calorieScaleMax = useMemo(() => {
-    if (!daily.length) return 1;
-    const peaks = daily.map((d) => Number(d.summary?.calories ?? 0));
-    const peak = Math.max(...peaks, calorieHigh ?? 0, calorieLow ?? 0, 1);
-    return Number.isFinite(peak) && peak > 0 ? peak * 1.08 : 1;
-  }, [daily, calorieHigh, calorieLow]);
-
-  const proteinScaleMax = useMemo(() => {
-    if (!daily.length) return 1;
-    const peaks = daily.map((d) => Number(d.summary?.protein ?? 0));
-    const peak = Math.max(...peaks, proteinHigh ?? 0, proteinLow ?? 0, 1);
-    return Number.isFinite(peak) && peak > 0 ? peak * 1.08 : 1;
-  }, [daily, proteinHigh, proteinLow]);
+  const scaleMaxByKey = useMemo(() => {
+    const ranges = [calorieGoalRange, proteinGoalRange, carbGoalRange, fatGoalRange];
+    const out = {} as Record<MacroPanelKey, number>;
+    MACRO_PANEL_DEFS.forEach((def, i) => {
+      const { low, high } = ranges[i];
+      out[def.key] = scaleMaxForField(daily, def.summaryKey, low, high);
+    });
+    return out;
+  }, [daily, calorieGoalRange, proteinGoalRange, carbGoalRange, fatGoalRange]);
 
   if (!daily.length) return null;
 
   const selected = daily.find((d) => d.date === selectedDate) ?? null;
-  const calorieGoals: PanelGoals = { low: calorieLow, high: calorieHigh, scaleMax: calorieScaleMax };
-  const proteinGoals: PanelGoals = { low: proteinLow, high: proteinHigh, scaleMax: proteinScaleMax };
+  const goalRanges = [calorieGoalRange, proteinGoalRange, carbGoalRange, fatGoalRange];
+
+  const panelGoals: PanelGoals[] = MACRO_PANEL_DEFS.map((def, i) => {
+    const { low, high } = goalRanges[i];
+    return { low, high, scaleMax: scaleMaxByKey[def.key] };
+  });
 
   const onPlotLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -222,10 +308,8 @@ export function CalorieRangeChart({
   const barWidth =
     colWidth > 0 ? Math.min(RANGE_BAR_WIDTH_MAX, Math.max(8, Math.floor(colWidth * 0.45))) : RANGE_BAR_WIDTH_MAX;
   const plotWidth = plotInnerWidth > 0 ? plotInnerWidth : colWidth * daily.length;
-  const proteinPanelTop = RANGE_PANEL_HEIGHT + PROTEIN_TITLE_HEIGHT;
-  const columnBlockHeight =
-    RANGE_PANEL_HEIGHT + PROTEIN_TITLE_HEIGHT + RANGE_PANEL_HEIGHT + RANGE_DAY_LABEL_HEIGHT;
-  const plotBlockHeight = columnBlockHeight;
+  const plotBlockHeight = COLUMN_BLOCK_HEIGHT;
+  const gutterMarginTop = RANGE_TOOLTIP_SLOT_HEIGHT + t.spacing.xs + 18;
 
   return (
     <View style={{ gap: t.spacing.sm }}>
@@ -245,132 +329,114 @@ export function CalorieRangeChart({
               marginBottom: 4,
             }}
           >
-            {STATS_COPY.caloriePanelTitle}
+            {MACRO_PANEL_DEFS[0].title}
           </Text>
 
           <View style={{ width: '100%' }} onLayout={onPlotLayout}>
             <View style={{ height: plotBlockHeight, width: plotWidth || '100%', position: 'relative' }}>
-              <View
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: plotWidth,
-                  height: RANGE_PANEL_HEIGHT,
-                }}
-              >
-                <PanelBands
-                  goals={calorieGoals}
-                  plotWidth={plotWidth}
-                  bandColor={t.colors.primary}
-                  lineHighColor={t.colors.info}
-                  lineLowColor={t.colors.info}
-                />
-              </View>
-
-              <Text
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  top: RANGE_PANEL_HEIGHT,
-                  left: 0,
-                  color: t.colors.fgMuted,
-                  fontSize: t.fontSize.caption,
-                  fontWeight: '600',
-                  height: PROTEIN_TITLE_HEIGHT,
-                  lineHeight: PROTEIN_TITLE_HEIGHT,
-                }}
-              >
-                {STATS_COPY.proteinPanelTitle}
-              </Text>
-
-              <View
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  top: proteinPanelTop,
-                  left: 0,
-                  width: plotWidth,
-                  height: RANGE_PANEL_HEIGHT,
-                }}
-              >
-                <PanelBands
-                  goals={proteinGoals}
-                  plotWidth={plotWidth}
-                  bandColor={t.colors.info}
-                  lineHighColor={t.colors.info}
-                  lineLowColor={t.colors.fgMuted}
-                />
-              </View>
+              {MACRO_PANEL_DEFS.map((def, panelIndex) => {
+                const contentTop = panelContentTop(panelIndex);
+                const goals = panelGoals[panelIndex];
+                return (
+                  <View key={def.key}>
+                    <View
+                      pointerEvents="none"
+                      style={{
+                        position: 'absolute',
+                        top: contentTop,
+                        left: 0,
+                        width: plotWidth,
+                        height: RANGE_PANEL_HEIGHT,
+                      }}
+                    >
+                      <PanelBands
+                        goals={goals}
+                        plotWidth={plotWidth}
+                        bandColor={def.bandColor(t.colors)}
+                        lineHighColor={def.lineHighColor(t.colors)}
+                        lineLowColor={def.lineLowColor(t.colors)}
+                      />
+                    </View>
+                    {panelIndex < MACRO_PANEL_COUNT - 1 ? (
+                      <Text
+                        pointerEvents="none"
+                        style={{
+                          position: 'absolute',
+                          top: panelTitleTop(panelIndex + 1),
+                          left: 0,
+                          color: t.colors.fgMuted,
+                          fontSize: t.fontSize.caption,
+                          fontWeight: '600',
+                          height: PANEL_TITLE_HEIGHT,
+                          lineHeight: PANEL_TITLE_HEIGHT,
+                        }}
+                      >
+                        {MACRO_PANEL_DEFS[panelIndex + 1].title}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })}
 
               <View
                 style={{
                   flexDirection: 'row',
-                  height: columnBlockHeight,
+                  height: COLUMN_BLOCK_HEIGHT,
                   width: plotWidth || '100%',
                 }}
               >
                 {colWidth > 0
                   ? daily.map((p) => {
-                      const kcal = Number(p.summary?.calories ?? 0);
-                      const proteinG = Number(p.summary?.protein ?? 0);
-                      const status = normalizeStatus(p.calorieStatus, p.hasRecords);
-                      const kcalBarH = p.hasRecords
-                        ? Math.max(6, valueToHeight(kcal, calorieScaleMax, RANGE_PANEL_HEIGHT))
-                        : 6;
-                      const proteinBarH = p.hasRecords
-                        ? Math.max(6, valueToHeight(proteinG, proteinScaleMax, RANGE_PANEL_HEIGHT))
-                        : 6;
                       const isSelected = p.date === selectedDate;
+                      const values = MACRO_PANEL_DEFS.map((def) =>
+                        Number(p.summary?.[def.summaryKey] ?? 0),
+                      );
 
                       return (
                         <Pressable
                           key={p.date}
                           onPress={() => setSelectedDate((prev) => (prev === p.date ? null : p.date))}
-                          style={{ width: colWidth, height: columnBlockHeight }}
+                          style={{ width: colWidth, height: COLUMN_BLOCK_HEIGHT }}
                           accessibilityRole="button"
-                          accessibilityLabel={STATS_COPY.calorieBarA11y(
+                          accessibilityLabel={STATS_COPY.macroBarA11y(
                             dayOfMonth(p.date) || 0,
-                            Math.round(kcal),
-                            Math.round(proteinG),
+                            Math.round(values[0]),
+                            Math.round(values[1]),
+                            Math.round(values[2]),
+                            Math.round(values[3]),
                           )}
                         >
-                          <View
-                            style={{
-                              height: RANGE_PANEL_HEIGHT,
-                              justifyContent: 'flex-end',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <View
-                              style={{
-                                width: barWidth,
-                                height: kcalBarH,
-                                borderRadius: 4,
-                                backgroundColor: statusColor(status, p.hasRecords, t),
-                                opacity: isSelected ? 1 : 0.92,
-                              }}
-                            />
-                          </View>
-                          <View style={{ height: PROTEIN_TITLE_HEIGHT }} />
-                          <View
-                            style={{
-                              height: RANGE_PANEL_HEIGHT,
-                              justifyContent: 'flex-end',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <View
-                              style={{
-                                width: barWidth,
-                                height: proteinBarH,
-                                borderRadius: 4,
-                                backgroundColor: p.hasRecords ? t.colors.info : t.colors.border,
-                                opacity: isSelected ? 1 : 0.92,
-                              }}
-                            />
-                          </View>
+                          {MACRO_PANEL_DEFS.map((def, panelIndex) => {
+                            const value = values[panelIndex];
+                            const scaleMax = scaleMaxByKey[def.key];
+                            const barH = p.hasRecords
+                              ? Math.max(6, valueToHeight(value, scaleMax, RANGE_PANEL_HEIGHT))
+                              : 6;
+                            return (
+                              <View key={def.key}>
+                                <View
+                                  style={{
+                                    height: RANGE_PANEL_HEIGHT,
+                                    justifyContent: 'flex-end',
+                                    alignItems: 'center',
+                                  }}
+                                >
+                                  <View
+                                    style={{
+                                      width: barWidth,
+                                      height: barH,
+                                      borderRadius: 4,
+                                      backgroundColor: def.barColor(p, t.colors),
+                                      opacity: isSelected ? 1 : 0.92,
+                                    }}
+                                  />
+                                </View>
+                                {panelIndex < MACRO_PANEL_COUNT - 1 ? (
+                                  <View style={{ height: PANEL_TITLE_HEIGHT }} />
+                                ) : null}
+                              </View>
+                            );
+                          })}
                           <View
                             style={{
                               height: RANGE_DAY_LABEL_HEIGHT,
@@ -419,37 +485,26 @@ export function CalorieRangeChart({
           style={{
             width: RANGE_LABEL_GUTTER,
             height: plotBlockHeight,
-            marginTop: RANGE_TOOLTIP_SLOT_HEIGHT + t.spacing.xs + 18,
+            marginTop: gutterMarginTop,
             position: 'relative',
           }}
         >
-          <PanelGutterLabels
-            goals={calorieGoals}
-            unit=" kcal"
-            color={t.colors.fgMuted}
-            panelTop={0}
-            formatGoalRangeLabel={STATS_COPY.goalRangeLabel}
-          />
-          <PanelGutterLabels
-            goals={proteinGoals}
-            unit="g"
-            color={t.colors.info}
-            panelTop={proteinPanelTop}
-            formatGoalRangeLabel={STATS_COPY.goalRangeLabel}
-          />
+          {MACRO_PANEL_DEFS.map((def, panelIndex) => (
+            <PanelGutterLabels
+              key={def.key}
+              goals={panelGoals[panelIndex]}
+              unit={def.gutterUnit}
+              color={def.gutterColor(t.colors)}
+              panelTop={panelContentTop(panelIndex)}
+              formatGoalRangeLabel={STATS_COPY.goalRangeLabel}
+            />
+          ))}
         </View>
       </View>
 
       <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
         {STATS_COPY.calorieRangeLegend}
       </Text>
-      {carbohydrateGoalMinG != null || carbohydrateGoalMaxG != null || fatGoalMinG != null || fatGoalMaxG != null ? (
-        <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
-          탄수 목표 {carbohydrateGoalMinG ?? carbohydrateGoalMaxG ?? '—'}–
-          {carbohydrateGoalMaxG ?? carbohydrateGoalMinG ?? '—'}g · 지방 목표 {fatGoalMinG ?? fatGoalMaxG ?? '—'}–
-          {fatGoalMaxG ?? fatGoalMinG ?? '—'}g
-        </Text>
-      ) : null}
     </View>
   );
 }
