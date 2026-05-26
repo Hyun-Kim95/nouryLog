@@ -206,7 +206,10 @@ export function HomeScreen() {
         ) : null}
       </Card>
 
-      {goals?.proteinGoalG != null || goals?.calorieGoalKcal != null ? (
+      {goals?.proteinGoalG != null ||
+      goals?.calorieGoalKcal != null ||
+      goals?.carbohydrateGoalG != null ||
+      goals?.fatGoalG != null ? (
         <Card>
           <CardTitle>{HOME_COPY.goalsTitle}</CardTitle>
           {goals.calorieGoalKcal != null && intake ? (
@@ -236,6 +239,36 @@ export function HomeScreen() {
               fulfillment={computeFulfillment('protein', intake.proteinG, goals.proteinGoalG, profile, {
                 min: goals.proteinGoalMinG,
                 max: goals.proteinGoalMaxG,
+              })}
+            />
+          ) : null}
+          {goals.carbohydrateGoalG != null && intake ? (
+            <ProgressBar
+              label={HOME_COPY.carb}
+              value={Math.round(intake.carbohydrateG)}
+              max={goals.carbohydrateGoalMaxG ?? goals.carbohydrateGoalG}
+              unit="g"
+              fulfillment={computeFulfillment(
+                'carbohydrate',
+                intake.carbohydrateG,
+                goals.carbohydrateGoalG,
+                profile,
+                {
+                  min: goals.carbohydrateGoalMinG,
+                  max: goals.carbohydrateGoalMaxG,
+                },
+              )}
+            />
+          ) : null}
+          {goals.fatGoalG != null && intake ? (
+            <ProgressBar
+              label={HOME_COPY.fat}
+              value={Math.round(intake.fatG)}
+              max={goals.fatGoalMaxG ?? goals.fatGoalG}
+              unit="g"
+              fulfillment={computeFulfillment('fat', intake.fatG, goals.fatGoalG, profile, {
+                min: goals.fatGoalMinG,
+                max: goals.fatGoalMaxG,
               })}
             />
           ) : null}

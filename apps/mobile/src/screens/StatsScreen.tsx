@@ -181,6 +181,10 @@ export function StatsScreen() {
                 calorieMax={goals?.calorieGoalMaxKcal ?? null}
                 proteinGoalMinG={goals?.proteinGoalMinG ?? null}
                 proteinGoalMaxG={goals?.proteinGoalMaxG ?? goals?.proteinGoalG ?? null}
+                carbohydrateGoalMinG={goals?.carbohydrateGoalMinG ?? null}
+                carbohydrateGoalMaxG={goals?.carbohydrateGoalMaxG ?? goals?.carbohydrateGoalG ?? null}
+                fatGoalMinG={goals?.fatGoalMinG ?? null}
+                fatGoalMaxG={goals?.fatGoalMaxG ?? goals?.fatGoalG ?? null}
                 chartTapHint={
                   range === 'day' ? STATS_COPY.calorieChartTapHint : STATS_COPY.calorieChartTapHintWeekMonth
                 }

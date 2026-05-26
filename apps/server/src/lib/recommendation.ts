@@ -85,6 +85,10 @@ export type RecommendationPolicy = {
   proteinPerKg: number;
   calorieMode: CalorieMode;
   calorieDeltaKcal: number;
+  carbohydrateRatio: number;
+  fatRatio: number;
+  carbohydrateMinG: number;
+  fatMinPerKg: number;
 };
 
 export type RecommendationMeta = {
@@ -105,6 +109,8 @@ export type ProfileForRecommendation = {
 export type RecommendationResult = {
   proteinGoalG: number;
   calorieGoalKcal: number;
+  carbohydrateGoalG: number;
+  fatGoalG: number;
 };
 
 export type RecommendationFull = RecommendationResult & RecommendationMeta;
@@ -114,10 +120,55 @@ export type GoalRange = {
   proteinGoalMaxG: number;
   calorieGoalMinKcal: number;
   calorieGoalMaxKcal: number;
+  carbohydrateGoalMinG: number;
+  carbohydrateGoalMaxG: number;
+  fatGoalMinG: number;
+  fatGoalMaxG: number;
 };
 
 const GOAL_CLAMP_MIN = 0;
 const GOAL_CLAMP_MAX = 10000;
+const CARBOHYDRATE_MIN_G = 100;
+const FAT_MIN_PER_KG = 0.6;
+const MACRO_RATIO_BY_GOAL: Record<Goal, { carbohydrate: number; fat: number }> = {
+  lose: { carbohydrate: 0.6, fat: 0.4 },
+  maintain: { carbohydrate: 0.55, fat: 0.45 },
+  gain: { carbohydrate: 0.5, fat: 0.5 },
+};
+
+function clampGoalInt(n: number): number {
+  return Math.min(GOAL_CLAMP_MAX, Math.max(GOAL_CLAMP_MIN, Math.round(n)));
+}
+
+type MacroTargets = {
+  carbohydrateGoalG: number;
+  fatGoalG: number;
+};
+
+function computeMacroTargets(
+  calorieGoalKcal: number,
+  proteinGoalG: number,
+  weightKg: number,
+  goal: Goal,
+): MacroTargets {
+  const ratio = MACRO_RATIO_BY_GOAL[goal];
+  const remainingKcal = Math.max(0, calorieGoalKcal - proteinGoalG * 4);
+  const fatMinG = Math.max(0, Math.round(weightKg * FAT_MIN_PER_KG));
+
+  let fatGoalG = Math.max(fatMinG, Math.round((remainingKcal * ratio.fat) / 9));
+  let carbohydrateGoalG = Math.max(CARBOHYDRATE_MIN_G, Math.round((remainingKcal - fatGoalG * 9) / 4));
+
+  // 4/4/9 합계를 최대한 맞추되 최소 가드(탄수 100g, 지방 0.6g/kg)는 유지한다.
+  const remainingAfterCarb = remainingKcal - carbohydrateGoalG * 4;
+  fatGoalG = Math.max(fatMinG, Math.round(remainingAfterCarb / 9));
+  const remainingAfterFat = remainingKcal - fatGoalG * 9;
+  carbohydrateGoalG = Math.max(CARBOHYDRATE_MIN_G, Math.round(remainingAfterFat / 4));
+
+  return {
+    carbohydrateGoalG: clampGoalInt(carbohydrateGoalG),
+    fatGoalG: clampGoalInt(fatGoalG),
+  };
+}
 
 /**
  * 중심값·목표 유형으로 일일 권장 범위 산출 (mobile-log-ux PRD §6).
@@ -125,11 +176,15 @@ const GOAL_CLAMP_MAX = 10000;
 export function computeGoalRanges(
   centerProteinG: number,
   centerCalorieKcal: number,
+  centerCarbohydrateG: number,
+  centerFatG: number,
   goal: Goal,
 ): GoalRange {
   const proteinDelta = Math.max(5, Math.round(centerProteinG * 0.05));
   const proteinGoalMinG = Math.max(GOAL_CLAMP_MIN, centerProteinG - proteinDelta);
   const proteinGoalMaxG = Math.min(GOAL_CLAMP_MAX, centerProteinG + proteinDelta);
+  const carbohydrateDelta = Math.max(10, Math.round(centerCarbohydrateG * 0.1));
+  const fatDelta = Math.max(5, Math.round(centerFatG * 0.1));
 
   let calorieGoalMinKcal: number;
   let calorieGoalMaxKcal: number;
@@ -149,6 +204,10 @@ export function computeGoalRanges(
     proteinGoalMaxG,
     calorieGoalMinKcal: Math.max(GOAL_CLAMP_MIN, calorieGoalMinKcal),
     calorieGoalMaxKcal: Math.min(GOAL_CLAMP_MAX, calorieGoalMaxKcal),
+    carbohydrateGoalMinG: Math.max(GOAL_CLAMP_MIN, centerCarbohydrateG - carbohydrateDelta),
+    carbohydrateGoalMaxG: Math.min(GOAL_CLAMP_MAX, centerCarbohydrateG + carbohydrateDelta),
+    fatGoalMinG: Math.max(GOAL_CLAMP_MIN, centerFatG - fatDelta),
+    fatGoalMaxG: Math.min(GOAL_CLAMP_MAX, centerFatG + fatDelta),
   };
 }
 
@@ -174,29 +233,45 @@ type StoredGoalRange = {
   proteinGoalMaxG?: number | null;
   calorieGoalMinKcal?: number | null;
   calorieGoalMaxKcal?: number | null;
+  carbohydrateGoalMinG?: number | null;
+  carbohydrateGoalMaxG?: number | null;
+  fatGoalMinG?: number | null;
+  fatGoalMaxG?: number | null;
 };
 
 export function resolveProfileGoalRanges(
   proteinGoalG: number | null | undefined,
   calorieGoalKcal: number | null | undefined,
+  carbohydrateGoalG: number | null | undefined,
+  fatGoalG: number | null | undefined,
   goal: string | null | undefined,
   stored: StoredGoalRange | null | undefined,
 ): GoalRange | null {
-  if (proteinGoalG == null || calorieGoalKcal == null) return null;
+  if (proteinGoalG == null || calorieGoalKcal == null || carbohydrateGoalG == null || fatGoalG == null) {
+    return null;
+  }
   if (
     stored?.proteinGoalMinG != null &&
     stored?.proteinGoalMaxG != null &&
     stored?.calorieGoalMinKcal != null &&
-    stored?.calorieGoalMaxKcal != null
+    stored?.calorieGoalMaxKcal != null &&
+    stored?.carbohydrateGoalMinG != null &&
+    stored?.carbohydrateGoalMaxG != null &&
+    stored?.fatGoalMinG != null &&
+    stored?.fatGoalMaxG != null
   ) {
     return {
       proteinGoalMinG: stored.proteinGoalMinG,
       proteinGoalMaxG: stored.proteinGoalMaxG,
       calorieGoalMinKcal: stored.calorieGoalMinKcal,
       calorieGoalMaxKcal: stored.calorieGoalMaxKcal,
+      carbohydrateGoalMinG: stored.carbohydrateGoalMinG,
+      carbohydrateGoalMaxG: stored.carbohydrateGoalMaxG,
+      fatGoalMinG: stored.fatGoalMinG,
+      fatGoalMaxG: stored.fatGoalMaxG,
     };
   }
-  return computeGoalRanges(proteinGoalG, calorieGoalKcal, safeGoal(goal));
+  return computeGoalRanges(proteinGoalG, calorieGoalKcal, carbohydrateGoalG, fatGoalG, safeGoal(goal));
 }
 
 function ageBandOf(age: number): AgeBand {
@@ -260,6 +335,7 @@ export function calculateRecommendationFull(profile: ProfileForRecommendation): 
   }
   proteinPerKg = Math.min(proteinPerKg, PROTEIN_AUTO_CAP_PER_KG);
   const proteinGoalG = Math.round(profile.weightKg * proteinPerKg);
+  const macro = computeMacroTargets(calorieGoalKcal, proteinGoalG, profile.weightKg, goal);
 
   const warnings: WarningCode[] = [];
   if (band === 'teen') warnings.push('teen_caution');
@@ -269,12 +345,18 @@ export function calculateRecommendationFull(profile: ProfileForRecommendation): 
   return {
     proteinGoalG,
     calorieGoalKcal,
+    carbohydrateGoalG: macro.carbohydrateGoalG,
+    fatGoalG: macro.fatGoalG,
     recommendationVersion: '1.4',
     policy: {
       ageBand: band,
       proteinPerKg,
       calorieMode,
       calorieDeltaKcal,
+      carbohydrateRatio: MACRO_RATIO_BY_GOAL[goal].carbohydrate,
+      fatRatio: MACRO_RATIO_BY_GOAL[goal].fat,
+      carbohydrateMinG: CARBOHYDRATE_MIN_G,
+      fatMinPerKg: FAT_MIN_PER_KG,
     },
     warnings,
   };
@@ -286,5 +368,10 @@ export function calculateRecommendationFull(profile: ProfileForRecommendation): 
  */
 export function calculateRecommendation(profile: ProfileForRecommendation): RecommendationResult {
   const full = calculateRecommendationFull(profile);
-  return { proteinGoalG: full.proteinGoalG, calorieGoalKcal: full.calorieGoalKcal };
+  return {
+    proteinGoalG: full.proteinGoalG,
+    calorieGoalKcal: full.calorieGoalKcal,
+    carbohydrateGoalG: full.carbohydrateGoalG,
+    fatGoalG: full.fatGoalG,
+  };
 }

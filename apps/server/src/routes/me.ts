@@ -286,7 +286,14 @@ meRouter.get('/me/profile', async (req, res) => {
     activityLevel: p.activityLevel,
     goal: p.goal,
   });
-  const ranges = resolveProfileGoalRanges(p.proteinGoalG, p.calorieGoalKcal, p.goal, p);
+  const ranges = resolveProfileGoalRanges(
+    p.proteinGoalG,
+    p.calorieGoalKcal,
+    p.carbohydrateGoalG,
+    p.fatGoalG,
+    p.goal,
+    p,
+  );
   res.json({
     gender: p.gender,
     age: p.age,
@@ -296,10 +303,16 @@ meRouter.get('/me/profile', async (req, res) => {
     goal: p.goal ?? null,
     proteinGoalG: p.proteinGoalG ?? undefined,
     calorieGoalKcal: p.calorieGoalKcal ?? undefined,
+    carbohydrateGoalG: p.carbohydrateGoalG ?? undefined,
+    fatGoalG: p.fatGoalG ?? undefined,
     proteinGoalMinG: ranges?.proteinGoalMinG,
     proteinGoalMaxG: ranges?.proteinGoalMaxG,
     calorieGoalMinKcal: ranges?.calorieGoalMinKcal,
     calorieGoalMaxKcal: ranges?.calorieGoalMaxKcal,
+    carbohydrateGoalMinG: ranges?.carbohydrateGoalMinG,
+    carbohydrateGoalMaxG: ranges?.carbohydrateGoalMaxG,
+    fatGoalMinG: ranges?.fatGoalMinG,
+    fatGoalMaxG: ranges?.fatGoalMaxG,
     recommendationVersion: full.recommendationVersion,
     policy: full.policy,
     warnings: full.warnings,
@@ -327,7 +340,9 @@ type ProfileFieldError = {
     | 'activityLevel'
     | 'goal'
     | 'proteinGoalG'
-    | 'calorieGoalKcal';
+    | 'calorieGoalKcal'
+    | 'carbohydrateGoalG'
+    | 'fatGoalG';
   message: string;
   details: Record<string, unknown>;
 };
@@ -370,7 +385,14 @@ function validateGender(input: unknown): { value?: string; error?: ProfileFieldE
 }
 
 function validateIntegerRange(
-  field: 'age' | 'heightCm' | 'weightKg' | 'proteinGoalG' | 'calorieGoalKcal',
+  field:
+    | 'age'
+    | 'heightCm'
+    | 'weightKg'
+    | 'proteinGoalG'
+    | 'calorieGoalKcal'
+    | 'carbohydrateGoalG'
+    | 'fatGoalG',
   input: unknown,
   min: number,
   max: number,
@@ -414,6 +436,8 @@ meRouter.put('/me/profile', async (req, res) => {
     goal: string;
     proteinGoalG: number;
     calorieGoalKcal: number;
+    carbohydrateGoalG: number;
+    fatGoalG: number;
   }>;
 
   const gender = validateGender(b.gender);
@@ -462,15 +486,40 @@ meRouter.put('/me/profile', async (req, res) => {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, calorie.error.message, calorie.error.details);
     return;
   }
+  const carbohydrate = validateIntegerRange(
+    'carbohydrateGoalG',
+    b.carbohydrateGoalG,
+    GOAL_MIN,
+    GOAL_MAX,
+    '탄수화물 목표',
+  );
+  if (carbohydrate.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, carbohydrate.error.message, carbohydrate.error.details);
+    return;
+  }
+  const fat = validateIntegerRange('fatGoalG', b.fatGoalG, GOAL_MIN, GOAL_MAX, '지방 목표');
+  if (fat.error) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, fat.error.message, fat.error.details);
+    return;
+  }
 
   const existing = await prisma.profile.findUnique({ where: { userId } });
   const mergedGoal = goal.value !== undefined ? goal.value : (existing?.goal ?? null);
   const mergedProtein = protein.value !== undefined ? protein.value : existing?.proteinGoalG;
   const mergedCalorie = calorie.value !== undefined ? calorie.value : existing?.calorieGoalKcal;
+  const mergedCarbohydrate =
+    carbohydrate.value !== undefined ? carbohydrate.value : existing?.carbohydrateGoalG;
+  const mergedFat = fat.value !== undefined ? fat.value : existing?.fatGoalG;
 
   let rangeData: ReturnType<typeof computeGoalRanges> | undefined;
-  if (mergedProtein != null && mergedCalorie != null) {
-    rangeData = computeGoalRanges(mergedProtein, mergedCalorie, safeGoal(mergedGoal));
+  if (mergedProtein != null && mergedCalorie != null && mergedCarbohydrate != null && mergedFat != null) {
+    rangeData = computeGoalRanges(
+      mergedProtein,
+      mergedCalorie,
+      mergedCarbohydrate,
+      mergedFat,
+      safeGoal(mergedGoal),
+    );
   }
 
   await prisma.profile.upsert({
@@ -485,6 +534,8 @@ meRouter.put('/me/profile', async (req, res) => {
       goal: goal.value ?? null,
       proteinGoalG: protein.value,
       calorieGoalKcal: calorie.value,
+      carbohydrateGoalG: carbohydrate.value,
+      fatGoalG: fat.value,
       ...(rangeData ?? {}),
     },
     update: {
@@ -496,6 +547,8 @@ meRouter.put('/me/profile', async (req, res) => {
       ...(goal.value !== undefined ? { goal: goal.value } : {}),
       ...(protein.value !== undefined ? { proteinGoalG: protein.value } : {}),
       ...(calorie.value !== undefined ? { calorieGoalKcal: calorie.value } : {}),
+      ...(carbohydrate.value !== undefined ? { carbohydrateGoalG: carbohydrate.value } : {}),
+      ...(fat.value !== undefined ? { fatGoalG: fat.value } : {}),
       ...(rangeData ?? {}),
     },
   });
@@ -521,18 +574,28 @@ meRouter.post('/me/recommendation/recalculate', async (req, res) => {
     activityLevel: p.activityLevel,
     goal: p.goal,
   });
-  const ranges = computeGoalRanges(full.proteinGoalG, full.calorieGoalKcal, safeGoal(p.goal));
+  const ranges = computeGoalRanges(
+    full.proteinGoalG,
+    full.calorieGoalKcal,
+    full.carbohydrateGoalG,
+    full.fatGoalG,
+    safeGoal(p.goal),
+  );
   await prisma.profile.update({
     where: { userId },
     data: {
       proteinGoalG: full.proteinGoalG,
       calorieGoalKcal: full.calorieGoalKcal,
+      carbohydrateGoalG: full.carbohydrateGoalG,
+      fatGoalG: full.fatGoalG,
       ...ranges,
     },
   });
   res.json({
     proteinGoalG: full.proteinGoalG,
     calorieGoalKcal: full.calorieGoalKcal,
+    carbohydrateGoalG: full.carbohydrateGoalG,
+    fatGoalG: full.fatGoalG,
     ...ranges,
     recommendationVersion: full.recommendationVersion,
     policy: full.policy,
@@ -544,19 +607,31 @@ function goalsSnapshotFromProfile(p: {
   goal: string | null;
   proteinGoalG: number | null;
   calorieGoalKcal: number | null;
+  carbohydrateGoalG: number | null;
+  fatGoalG: number | null;
   proteinGoalMinG: number | null;
   proteinGoalMaxG: number | null;
   calorieGoalMinKcal: number | null;
   calorieGoalMaxKcal: number | null;
+  carbohydrateGoalMinG: number | null;
+  carbohydrateGoalMaxG: number | null;
+  fatGoalMinG: number | null;
+  fatGoalMaxG: number | null;
 }): GoalSnapshot {
   return {
     goal: p.goal,
     proteinGoalG: p.proteinGoalG,
     calorieGoalKcal: p.calorieGoalKcal,
+    carbohydrateGoalG: p.carbohydrateGoalG,
+    fatGoalG: p.fatGoalG,
     proteinGoalMinG: p.proteinGoalMinG,
     proteinGoalMaxG: p.proteinGoalMaxG,
     calorieGoalMinKcal: p.calorieGoalMinKcal,
     calorieGoalMaxKcal: p.calorieGoalMaxKcal,
+    carbohydrateGoalMinG: p.carbohydrateGoalMinG,
+    carbohydrateGoalMaxG: p.carbohydrateGoalMaxG,
+    fatGoalMinG: p.fatGoalMinG,
+    fatGoalMaxG: p.fatGoalMaxG,
   };
 }
 
@@ -633,13 +708,21 @@ meRouter.post('/me/weight-entries', async (req, res) => {
       activityLevel: p.activityLevel,
       goal: p.goal,
     });
-    const ranges = computeGoalRanges(full.proteinGoalG, full.calorieGoalKcal, safeGoal(p.goal));
+    const ranges = computeGoalRanges(
+      full.proteinGoalG,
+      full.calorieGoalKcal,
+      full.carbohydrateGoalG,
+      full.fatGoalG,
+      safeGoal(p.goal),
+    );
 
     const updated = await tx.profile.update({
       where: { userId },
       data: {
         proteinGoalG: full.proteinGoalG,
         calorieGoalKcal: full.calorieGoalKcal,
+        carbohydrateGoalG: full.carbohydrateGoalG,
+        fatGoalG: full.fatGoalG,
         ...ranges,
       },
     });
@@ -662,10 +745,16 @@ meRouter.post('/me/weight-entries', async (req, res) => {
         activityLevel: p.activityLevel,
         proteinGoalG: goalsAfter.proteinGoalG,
         calorieGoalKcal: goalsAfter.calorieGoalKcal,
+        carbohydrateGoalG: goalsAfter.carbohydrateGoalG,
+        fatGoalG: goalsAfter.fatGoalG,
         proteinGoalMinG: goalsAfter.proteinGoalMinG,
         proteinGoalMaxG: goalsAfter.proteinGoalMaxG,
         calorieGoalMinKcal: goalsAfter.calorieGoalMinKcal,
         calorieGoalMaxKcal: goalsAfter.calorieGoalMaxKcal,
+        carbohydrateGoalMinG: goalsAfter.carbohydrateGoalMinG,
+        carbohydrateGoalMaxG: goalsAfter.carbohydrateGoalMaxG,
+        fatGoalMinG: goalsAfter.fatGoalMinG,
+        fatGoalMaxG: goalsAfter.fatGoalMaxG,
       },
     });
 
@@ -1465,10 +1554,16 @@ meRouter.get('/stats', async (req, res) => {
         goal: profile.goal,
         proteinGoalG: profile.proteinGoalG,
         calorieGoalKcal: profile.calorieGoalKcal,
+        carbohydrateGoalG: profile.carbohydrateGoalG,
+        fatGoalG: profile.fatGoalG,
         proteinGoalMinG: profile.proteinGoalMinG,
         proteinGoalMaxG: profile.proteinGoalMaxG,
         calorieGoalMinKcal: profile.calorieGoalMinKcal,
         calorieGoalMaxKcal: profile.calorieGoalMaxKcal,
+        carbohydrateGoalMinG: profile.carbohydrateGoalMinG,
+        carbohydrateGoalMaxG: profile.carbohydrateGoalMaxG,
+        fatGoalMinG: profile.fatGoalMinG,
+        fatGoalMaxG: profile.fatGoalMaxG,
       }
     : null;
 

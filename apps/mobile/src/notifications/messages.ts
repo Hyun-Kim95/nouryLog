@@ -27,10 +27,14 @@ export type ShortfallContent = { title: string; body: string } | null;
 export function buildNutritionContent(args: {
   proteinShortfallG: number;
   calorieShortfallKcal: number;
+  carbohydrateShortfallG: number;
+  fatShortfallG: number;
 }): ShortfallContent {
   const p = Math.max(0, Math.round(args.proteinShortfallG));
   const c = Math.max(0, Math.round(args.calorieShortfallKcal));
-  if (p === 0 && c === 0) return null;
+  const carb = Math.max(0, Math.round(args.carbohydrateShortfallG));
+  const fat = Math.max(0, Math.round(args.fatShortfallG));
+  if (p === 0 && c === 0 && carb === 0 && fat === 0) return null;
 
   const title = '오늘 식단 점검';
   if (p > 0 && c > 0) {
@@ -38,6 +42,15 @@ export function buildNutritionContent(args: {
   }
   if (p > 0) {
     return { title, body: `오늘 단백질이 약 ${p} g 부족해요. 한 끼 더 챙겨볼까요?` };
+  }
+  if (carb > 0 && fat > 0) {
+    return { title, body: `오늘 탄수 약 ${carb} g, 지방 약 ${fat} g 부족해요. 식단 균형을 점검해보세요.` };
+  }
+  if (carb > 0) {
+    return { title, body: `오늘 탄수화물이 약 ${carb} g 부족해요. 식단을 보충해보세요.` };
+  }
+  if (fat > 0) {
+    return { title, body: `오늘 지방이 약 ${fat} g 부족해요. 식단 균형을 점검해보세요.` };
   }
   return { title, body: `오늘 칼로리가 약 ${c} kcal 부족해요. 가벼운 보충 식단을 고려해보세요.` };
 }

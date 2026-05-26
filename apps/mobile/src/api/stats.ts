@@ -29,13 +29,15 @@ export type StatsResponse = {
     date: string;
     label?: string;
     summary: NutritionSum;
-    goalMet: { calorie: boolean; protein: boolean };
+    goalMet: { calorie: boolean; protein: boolean; carbohydrate: boolean; fat: boolean };
     calorieStatus: FulfillmentStatus;
     hasRecords: boolean;
   }>;
   goalAchievement?: {
     calorie: { metDays: number; countedDays: number; pct: number };
     protein: { metDays: number; countedDays: number; pct: number };
+    carbohydrate: { metDays: number; countedDays: number; pct: number };
+    fat: { metDays: number; countedDays: number; pct: number };
   };
 };
 

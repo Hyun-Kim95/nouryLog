@@ -99,7 +99,7 @@ export type StatsSeriesPoint = {
   date: string;
   label: string;
   summary: NutritionSum;
-  goalMet: { calorie: boolean; protein: boolean };
+  goalMet: { calorie: boolean; protein: boolean; carbohydrate: boolean; fat: boolean };
   calorieStatus: FulfillmentStatus;
   hasRecords: boolean;
 };
@@ -111,6 +111,8 @@ export type StatsExtras = {
   goalAchievement: {
     calorie: { metDays: number; countedDays: number; pct: number };
     protein: { metDays: number; countedDays: number; pct: number };
+    carbohydrate: { metDays: number; countedDays: number; pct: number };
+    fat: { metDays: number; countedDays: number; pct: number };
   };
 };
 
@@ -192,15 +194,23 @@ export async function buildStatsSeries(
     const profileCtx = goals ? { goal: goals.goal } : null;
     const calorieGoal = goals?.calorieGoalKcal ?? null;
     const proteinGoal = goals?.proteinGoalG ?? null;
+    const carbohydrateGoal = goals?.carbohydrateGoalG ?? null;
+    const fatGoal = goals?.fatGoalG ?? null;
     const calorieBounds = goals
       ? { min: goals.calorieGoalMinKcal, max: goals.calorieGoalMaxKcal }
       : undefined;
     const proteinBounds = goals
       ? { min: goals.proteinGoalMinG, max: goals.proteinGoalMaxG }
       : undefined;
+    const carbohydrateBounds = goals
+      ? { min: goals.carbohydrateGoalMinG, max: goals.carbohydrateGoalMaxG }
+      : undefined;
+    const fatBounds = goals ? { min: goals.fatGoalMinG, max: goals.fatGoalMaxG } : undefined;
 
     let calorieMet = false;
     let proteinMet = false;
+    let carbohydrateMet = false;
+    let fatMet = false;
     let calorieStatus: FulfillmentStatus = 'none';
     if (hasRecords) {
       if (calorieGoal != null) {
@@ -211,12 +221,29 @@ export async function buildStatsSeries(
       if (proteinGoal != null) {
         proteinMet = isGoalMet('protein', summary.protein, proteinGoal, profileCtx, proteinBounds);
       }
+      if (carbohydrateGoal != null) {
+        carbohydrateMet = isGoalMet(
+          'carbohydrate',
+          summary.carbohydrate,
+          carbohydrateGoal,
+          profileCtx,
+          carbohydrateBounds,
+        );
+      }
+      if (fatGoal != null) {
+        fatMet = isGoalMet('fat', summary.fat, fatGoal, profileCtx, fatBounds);
+      }
     }
     return {
       date: b.date,
       label: b.label,
       summary,
-      goalMet: { calorie: calorieMet, protein: proteinMet },
+      goalMet: {
+        calorie: calorieMet,
+        protein: proteinMet,
+        carbohydrate: carbohydrateMet,
+        fat: fatMet,
+      },
       calorieStatus,
       hasRecords,
     };
@@ -233,6 +260,8 @@ export async function buildStatsSeries(
 
   let calorieMetDays = 0;
   let proteinMetDays = 0;
+  let carbohydrateMetDays = 0;
+  let fatMetDays = 0;
   const countedDays = dayGoalDates.length;
 
   for (const ymd of dayGoalDates) {
@@ -241,12 +270,18 @@ export async function buildStatsSeries(
     const profileCtx = goals ? { goal: goals.goal } : null;
     const calorieGoal = goals?.calorieGoalKcal ?? null;
     const proteinGoal = goals?.proteinGoalG ?? null;
+    const carbohydrateGoal = goals?.carbohydrateGoalG ?? null;
+    const fatGoal = goals?.fatGoalG ?? null;
     const calorieBounds = goals
       ? { min: goals.calorieGoalMinKcal, max: goals.calorieGoalMaxKcal }
       : undefined;
     const proteinBounds = goals
       ? { min: goals.proteinGoalMinG, max: goals.proteinGoalMaxG }
       : undefined;
+    const carbohydrateBounds = goals
+      ? { min: goals.carbohydrateGoalMinG, max: goals.carbohydrateGoalMaxG }
+      : undefined;
+    const fatBounds = goals ? { min: goals.fatGoalMinG, max: goals.fatGoalMaxG } : undefined;
 
     if (calorieGoal != null) {
       const f = computeFulfillment('calorie', sum.calories, calorieGoal, profileCtx, calorieBounds);
@@ -255,6 +290,16 @@ export async function buildStatsSeries(
     if (proteinGoal != null) {
       if (isGoalMet('protein', sum.protein, proteinGoal, profileCtx, proteinBounds)) {
         proteinMetDays += 1;
+      }
+    }
+    if (carbohydrateGoal != null) {
+      if (isGoalMet('carbohydrate', sum.carbohydrate, carbohydrateGoal, profileCtx, carbohydrateBounds)) {
+        carbohydrateMetDays += 1;
+      }
+    }
+    if (fatGoal != null) {
+      if (isGoalMet('fat', sum.fat, fatGoal, profileCtx, fatBounds)) {
+        fatMetDays += 1;
       }
     }
   }
@@ -273,6 +318,16 @@ export async function buildStatsSeries(
         metDays: proteinMetDays,
         countedDays,
         pct: pct(proteinMetDays, countedDays),
+      },
+      carbohydrate: {
+        metDays: carbohydrateMetDays,
+        countedDays,
+        pct: pct(carbohydrateMetDays, countedDays),
+      },
+      fat: {
+        metDays: fatMetDays,
+        countedDays,
+        pct: pct(fatMetDays, countedDays),
       },
     },
   };

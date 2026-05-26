@@ -143,7 +143,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ProfileResponse"];
+                    };
                 };
             };
         };
@@ -203,7 +205,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["RecommendationRecalculateResponse"];
+                    };
                 };
             };
         };
@@ -211,6 +215,65 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/me/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 회원 탈퇴(비활성화) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        reasonCode: "not_using" | "alternative_app" | "hard_to_use" | "privacy" | "etc";
+                        /** @description reasonCode가 etc일 때 필수 */
+                        reasonText?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/me/food-templates": {
@@ -1161,6 +1224,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/jobs/purge-inactive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 비활성 데이터 영구 삭제 배치(1년 경과) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1256,6 +1353,61 @@ export interface components {
                 protein?: number;
                 fat?: number;
             };
+        };
+        RecommendationPolicy: {
+            /** @enum {string} */
+            ageBand: "teen" | "adult" | "older";
+            proteinPerKg: number;
+            /** @enum {string} */
+            calorieMode: "maintain" | "deficit" | "surplus" | "maintain_with_caution";
+            calorieDeltaKcal: number;
+            carbohydrateRatio: number;
+            fatRatio: number;
+            carbohydrateMinG: number;
+            fatMinPerKg: number;
+        };
+        ProfileResponse: {
+            /** @enum {string} */
+            gender: "male" | "female" | "unspecified";
+            age: number;
+            heightCm: number;
+            weightKg: number;
+            /** @enum {string|null} */
+            activityLevel: "sedentary" | "light" | "moderate" | "active" | null;
+            /** @enum {string|null} */
+            goal: "lose" | "maintain" | "gain" | null;
+            proteinGoalG?: number | null;
+            calorieGoalKcal?: number | null;
+            carbohydrateGoalG?: number | null;
+            fatGoalG?: number | null;
+            proteinGoalMinG?: number | null;
+            proteinGoalMaxG?: number | null;
+            calorieGoalMinKcal?: number | null;
+            calorieGoalMaxKcal?: number | null;
+            carbohydrateGoalMinG?: number | null;
+            carbohydrateGoalMaxG?: number | null;
+            fatGoalMinG?: number | null;
+            fatGoalMaxG?: number | null;
+            recommendationVersion?: string;
+            policy?: components["schemas"]["RecommendationPolicy"];
+            warnings?: ("teen_caution" | "older_adult_caution" | "low_calorie_floor_applied" | "general_medical_caution")[];
+        };
+        RecommendationRecalculateResponse: {
+            proteinGoalG: number;
+            calorieGoalKcal: number;
+            carbohydrateGoalG: number;
+            fatGoalG: number;
+            proteinGoalMinG?: number | null;
+            proteinGoalMaxG?: number | null;
+            calorieGoalMinKcal?: number | null;
+            calorieGoalMaxKcal?: number | null;
+            carbohydrateGoalMinG?: number | null;
+            carbohydrateGoalMaxG?: number | null;
+            fatGoalMinG?: number | null;
+            fatGoalMaxG?: number | null;
+            recommendationVersion?: string;
+            policy?: components["schemas"]["RecommendationPolicy"];
+            warnings?: ("teen_caution" | "older_adult_caution" | "low_calorie_floor_applied" | "general_medical_caution")[];
         };
         Entitlements: {
             ocrQuotaLimit?: number;

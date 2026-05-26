@@ -37,6 +37,10 @@ type Props = {
   calorieMax: number | null;
   proteinGoalMinG?: number | null;
   proteinGoalMaxG?: number | null;
+  carbohydrateGoalMinG?: number | null;
+  carbohydrateGoalMaxG?: number | null;
+  fatGoalMinG?: number | null;
+  fatGoalMaxG?: number | null;
   /** 막대 미선택 시 안내 (주·월은 달력 안내 문구) */
   chartTapHint?: string;
 };
@@ -157,6 +161,10 @@ export function CalorieRangeChart({
   calorieMax,
   proteinGoalMinG,
   proteinGoalMaxG,
+  carbohydrateGoalMinG,
+  carbohydrateGoalMaxG,
+  fatGoalMinG,
+  fatGoalMaxG,
   chartTapHint = STATS_COPY.calorieChartTapHint,
 }: Props) {
   const t = useTheme();
@@ -435,6 +443,13 @@ export function CalorieRangeChart({
       <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
         {STATS_COPY.calorieRangeLegend}
       </Text>
+      {carbohydrateGoalMinG != null || carbohydrateGoalMaxG != null || fatGoalMinG != null || fatGoalMaxG != null ? (
+        <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
+          탄수 목표 {carbohydrateGoalMinG ?? carbohydrateGoalMaxG ?? '—'}–
+          {carbohydrateGoalMaxG ?? carbohydrateGoalMinG ?? '—'}g · 지방 목표 {fatGoalMinG ?? fatGoalMaxG ?? '—'}–
+          {fatGoalMaxG ?? fatGoalMinG ?? '—'}g
+        </Text>
+      ) : null}
     </View>
   );
 }

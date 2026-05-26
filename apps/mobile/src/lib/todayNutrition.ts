@@ -20,10 +20,16 @@ export type TodayIntake = {
 export type TodayGoals = {
   proteinGoalG: number | null;
   calorieGoalKcal: number | null;
+  carbohydrateGoalG: number | null;
+  fatGoalG: number | null;
   proteinGoalMinG: number | null;
   proteinGoalMaxG: number | null;
   calorieGoalMinKcal: number | null;
   calorieGoalMaxKcal: number | null;
+  carbohydrateGoalMinG: number | null;
+  carbohydrateGoalMaxG: number | null;
+  fatGoalMinG: number | null;
+  fatGoalMaxG: number | null;
   profile: ProfileGetResponse;
 };
 
@@ -67,10 +73,16 @@ export async function fetchTodayGoals(token: string): Promise<TodayGoals> {
   return {
     proteinGoalG: profile.proteinGoalG ?? null,
     calorieGoalKcal: profile.calorieGoalKcal ?? null,
+    carbohydrateGoalG: profile.carbohydrateGoalG ?? null,
+    fatGoalG: profile.fatGoalG ?? null,
     proteinGoalMinG: profile.proteinGoalMinG ?? null,
     proteinGoalMaxG: profile.proteinGoalMaxG ?? null,
     calorieGoalMinKcal: profile.calorieGoalMinKcal ?? null,
     calorieGoalMaxKcal: profile.calorieGoalMaxKcal ?? null,
+    carbohydrateGoalMinG: profile.carbohydrateGoalMinG ?? null,
+    carbohydrateGoalMaxG: profile.carbohydrateGoalMaxG ?? null,
+    fatGoalMinG: profile.fatGoalMinG ?? null,
+    fatGoalMaxG: profile.fatGoalMaxG ?? null,
     profile,
   };
 }

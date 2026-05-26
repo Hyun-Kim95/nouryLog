@@ -7,10 +7,16 @@ export type GoalSnapshot = {
   goal: string | null;
   proteinGoalG: number | null;
   calorieGoalKcal: number | null;
+  carbohydrateGoalG: number | null;
+  fatGoalG: number | null;
   proteinGoalMinG: number | null;
   proteinGoalMaxG: number | null;
   calorieGoalMinKcal: number | null;
   calorieGoalMaxKcal: number | null;
+  carbohydrateGoalMinG: number | null;
+  carbohydrateGoalMaxG: number | null;
+  fatGoalMinG: number | null;
+  fatGoalMaxG: number | null;
 };
 
 export function snapshotFromWeightEntry(entry: WeightEntry): GoalSnapshot {
@@ -18,10 +24,16 @@ export function snapshotFromWeightEntry(entry: WeightEntry): GoalSnapshot {
     goal: entry.goal,
     proteinGoalG: entry.proteinGoalG,
     calorieGoalKcal: entry.calorieGoalKcal,
+    carbohydrateGoalG: entry.carbohydrateGoalG,
+    fatGoalG: entry.fatGoalG,
     proteinGoalMinG: entry.proteinGoalMinG,
     proteinGoalMaxG: entry.proteinGoalMaxG,
     calorieGoalMinKcal: entry.calorieGoalMinKcal,
     calorieGoalMaxKcal: entry.calorieGoalMaxKcal,
+    carbohydrateGoalMinG: entry.carbohydrateGoalMinG,
+    carbohydrateGoalMaxG: entry.carbohydrateGoalMaxG,
+    fatGoalMinG: entry.fatGoalMinG,
+    fatGoalMaxG: entry.fatGoalMaxG,
   };
 }
 

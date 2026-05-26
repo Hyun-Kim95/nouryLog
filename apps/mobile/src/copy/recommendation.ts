@@ -31,6 +31,10 @@ export const OVERRIDE_COPY = {
   proteinHelper: '권장 30~300 g/일. 정수만 입력해 주세요.',
   calorieLabel: '칼로리 목표',
   calorieHelper: '권장 800~6000 kcal/일. 정수만 입력해 주세요.',
+  carbLabel: '탄수화물 목표',
+  carbHelper: '권장 30~1000 g/일. 정수만 입력해 주세요.',
+  fatLabel: '지방 목표',
+  fatHelper: '권장 10~500 g/일. 정수만 입력해 주세요.',
   resetButton: '자동 추천으로 되돌리기',
   resetSuccess: '자동 추천으로 되돌렸어요.',
   saveSuccess: '내 목표를 저장했어요.',
@@ -40,6 +44,10 @@ export const OVERRIDE_PROTEIN_HINT_MIN = 30;
 export const OVERRIDE_PROTEIN_HINT_MAX = 300;
 export const OVERRIDE_CALORIE_HINT_MIN = 800;
 export const OVERRIDE_CALORIE_HINT_MAX = 6000;
+export const OVERRIDE_CARB_HINT_MIN = 30;
+export const OVERRIDE_CARB_HINT_MAX = 1000;
+export const OVERRIDE_FAT_HINT_MIN = 10;
+export const OVERRIDE_FAT_HINT_MAX = 500;
 
 export const WARNING_COPY: Record<WarningCode, string> = {
   teen_caution: RECOMMENDATION_COPY.teenCaution,

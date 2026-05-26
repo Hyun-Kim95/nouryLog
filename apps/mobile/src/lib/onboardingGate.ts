@@ -8,7 +8,12 @@ async function profileHasGoals(accessToken: string): Promise<boolean> {
   const timer = setTimeout(() => controller.abort(), PROFILE_PROBE_MS);
   try {
     const profile = await getProfile(accessToken, { signal: controller.signal });
-    return profile.calorieGoalKcal != null || profile.proteinGoalG != null;
+    return (
+      profile.calorieGoalKcal != null ||
+      profile.proteinGoalG != null ||
+      profile.carbohydrateGoalG != null ||
+      profile.fatGoalG != null
+    );
   } finally {
     clearTimeout(timer);
   }

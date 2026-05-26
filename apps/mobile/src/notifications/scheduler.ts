@@ -101,6 +101,8 @@ export async function scheduleNutrition(time: TimeStr, token: string | null): Pr
         content = buildNutritionContent({
           proteinShortfallG: sf.proteinShortfallG,
           calorieShortfallKcal: sf.calorieShortfallKcal,
+          carbohydrateShortfallG: sf.carbohydrateShortfallG,
+          fatShortfallG: sf.fatShortfallG,
         });
       }
     } catch (e) {

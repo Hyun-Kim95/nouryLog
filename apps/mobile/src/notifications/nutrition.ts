@@ -5,6 +5,8 @@ type MealRow = {
   consumedAt: string;
   protein?: number | null;
   calories?: number | null;
+  carbohydrate?: number | null;
+  fat?: number | null;
 };
 
 /// PRD v0.2 §5.3 — 권장량 미달 판정용 데이터 페치.
@@ -13,16 +15,33 @@ type MealRow = {
 export async function fetchTodayShortfall(token: string): Promise<{
   proteinShortfallG: number;
   calorieShortfallKcal: number;
+  carbohydrateShortfallG: number;
+  fatShortfallG: number;
   proteinGoalG: number | null;
   calorieGoalKcal: number | null;
+  carbohydrateGoalG: number | null;
+  fatGoalG: number | null;
 } | null> {
   const profile = await getProfile(token);
   const proteinGoalG = profile.proteinGoalG ?? null;
   const proteinThreshold = profile.proteinGoalMinG ?? proteinGoalG;
   const calorieGoalKcal = profile.calorieGoalKcal ?? null;
   const calorieThreshold = profile.calorieGoalMinKcal ?? calorieGoalKcal;
+  const carbohydrateGoalG = profile.carbohydrateGoalG ?? null;
+  const carbohydrateThreshold = profile.carbohydrateGoalMinG ?? carbohydrateGoalG;
+  const fatGoalG = profile.fatGoalG ?? null;
+  const fatThreshold = profile.fatGoalMinG ?? fatGoalG;
   if (!proteinThreshold || !calorieThreshold) {
-    return { proteinShortfallG: 0, calorieShortfallKcal: 0, proteinGoalG, calorieGoalKcal };
+    return {
+      proteinShortfallG: 0,
+      calorieShortfallKcal: 0,
+      carbohydrateShortfallG: 0,
+      fatShortfallG: 0,
+      proteinGoalG,
+      calorieGoalKcal,
+      carbohydrateGoalG,
+      fatGoalG,
+    };
   }
 
   const res = await apiFetch<{ items: MealRow[] }>('/meals?page=1&size=100', { token });
@@ -34,18 +53,26 @@ export async function fetchTodayShortfall(token: string): Promise<{
 
   let proteinSum = 0;
   let calorieSum = 0;
+  let carbohydrateSum = 0;
+  let fatSum = 0;
   for (const m of res.items ?? []) {
     const t = new Date(m.consumedAt).getTime();
     if (t >= todayStart.getTime() && t <= todayEnd.getTime()) {
       proteinSum += Number(m.protein ?? 0);
       calorieSum += Number(m.calories ?? 0);
+      carbohydrateSum += Number(m.carbohydrate ?? 0);
+      fatSum += Number(m.fat ?? 0);
     }
   }
 
   return {
     proteinShortfallG: Math.max(0, proteinThreshold - proteinSum),
     calorieShortfallKcal: Math.max(0, calorieThreshold - calorieSum),
+    carbohydrateShortfallG: Math.max(0, Number(carbohydrateThreshold ?? 0) - carbohydrateSum),
+    fatShortfallG: Math.max(0, Number(fatThreshold ?? 0) - fatSum),
     proteinGoalG,
     calorieGoalKcal,
+    carbohydrateGoalG,
+    fatGoalG,
   };
 }

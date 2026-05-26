@@ -142,6 +142,80 @@ components:
             protein: { type: number }
             fat: { type: number }
 
+    RecommendationPolicy:
+      type: object
+      required:
+        [ageBand, proteinPerKg, calorieMode, calorieDeltaKcal, carbohydrateRatio, fatRatio, carbohydrateMinG, fatMinPerKg]
+      properties:
+        ageBand: { type: string, enum: [teen, adult, older] }
+        proteinPerKg: { type: number }
+        calorieMode: { type: string, enum: [maintain, deficit, surplus, maintain_with_caution] }
+        calorieDeltaKcal: { type: number }
+        carbohydrateRatio: { type: number }
+        fatRatio: { type: number }
+        carbohydrateMinG: { type: number }
+        fatMinPerKg: { type: number }
+
+    ProfileResponse:
+      type: object
+      required: [gender, age, heightCm, weightKg, activityLevel, goal]
+      properties:
+        gender: { type: string, enum: [male, female, unspecified] }
+        age: { type: integer }
+        heightCm: { type: integer }
+        weightKg: { type: number }
+        activityLevel:
+          type: string
+          nullable: true
+          enum: [sedentary, light, moderate, active]
+        goal:
+          type: string
+          nullable: true
+          enum: [lose, maintain, gain]
+        proteinGoalG: { type: integer, nullable: true }
+        calorieGoalKcal: { type: integer, nullable: true }
+        carbohydrateGoalG: { type: integer, nullable: true }
+        fatGoalG: { type: integer, nullable: true }
+        proteinGoalMinG: { type: integer, nullable: true }
+        proteinGoalMaxG: { type: integer, nullable: true }
+        calorieGoalMinKcal: { type: integer, nullable: true }
+        calorieGoalMaxKcal: { type: integer, nullable: true }
+        carbohydrateGoalMinG: { type: integer, nullable: true }
+        carbohydrateGoalMaxG: { type: integer, nullable: true }
+        fatGoalMinG: { type: integer, nullable: true }
+        fatGoalMaxG: { type: integer, nullable: true }
+        recommendationVersion: { type: string }
+        policy: { $ref: '#/components/schemas/RecommendationPolicy' }
+        warnings:
+          type: array
+          items:
+            type: string
+            enum: [teen_caution, older_adult_caution, low_calorie_floor_applied, general_medical_caution]
+
+    RecommendationRecalculateResponse:
+      type: object
+      required: [proteinGoalG, calorieGoalKcal, carbohydrateGoalG, fatGoalG]
+      properties:
+        proteinGoalG: { type: integer }
+        calorieGoalKcal: { type: integer }
+        carbohydrateGoalG: { type: integer }
+        fatGoalG: { type: integer }
+        proteinGoalMinG: { type: integer, nullable: true }
+        proteinGoalMaxG: { type: integer, nullable: true }
+        calorieGoalMinKcal: { type: integer, nullable: true }
+        calorieGoalMaxKcal: { type: integer, nullable: true }
+        carbohydrateGoalMinG: { type: integer, nullable: true }
+        carbohydrateGoalMaxG: { type: integer, nullable: true }
+        fatGoalMinG: { type: integer, nullable: true }
+        fatGoalMaxG: { type: integer, nullable: true }
+        recommendationVersion: { type: string }
+        policy: { $ref: '#/components/schemas/RecommendationPolicy' }
+        warnings:
+          type: array
+          items:
+            type: string
+            enum: [teen_caution, older_adult_caution, low_calorie_floor_applied, general_medical_caution]
+
     Entitlements:
       type: object
       properties:
@@ -198,7 +272,11 @@ paths:
       tags: [Me]
       security: [{ BearerAuth: [] }]
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfileResponse' }
     put:
       tags: [Me]
       security: [{ BearerAuth: [] }]
@@ -211,7 +289,11 @@ paths:
       tags: [Me]
       security: [{ BearerAuth: [] }]
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecommendationRecalculateResponse' }
 
   /me/deactivate:
     patch:

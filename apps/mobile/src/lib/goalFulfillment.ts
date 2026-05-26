@@ -1,6 +1,6 @@
 import type { Goal, ProfileGetResponse } from '../api/profile';
 
-export type FulfillmentMetric = 'protein' | 'calorie';
+export type FulfillmentMetric = 'protein' | 'calorie' | 'carbohydrate' | 'fat';
 export type FulfillmentStatus = 'under' | 'met' | 'over' | 'none';
 
 export type GoalBounds = {
@@ -28,6 +28,12 @@ function proteinDirection(): Direction {
   return 'atLeast';
 }
 
+function metricDirection(metric: FulfillmentMetric, goal: Goal | null | undefined): Direction {
+  if (metric === 'protein') return proteinDirection();
+  if (metric === 'calorie') return calorieDirection(goal);
+  return 'band';
+}
+
 function rangeLabel(bounds: GoalBounds | undefined, goal: number | null, unit: string): string {
   if (bounds?.min != null && bounds?.max != null) {
     return `${bounds.min}–${bounds.max}${unit}`;
@@ -48,9 +54,9 @@ export function computeFulfillment(
     return { pct: 0, status: 'none', detailLabel: `${Math.round(current)}`, barPct: 0, tone: 'muted' };
   }
 
-  const unit = metric === 'protein' ? 'g' : ' kcal';
+  const unit = metric === 'calorie' ? ' kcal' : 'g';
   const goalText = rangeLabel(bounds, goal, unit);
-  const direction = metric === 'protein' ? proteinDirection() : calorieDirection(profile?.goal);
+  const direction = metricDirection(metric, profile?.goal);
   const barMax = bounds?.max ?? effectiveGoal;
   const rawPct = barMax > 0 ? Math.round((current / barMax) * 100) : 0;
 

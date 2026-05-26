@@ -1,4 +1,4 @@
-export type FulfillmentMetric = 'protein' | 'calorie';
+export type FulfillmentMetric = 'protein' | 'calorie' | 'carbohydrate' | 'fat';
 export type FulfillmentStatus = 'under' | 'met' | 'over' | 'none';
 
 export type GoalBounds = {
@@ -25,6 +25,13 @@ function proteinDirection(): 'atLeast' {
   return 'atLeast';
 }
 
+function macroDirection(metric: FulfillmentMetric, goal: string | null | undefined): 'atLeast' | 'atMost' | 'band' {
+  if (metric === 'protein') return proteinDirection();
+  if (metric === 'calorie') return calorieDirection(goal);
+  // 탄수/지방은 목표 유형 무관하게 권장 범위(band)로 판단한다.
+  return 'band';
+}
+
 export function computeFulfillment(
   metric: FulfillmentMetric,
   current: number,
@@ -37,7 +44,7 @@ export function computeFulfillment(
     return { pct: 0, status: 'none' };
   }
 
-  const direction = metric === 'protein' ? proteinDirection() : calorieDirection(profile?.goal);
+  const direction = macroDirection(metric, profile?.goal);
   const barMax = bounds?.max ?? effectiveGoal;
   const rawPct = barMax > 0 ? Math.round((current / barMax) * 100) : 0;
 

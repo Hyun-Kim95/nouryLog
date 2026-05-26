@@ -17,6 +17,8 @@ export type ProfileInput = {
   goal?: Goal | null;
   proteinGoalG?: number;
   calorieGoalKcal?: number;
+  carbohydrateGoalG?: number;
+  fatGoalG?: number;
 };
 
 export type AgeBand = 'teen' | 'adult' | 'older';
@@ -32,6 +34,10 @@ export type RecommendationPolicy = {
   proteinPerKg: number;
   calorieMode: CalorieMode;
   calorieDeltaKcal: number;
+  carbohydrateRatio: number;
+  fatRatio: number;
+  carbohydrateMinG: number;
+  fatMinPerKg: number;
 };
 
 export type RecommendationMeta = {
@@ -45,6 +51,10 @@ export type GoalRangeFields = {
   proteinGoalMaxG?: number;
   calorieGoalMinKcal?: number;
   calorieGoalMaxKcal?: number;
+  carbohydrateGoalMinG?: number;
+  carbohydrateGoalMaxG?: number;
+  fatGoalMinG?: number;
+  fatGoalMaxG?: number;
 };
 
 export type ProfileGetResponse = {
@@ -56,12 +66,16 @@ export type ProfileGetResponse = {
   goal: Goal | null;
   proteinGoalG?: number;
   calorieGoalKcal?: number;
+  carbohydrateGoalG?: number;
+  fatGoalG?: number;
 } & GoalRangeFields &
   RecommendationMeta;
 
 export type RecommendationResult = {
   proteinGoalG: number;
   calorieGoalKcal: number;
+  carbohydrateGoalG: number;
+  fatGoalG: number;
 } & GoalRangeFields &
   RecommendationMeta;
 
@@ -160,6 +174,8 @@ export async function saveProfile(
   if (input.goal !== undefined) body.goal = input.goal;
   if (input.proteinGoalG !== undefined) body.proteinGoalG = input.proteinGoalG;
   if (input.calorieGoalKcal !== undefined) body.calorieGoalKcal = input.calorieGoalKcal;
+  if (input.carbohydrateGoalG !== undefined) body.carbohydrateGoalG = input.carbohydrateGoalG;
+  if (input.fatGoalG !== undefined) body.fatGoalG = input.fatGoalG;
   return request<{ ok: true }>('/me/profile', { token, method: 'PUT', body });
 }
 

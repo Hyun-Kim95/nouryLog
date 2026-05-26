@@ -39,7 +39,11 @@ import { useToast } from '../toast/useToast';
 import {
   OVERRIDE_CALORIE_HINT_MAX,
   OVERRIDE_CALORIE_HINT_MIN,
+  OVERRIDE_CARB_HINT_MAX,
+  OVERRIDE_CARB_HINT_MIN,
   OVERRIDE_COPY,
+  OVERRIDE_FAT_HINT_MAX,
+  OVERRIDE_FAT_HINT_MIN,
   OVERRIDE_PROTEIN_HINT_MAX,
   OVERRIDE_PROTEIN_HINT_MIN,
   RECOMMENDATION_COPY,
@@ -114,10 +118,16 @@ export function ProfileEditScreen({ navigation }: Props) {
   const [recommendation, setRecommendation] = useState<{
     proteinGoalG?: number;
     calorieGoalKcal?: number;
+    carbohydrateGoalG?: number;
+    fatGoalG?: number;
     proteinGoalMinG?: number;
     proteinGoalMaxG?: number;
     calorieGoalMinKcal?: number;
     calorieGoalMaxKcal?: number;
+    carbohydrateGoalMinG?: number;
+    carbohydrateGoalMaxG?: number;
+    fatGoalMinG?: number;
+    fatGoalMaxG?: number;
     warnings?: WarningCode[];
     recommendationVersion?: string;
   }>({});
@@ -133,9 +143,13 @@ export function ProfileEditScreen({ navigation }: Props) {
   const [overrideEnabled, setOverrideEnabled] = useState(false);
   const [proteinOverrideStr, setProteinOverrideStr] = useState('');
   const [calorieOverrideStr, setCalorieOverrideStr] = useState('');
+  const [carbOverrideStr, setCarbOverrideStr] = useState('');
+  const [fatOverrideStr, setFatOverrideStr] = useState('');
   const [overrideErrors, setOverrideErrors] = useState<{
     protein?: string;
     calorie?: string;
+    carbohydrate?: string;
+    fat?: string;
   }>({});
 
   useEffect(() => {
@@ -161,10 +175,16 @@ export function ProfileEditScreen({ navigation }: Props) {
         setRecommendation({
           proteinGoalG: me.proteinGoalG,
           calorieGoalKcal: me.calorieGoalKcal,
+          carbohydrateGoalG: me.carbohydrateGoalG,
+          fatGoalG: me.fatGoalG,
           proteinGoalMinG: me.proteinGoalMinG,
           proteinGoalMaxG: me.proteinGoalMaxG,
           calorieGoalMinKcal: me.calorieGoalMinKcal,
           calorieGoalMaxKcal: me.calorieGoalMaxKcal,
+          carbohydrateGoalMinG: me.carbohydrateGoalMinG,
+          carbohydrateGoalMaxG: me.carbohydrateGoalMaxG,
+          fatGoalMinG: me.fatGoalMinG,
+          fatGoalMaxG: me.fatGoalMaxG,
           warnings: me.warnings,
           recommendationVersion: me.recommendationVersion,
         });
@@ -237,11 +257,20 @@ export function ProfileEditScreen({ navigation }: Props) {
       if (next) {
         const p = recommendation.proteinGoalG;
         const c = recommendation.calorieGoalKcal;
+        const carb = recommendation.carbohydrateGoalG;
+        const fat = recommendation.fatGoalG;
         setProteinOverrideStr(typeof p === 'number' ? String(p) : '');
         setCalorieOverrideStr(typeof c === 'number' ? String(c) : '');
+        setCarbOverrideStr(typeof carb === 'number' ? String(carb) : '');
+        setFatOverrideStr(typeof fat === 'number' ? String(fat) : '');
       }
     },
-    [recommendation.proteinGoalG, recommendation.calorieGoalKcal],
+    [
+      recommendation.proteinGoalG,
+      recommendation.calorieGoalKcal,
+      recommendation.carbohydrateGoalG,
+      recommendation.fatGoalG,
+    ],
   );
 
   const goBackWithGuard = useCallback(() => {
@@ -295,10 +324,10 @@ export function ProfileEditScreen({ navigation }: Props) {
 
   const validateOverride = useCallback((): {
     ok: boolean;
-    errors: { protein?: string; calorie?: string };
-    values?: { proteinGoalG: number; calorieGoalKcal: number };
+    errors: { protein?: string; calorie?: string; carbohydrate?: string; fat?: string };
+    values?: { proteinGoalG: number; calorieGoalKcal: number; carbohydrateGoalG: number; fatGoalG: number };
   } => {
-    const next: { protein?: string; calorie?: string } = {};
+    const next: { protein?: string; calorie?: string; carbohydrate?: string; fat?: string } = {};
     const p = parseInteger(proteinOverrideStr);
     if (p === null) next.protein = '단백질 목표는 정수만 입력해 주세요.';
     else if (p < OVERRIDE_PROTEIN_HINT_MIN || p > OVERRIDE_PROTEIN_HINT_MAX)
@@ -307,9 +336,26 @@ export function ProfileEditScreen({ navigation }: Props) {
     if (c === null) next.calorie = '칼로리 목표는 정수만 입력해 주세요.';
     else if (c < OVERRIDE_CALORIE_HINT_MIN || c > OVERRIDE_CALORIE_HINT_MAX)
       next.calorie = `칼로리 목표는 ${OVERRIDE_CALORIE_HINT_MIN}~${OVERRIDE_CALORIE_HINT_MAX} kcal 범위로 입력해 주세요.`;
+    const carb = parseInteger(carbOverrideStr);
+    if (carb === null) next.carbohydrate = '탄수화물 목표는 정수만 입력해 주세요.';
+    else if (carb < OVERRIDE_CARB_HINT_MIN || carb > OVERRIDE_CARB_HINT_MAX)
+      next.carbohydrate = `탄수화물 목표는 ${OVERRIDE_CARB_HINT_MIN}~${OVERRIDE_CARB_HINT_MAX} g 범위로 입력해 주세요.`;
+    const fat = parseInteger(fatOverrideStr);
+    if (fat === null) next.fat = '지방 목표는 정수만 입력해 주세요.';
+    else if (fat < OVERRIDE_FAT_HINT_MIN || fat > OVERRIDE_FAT_HINT_MAX)
+      next.fat = `지방 목표는 ${OVERRIDE_FAT_HINT_MIN}~${OVERRIDE_FAT_HINT_MAX} g 범위로 입력해 주세요.`;
     if (Object.keys(next).length > 0) return { ok: false, errors: next };
-    return { ok: true, errors: {}, values: { proteinGoalG: p as number, calorieGoalKcal: c as number } };
-  }, [proteinOverrideStr, calorieOverrideStr]);
+    return {
+      ok: true,
+      errors: {},
+      values: {
+        proteinGoalG: p as number,
+        calorieGoalKcal: c as number,
+        carbohydrateGoalG: carb as number,
+        fatGoalG: fat as number,
+      },
+    };
+  }, [proteinOverrideStr, calorieOverrideStr, carbOverrideStr, fatOverrideStr]);
 
   const onResetToAuto = useCallback(async () => {
     if (!token || busy) return;
@@ -319,10 +365,16 @@ export function ProfileEditScreen({ navigation }: Props) {
       setRecommendation({
         proteinGoalG: r.proteinGoalG,
         calorieGoalKcal: r.calorieGoalKcal,
+        carbohydrateGoalG: r.carbohydrateGoalG,
+        fatGoalG: r.fatGoalG,
         proteinGoalMinG: r.proteinGoalMinG,
         proteinGoalMaxG: r.proteinGoalMaxG,
         calorieGoalMinKcal: r.calorieGoalMinKcal,
         calorieGoalMaxKcal: r.calorieGoalMaxKcal,
+        carbohydrateGoalMinG: r.carbohydrateGoalMinG,
+        carbohydrateGoalMaxG: r.carbohydrateGoalMaxG,
+        fatGoalMinG: r.fatGoalMinG,
+        fatGoalMaxG: r.fatGoalMaxG,
         warnings: r.warnings,
         recommendationVersion: r.recommendationVersion,
       });
@@ -351,7 +403,14 @@ export function ProfileEditScreen({ navigation }: Props) {
     }
     setErrors({});
 
-    let overrideValues: { proteinGoalG: number; calorieGoalKcal: number } | null = null;
+    let overrideValues:
+      | {
+          proteinGoalG: number;
+          calorieGoalKcal: number;
+          carbohydrateGoalG: number;
+          fatGoalG: number;
+        }
+      | null = null;
     if (overrideEnabled) {
       const ov = validateOverride();
       if (!ov.ok || !ov.values) {
@@ -374,6 +433,8 @@ export function ProfileEditScreen({ navigation }: Props) {
       if (overrideValues) {
         diff.proteinGoalG = overrideValues.proteinGoalG;
         diff.calorieGoalKcal = overrideValues.calorieGoalKcal;
+        diff.carbohydrateGoalG = overrideValues.carbohydrateGoalG;
+        diff.fatGoalG = overrideValues.fatGoalG;
       }
       await saveProfile(token, diff, { __forceFail: dev.force5xx });
 
@@ -382,10 +443,16 @@ export function ProfileEditScreen({ navigation }: Props) {
         setRecommendation({
           proteinGoalG: me.proteinGoalG,
           calorieGoalKcal: me.calorieGoalKcal,
+          carbohydrateGoalG: me.carbohydrateGoalG,
+          fatGoalG: me.fatGoalG,
           proteinGoalMinG: me.proteinGoalMinG,
           proteinGoalMaxG: me.proteinGoalMaxG,
           calorieGoalMinKcal: me.calorieGoalMinKcal,
           calorieGoalMaxKcal: me.calorieGoalMaxKcal,
+          carbohydrateGoalMinG: me.carbohydrateGoalMinG,
+          carbohydrateGoalMaxG: me.carbohydrateGoalMaxG,
+          fatGoalMinG: me.fatGoalMinG,
+          fatGoalMaxG: me.fatGoalMaxG,
           warnings: me.warnings,
           recommendationVersion: me.recommendationVersion,
         });
@@ -396,10 +463,16 @@ export function ProfileEditScreen({ navigation }: Props) {
           setRecommendation({
             proteinGoalG: r.proteinGoalG,
             calorieGoalKcal: r.calorieGoalKcal,
+            carbohydrateGoalG: r.carbohydrateGoalG,
+            fatGoalG: r.fatGoalG,
             proteinGoalMinG: r.proteinGoalMinG,
             proteinGoalMaxG: r.proteinGoalMaxG,
             calorieGoalMinKcal: r.calorieGoalMinKcal,
             calorieGoalMaxKcal: r.calorieGoalMaxKcal,
+            carbohydrateGoalMinG: r.carbohydrateGoalMinG,
+            carbohydrateGoalMaxG: r.carbohydrateGoalMaxG,
+            fatGoalMinG: r.fatGoalMinG,
+            fatGoalMaxG: r.fatGoalMaxG,
             warnings: r.warnings,
             recommendationVersion: r.recommendationVersion,
           });
@@ -430,6 +503,10 @@ export function ProfileEditScreen({ navigation }: Props) {
             setOverrideErrors((prev) => ({ ...prev, protein: e.message }));
           } else if (e.field === 'calorieGoalKcal') {
             setOverrideErrors((prev) => ({ ...prev, calorie: e.message }));
+          } else if (e.field === 'carbohydrateGoalG') {
+            setOverrideErrors((prev) => ({ ...prev, carbohydrate: e.message }));
+          } else if (e.field === 'fatGoalG') {
+            setOverrideErrors((prev) => ({ ...prev, fat: e.message }));
           } else {
             const target = map[e.field];
             if (target) setErrors({ [target]: e.message });
@@ -588,6 +665,17 @@ export function ProfileEditScreen({ navigation }: Props) {
                     : (recommendation.calorieGoalKcal?.toLocaleString() ?? '—')}{' '}
                   kcal
                 </Text>
+                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
+                  탄수화물{' '}
+                  {recommendation.carbohydrateGoalMinG != null && recommendation.carbohydrateGoalMaxG != null
+                    ? `${recommendation.carbohydrateGoalMinG}–${recommendation.carbohydrateGoalMaxG}`
+                    : (recommendation.carbohydrateGoalG ?? '—')}{' '}
+                  g · 지방{' '}
+                  {recommendation.fatGoalMinG != null && recommendation.fatGoalMaxG != null
+                    ? `${recommendation.fatGoalMinG}–${recommendation.fatGoalMaxG}`
+                    : (recommendation.fatGoalG ?? '—')}{' '}
+                  g
+                </Text>
                 <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
                   저장 시 자동으로 다시 계산됩니다.
                 </Text>
@@ -672,6 +760,36 @@ export function ProfileEditScreen({ navigation }: Props) {
                       }}
                       helper={OVERRIDE_COPY.calorieHelper}
                       error={overrideErrors.calorie}
+                    />
+                    <Field
+                      label={OVERRIDE_COPY.carbLabel}
+                      suffix="g"
+                      placeholder="예: 280"
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      value={carbOverrideStr}
+                      onChangeText={(v) => {
+                        setCarbOverrideStr(v);
+                        if (overrideErrors.carbohydrate) {
+                          setOverrideErrors((p) => ({ ...p, carbohydrate: undefined }));
+                        }
+                      }}
+                      helper={OVERRIDE_COPY.carbHelper}
+                      error={overrideErrors.carbohydrate}
+                    />
+                    <Field
+                      label={OVERRIDE_COPY.fatLabel}
+                      suffix="g"
+                      placeholder="예: 70"
+                      keyboardType="number-pad"
+                      maxLength={3}
+                      value={fatOverrideStr}
+                      onChangeText={(v) => {
+                        setFatOverrideStr(v);
+                        if (overrideErrors.fat) setOverrideErrors((p) => ({ ...p, fat: undefined }));
+                      }}
+                      helper={OVERRIDE_COPY.fatHelper}
+                      error={overrideErrors.fat}
                     />
                     <Text
                       accessibilityRole="text"
