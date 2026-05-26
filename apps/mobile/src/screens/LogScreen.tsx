@@ -17,8 +17,8 @@ import {
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
-import { resolveImagePickerBase64 } from '../lib/imagePickerBase64';
-import { apiFetch, isAuthDenied } from '../api';
+import { prepareOcrImageBase64 } from '../lib/prepareOcrImage';
+import { apiFetch, ApiError, isAuthDenied } from '../api';
 import {
   createMeal,
   deactivateMeal,
@@ -517,7 +517,7 @@ export function LogScreen() {
           toast.show({ kind: 'info', message: LOG_COPY.ocrCameraCanceled });
           return;
         }
-        const base64 = await resolveImagePickerBase64(asset);
+        const base64 = await prepareOcrImageBase64(asset);
         if (!base64) throw new Error(LOG_COPY.ocrImageLoadFailed);
         await runOcrWithBase64(base64);
       } else {
@@ -536,13 +536,18 @@ export function LogScreen() {
           toast.show({ kind: 'info', message: LOG_COPY.ocrPickCanceled });
           return;
         }
-        const base64 = await resolveImagePickerBase64(asset);
+        const base64 = await prepareOcrImageBase64(asset);
         if (!base64) throw new Error(LOG_COPY.ocrImageLoadFailed);
         await runOcrWithBase64(base64);
       }
     } catch (e) {
       if (isAuthDenied(e)) return;
-      const msg = e instanceof Error ? e.message : '사진 분석에 실패했어요';
+      const msg =
+        e instanceof ApiError && e.status === 413
+          ? LOG_COPY.ocrImageTooLarge
+          : e instanceof Error
+            ? e.message
+            : '사진 분석에 실패했어요';
       if (msg.includes('무료') || msg.includes('한도') || msg.includes('OCR')) {
         setPaywallOpen(true);
       }

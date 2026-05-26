@@ -1,6 +1,6 @@
 import { API_BASE } from './config';
 import { refreshAccessToken, isRefreshPath, shouldRetryWithRefresh } from './authRefresh';
-import { ApiError, type ApiErrorBody } from './lib/apiError';
+import { ApiError, parseApiErrorBody } from './lib/apiError';
 import { handleAuthFailure } from './authSession';
 
 export { ApiError, isAuthDenied } from './lib/apiError';
@@ -49,16 +49,9 @@ export async function apiFetch<T>(
     clearTimeout(timer);
   }
   const text = await res.text();
-  let json: unknown = {};
-  if (text) {
-    try {
-      json = JSON.parse(text);
-    } catch {
-      json = { message: text };
-    }
-  }
+  const json = text ? parseApiErrorBody(res.status, text) : {};
   if (!res.ok) {
-    const err = new ApiError(res.status, (json ?? {}) as ApiErrorBody);
+    const err = new ApiError(res.status, json);
     const hadBearer = Boolean(token);
     if (
       !_authRetried &&

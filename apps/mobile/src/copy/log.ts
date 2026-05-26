@@ -14,6 +14,8 @@ export const LOG_COPY = {
   ocrPickCanceled: '이미지 선택이 취소되었습니다.',
   ocrCameraCanceled: '촬영이 취소되었습니다.',
   ocrImageLoadFailed: '이미지를 불러오지 못했어요. 다른 사진을 선택해 주세요.',
+  ocrImageTooLarge:
+    '이미지가 너무 커요. 다른 사진을 선택하거나 해상도를 낮춰 주세요.',
   ocrDoneToast: (remaining: number) =>
     `분석 완료 · 남은 무료 ${remaining}회 · 음식명을 입력한 뒤 저장해 주세요`,
   nameRequired: '음식명을 입력해 주세요.',

@@ -415,6 +415,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OcrResult' }
         '402': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '413': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
         '429': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
         '503': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
 
