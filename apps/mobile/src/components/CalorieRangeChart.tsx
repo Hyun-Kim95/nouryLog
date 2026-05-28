@@ -47,7 +47,7 @@ type Props = {
 const PANEL_TITLE_HEIGHT = 22;
 const PANEL_ROW_STRIDE = RANGE_PANEL_HEIGHT + PANEL_TITLE_HEIGHT;
 const MACRO_PANEL_COUNT = 4;
-const DIVIDER_LABEL_CLEARANCE = 3;
+const DIVIDER_TO_TITLE_GAP = 6;
 
 type MacroPanelKey = 'calorie' | 'protein' | 'carb' | 'fat';
 
@@ -192,10 +192,9 @@ function panelTitleTop(panelIndex: number): number {
 
 /** 패널 제목 행 바로 위 — 매크로 구간 구분선 */
 function panelSectionDividerTop(sectionIndex: number): number {
-  return panelTitleTop(sectionIndex) + PANEL_TITLE_HEIGHT + DIVIDER_LABEL_CLEARANCE;
+  if (sectionIndex <= 0) return 0;
+  return panelContentTop(sectionIndex - 1) + RANGE_PANEL_HEIGHT;
 }
-
-const FIRST_PANEL_TITLE_OUTSIDE = PANEL_TITLE_HEIGHT + 4;
 
 const COLUMN_BLOCK_HEIGHT =
   MACRO_PANEL_COUNT * RANGE_PANEL_HEIGHT + (MACRO_PANEL_COUNT - 1) * PANEL_TITLE_HEIGHT + RANGE_DAY_LABEL_HEIGHT;
@@ -324,7 +323,7 @@ export function CalorieRangeChart({
     colWidth > 0 ? Math.min(RANGE_BAR_WIDTH_MAX, Math.max(8, Math.floor(colWidth * 0.45))) : RANGE_BAR_WIDTH_MAX;
   const plotWidth = plotContentWidth > 0 ? plotContentWidth : colWidth * daily.length;
   const plotBlockHeight = COLUMN_BLOCK_HEIGHT;
-  const gutterMarginTop = RANGE_TOOLTIP_SLOT_HEIGHT + t.spacing.xs + FIRST_PANEL_TITLE_OUTSIDE;
+  const gutterMarginTop = RANGE_TOOLTIP_SLOT_HEIGHT + t.spacing.xs + PANEL_TITLE_HEIGHT;
 
   return (
     <View style={{ gap: t.spacing.sm }}>
@@ -341,7 +340,8 @@ export function CalorieRangeChart({
               color: t.colors.fgMuted,
               fontSize: t.fontSize.caption,
               fontWeight: '600',
-              marginBottom: 4,
+              height: PANEL_TITLE_HEIGHT,
+              lineHeight: PANEL_TITLE_HEIGHT,
             }}
           >
             {MACRO_PANEL_DEFS[0].title}
@@ -390,13 +390,13 @@ export function CalorieRangeChart({
                         pointerEvents="none"
                         style={{
                           position: 'absolute',
-                          top: panelTitleTop(panelIndex + 1),
+                          top: panelTitleTop(panelIndex + 1) + DIVIDER_TO_TITLE_GAP,
                           left: 0,
                           color: t.colors.fgMuted,
                           fontSize: t.fontSize.caption,
                           fontWeight: '600',
-                          height: PANEL_TITLE_HEIGHT,
-                          lineHeight: PANEL_TITLE_HEIGHT,
+                          height: PANEL_TITLE_HEIGHT - DIVIDER_TO_TITLE_GAP,
+                          lineHeight: PANEL_TITLE_HEIGHT - DIVIDER_TO_TITLE_GAP,
                         }}
                       >
                         {MACRO_PANEL_DEFS[panelIndex + 1].title}
