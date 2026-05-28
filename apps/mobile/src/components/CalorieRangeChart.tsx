@@ -47,6 +47,7 @@ type Props = {
 const PANEL_TITLE_HEIGHT = 22;
 const PANEL_ROW_STRIDE = RANGE_PANEL_HEIGHT + PANEL_TITLE_HEIGHT;
 const MACRO_PANEL_COUNT = 4;
+const DIVIDER_LABEL_CLEARANCE = 3;
 
 type MacroPanelKey = 'calorie' | 'protein' | 'carb' | 'fat';
 
@@ -189,6 +190,13 @@ function panelTitleTop(panelIndex: number): number {
   return RANGE_PANEL_HEIGHT + (panelIndex - 1) * PANEL_ROW_STRIDE;
 }
 
+/** 패널 제목 행 바로 위 — 매크로 구간 구분선 */
+function panelSectionDividerTop(sectionIndex: number): number {
+  return panelTitleTop(sectionIndex) + PANEL_TITLE_HEIGHT + DIVIDER_LABEL_CLEARANCE;
+}
+
+const FIRST_PANEL_TITLE_OUTSIDE = PANEL_TITLE_HEIGHT + 4;
+
 const COLUMN_BLOCK_HEIGHT =
   MACRO_PANEL_COUNT * RANGE_PANEL_HEIGHT + (MACRO_PANEL_COUNT - 1) * PANEL_TITLE_HEIGHT + RANGE_DAY_LABEL_HEIGHT;
 
@@ -309,11 +317,14 @@ export function CalorieRangeChart({
   };
 
   const colWidth = plotInnerWidth > 0 ? Math.floor(plotInnerWidth / daily.length) : 0;
+  const plotRemainder = plotInnerWidth > 0 && colWidth > 0 ? plotInnerWidth - colWidth * daily.length : 0;
+  const plotContentWidth =
+    colWidth > 0 ? colWidth * daily.length + plotRemainder : plotInnerWidth > 0 ? plotInnerWidth : 0;
   const barWidth =
     colWidth > 0 ? Math.min(RANGE_BAR_WIDTH_MAX, Math.max(8, Math.floor(colWidth * 0.45))) : RANGE_BAR_WIDTH_MAX;
-  const plotWidth = plotInnerWidth > 0 ? plotInnerWidth : colWidth * daily.length;
+  const plotWidth = plotContentWidth > 0 ? plotContentWidth : colWidth * daily.length;
   const plotBlockHeight = COLUMN_BLOCK_HEIGHT;
-  const gutterMarginTop = RANGE_TOOLTIP_SLOT_HEIGHT + t.spacing.xs + 18;
+  const gutterMarginTop = RANGE_TOOLTIP_SLOT_HEIGHT + t.spacing.xs + FIRST_PANEL_TITLE_OUTSIDE;
 
   return (
     <View style={{ gap: t.spacing.sm }}>
@@ -343,6 +354,19 @@ export function CalorieRangeChart({
                 const goals = panelGoals[panelIndex];
                 return (
                   <View key={def.key}>
+                    {panelIndex > 0 ? (
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: 'absolute',
+                          top: panelSectionDividerTop(panelIndex),
+                          left: 0,
+                          width: plotWidth || '100%',
+                          height: 1,
+                          backgroundColor: t.colors.border,
+                        }}
+                      />
+                    ) : null}
                     <View
                       pointerEvents="none"
                       style={{
@@ -390,8 +414,10 @@ export function CalorieRangeChart({
                 }}
               >
                 {colWidth > 0
-                  ? daily.map((p) => {
+                  ? daily.map((p, dayIndex) => {
                       const isSelected = p.date === selectedDate;
+                      const isLast = dayIndex === daily.length - 1;
+                      const columnWidth = isLast ? colWidth + plotRemainder : colWidth;
                       const values = MACRO_PANEL_DEFS.map((def) =>
                         Number(p.summary?.[def.summaryKey] ?? 0),
                       );
@@ -400,7 +426,7 @@ export function CalorieRangeChart({
                         <Pressable
                           key={p.date}
                           onPress={() => setSelectedDate((prev) => (prev === p.date ? null : p.date))}
-                          style={{ width: colWidth, height: COLUMN_BLOCK_HEIGHT }}
+                          style={{ width: columnWidth, height: COLUMN_BLOCK_HEIGHT }}
                           accessibilityRole="button"
                           accessibilityLabel={STATS_COPY.macroBarA11y(
                             dayOfMonth(p.date) || 0,
@@ -493,9 +519,23 @@ export function CalorieRangeChart({
             position: 'relative',
           }}
         >
+          {[1, 2, 3].map((panelIndex) => (
+            <View
+              key={`gutter-divider-${panelIndex}`}
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: panelSectionDividerTop(panelIndex),
+                left: 0,
+                right: 0,
+                height: 1,
+                backgroundColor: t.colors.border,
+              }}
+            />
+          ))}
           {MACRO_PANEL_DEFS.map((def, panelIndex) => (
             <PanelGutterLabels
-              key={def.key}
+              key={`gutter-label-${def.key}`}
               goals={panelGoals[panelIndex]}
               unit={def.gutterUnit}
               color={def.gutterColor(t.colors)}

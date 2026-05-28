@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Diet Management API
-  version: v1.4.0
+  version: v1.5.0
   description: >
     스냅샷 계약 (SSOT 본문: docs/requirements/feature-diet-management-api-contract-v1.md).
     구현체는 본 파일과 문서를 함께 유지한다.
@@ -78,6 +78,43 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/FoodTemplatePublic' }
+
+    MealEntrySuggestionMeal:
+      type: object
+      required: [mealId, name, calories, protein, carbohydrate, fat]
+      properties:
+        mealId: { type: string }
+        name: { type: string }
+        calories: { type: number }
+        protein: { type: number }
+        carbohydrate: { type: number }
+        fat: { type: number }
+        foodTemplateId: { type: string, nullable: true }
+        mealInputMode: { $ref: '#/components/schemas/MealInputMode', nullable: true }
+        portionQuantity: { type: number, nullable: true }
+        consumedAt: { type: string, format: date-time, nullable: true }
+
+    MealEntrySuggestionItem:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [template, past_meal]
+        template:
+          $ref: '#/components/schemas/FoodTemplatePublic'
+          nullable: true
+        meal:
+          $ref: '#/components/schemas/MealEntrySuggestionMeal'
+          nullable: true
+
+    MealEntrySuggestionsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MealEntrySuggestionItem' }
 
     MealInput:
       type: object
@@ -319,6 +356,34 @@ paths:
         '200': { description: OK }
         '403': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
         '422': { content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /me/meal-entry-suggestions:
+    get:
+      tags: [Meals]
+      summary: 기록 추가 음식명 자동완성(템플릿 + 과거 식사)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string, minLength: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 15, default: 8 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MealEntrySuggestionsResponse' }
+        '403':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /me/food-templates:
     get:

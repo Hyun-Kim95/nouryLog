@@ -16,7 +16,6 @@ import {
   defaultTplAmount,
   hydrateFromMeal,
   previewTemplateKcal,
-  unitHint,
   type MealEditFormState,
 } from '../lib/mealEntryForm';
 import {
@@ -171,34 +170,37 @@ export function MealEditModal({ visible, meal, onClose, onSaved }: Props) {
                     <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                       기준 분량: {baselineSummary(form.selectedTpl)} (영양 기준 {form.selectedTpl.servingGrams}g) ·
                       기준당 약 {form.selectedTpl.calories} kcal
+                      {form.mealInputMode === 'PORTION_COUNT'
+                        ? ' · 분량은 목록에서 − / + 로 조절해요'
+                        : ''}
                     </Text>
-                    <Segmented<TemplateInputMode>
-                      options={[
-                        { value: 'PORTION_COUNT', label: '분량 수' },
-                        { value: 'TOTAL_GRAMS', label: '총 g' },
-                      ]}
-                      value={form.mealInputMode}
-                      onChange={(mode) => {
-                        patch({
-                          mealInputMode: mode,
-                          tplAmount: defaultTplAmount(form.selectedTpl!, mode),
-                        });
-                      }}
-                    />
-                    <LabeledField
-                      label={
-                        form.mealInputMode === 'PORTION_COUNT'
-                          ? `분량 (${unitHint(form.selectedTpl)})`
-                          : '총 중량 (g)'
-                      }
-                      value={form.tplAmount}
-                      onChangeText={(tplAmount) => patch({ tplAmount })}
-                      keyboardType="decimal-pad"
-                    />
-                    {previewKcal != null ? (
-                      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                        예상 칼로리 약 {previewKcal} kcal
-                      </Text>
+                    {form.mealInputMode === 'TOTAL_GRAMS' ? (
+                      <>
+                        <Segmented<TemplateInputMode>
+                          options={[
+                            { value: 'PORTION_COUNT', label: '분량 수' },
+                            { value: 'TOTAL_GRAMS', label: '총 g' },
+                          ]}
+                          value={form.mealInputMode}
+                          onChange={(mode) => {
+                            patch({
+                              mealInputMode: mode,
+                              tplAmount: defaultTplAmount(form.selectedTpl!, mode),
+                            });
+                          }}
+                        />
+                        <LabeledField
+                          label="총 중량 (g)"
+                          value={form.tplAmount}
+                          onChangeText={(tplAmount) => patch({ tplAmount })}
+                          keyboardType="decimal-pad"
+                        />
+                        {previewKcal != null ? (
+                          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                            예상 칼로리 약 {previewKcal} kcal
+                          </Text>
+                        ) : null}
+                      </>
                     ) : null}
                   </View>
                 ) : (
@@ -212,13 +214,6 @@ export function MealEditModal({ visible, meal, onClose, onSaved }: Props) {
                     <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                       {LOG_COPY.manualPerServingHint}
                     </Text>
-                    <LabeledField
-                      label={LOG_COPY.manualPortionLabel}
-                      value={form.manualPortion}
-                      onChangeText={(manualPortion) => patch({ manualPortion })}
-                      keyboardType="decimal-pad"
-                      placeholder="1"
-                    />
                     <LabeledField
                       label={LOG_COPY.calories}
                       value={form.calories}

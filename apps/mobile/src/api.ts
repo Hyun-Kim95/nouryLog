@@ -3,13 +3,20 @@ import { refreshAccessToken, isRefreshPath, shouldRetryWithRefresh } from './aut
 import { ApiError, parseApiErrorBody } from './lib/apiError';
 import { handleAuthFailure } from './authSession';
 
-export { ApiError, isAuthDenied } from './lib/apiError';
+export { ApiError, isAuthDenied, isRequestAborted } from './lib/apiError';
 
 const DEFAULT_API_TIMEOUT_MS = 20_000;
 
+export type ApiFetchAuthFailure = 'signOut' | 'silent';
+
 export async function apiFetch<T>(
   path: string,
-  init: RequestInit & { token?: string; timeoutMs?: number; _authRetried?: boolean } = {},
+  init: RequestInit & {
+    token?: string;
+    timeoutMs?: number;
+    _authRetried?: boolean;
+    onAuthFailure?: ApiFetchAuthFailure;
+  } = {},
 ): Promise<T> {
   const {
     token,
@@ -17,6 +24,7 @@ export async function apiFetch<T>(
     timeoutMs = DEFAULT_API_TIMEOUT_MS,
     signal: externalSignal,
     _authRetried = false,
+    onAuthFailure = 'signOut',
     ...rest
   } = init;
   const controller = new AbortController();
@@ -39,6 +47,9 @@ export async function apiFetch<T>(
     });
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
+      if (externalSignal?.aborted) {
+        throw e;
+      }
       throw new ApiError(408, {
         code: 'TIMEOUT',
         message: '서버 응답이 지연되고 있어요. 네트워크를 확인한 뒤 다시 시도해 주세요.',
@@ -63,7 +74,7 @@ export async function apiFetch<T>(
         return apiFetch<T>(path, { ...init, token: newToken, _authRetried: true });
       }
     }
-    if (hadBearer) handleAuthFailure(err);
+    if (hadBearer && onAuthFailure === 'signOut') handleAuthFailure(err);
     throw err;
   }
   return json as T;

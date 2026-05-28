@@ -31,6 +31,8 @@ import {
 import { ensureAccessToken } from '../authSession';
 import { getAccessToken } from '../authStorage';
 import { LabeledField } from '../components/LabeledField';
+import { canAdjustPortionInList, MealPortionStepper } from '../components/MealPortionStepper';
+import { PortionQuantityModal } from '../components/PortionQuantityModal';
 import { RadioGroup } from '../components/RadioGroup';
 import { Segmented } from '../components/Segmented';
 import {
@@ -50,18 +52,19 @@ import { LOG_COPY } from '../copy/log';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { formatMacroLine } from '../lib/formatNutrition';
 import { formatTplAmount as formatPortionAmount } from '../lib/mealEntryForm';
+import { adjustMealPortionOnServer, portionUnitLabel } from '../lib/adjustMealPortion';
 import {
+  effectivePortionQty,
   parsePortionInput,
   roundPerServingForForm,
   scaleManualNutritionForSave,
 } from '../lib/manualPortion';
 import { parseManualNutrition } from '../lib/manualNutrition';
+import { formatKstDayTitle, kstNoonIsoFromYmd, localDayBounds } from '../lib/dateRange';
 import {
-  formatKstDayTitle,
-  kstNoonIsoFromYmd,
-  localDayBounds,
-  localDayStartExclusiveUpperBound,
-} from '../lib/dateRange';
+  mealEntrySuggestionsErrorMessage,
+  useMealEntrySuggestions,
+} from '../hooks/useMealEntrySuggestions';
 import { groupMealsForTodayTimeline, mealRowSubtitle } from '../lib/mealTimeline';
 import {
   defaultMealSlotForNow,
@@ -128,53 +131,6 @@ function tplAmountFromMeal(m: MealRow, tpl: FoodTemplateItem): string {
   return defaultTplAmount(tpl, mode);
 }
 
-const PAST_PAGE_SIZE = 10;
-const NAME_SUGGEST_LIMIT = 8;
-
-type NameSuggestion =
-  | { kind: 'template'; tpl: FoodTemplateItem }
-  | { kind: 'meal'; meal: MealRow };
-
-function buildNameSuggestions(
-  q: string,
-  templates: FoodTemplateItem[],
-  ...mealGroups: MealRow[][]
-): NameSuggestion[] {
-  const needle = q.trim().toLowerCase();
-  if (needle.length < 1) return [];
-  const seen = new Set<string>();
-  const out: NameSuggestion[] = [];
-
-  for (const tpl of templates) {
-    const key = tpl.name.trim().toLowerCase();
-    if (!key.includes(needle) || seen.has(key)) continue;
-    seen.add(key);
-    out.push({ kind: 'template', tpl });
-    if (out.length >= NAME_SUGGEST_LIMIT) return out;
-  }
-
-  for (const m of mealSuggestionPool(...mealGroups)) {
-    const key = m.name.trim().toLowerCase();
-    if (!key.includes(needle) || seen.has(key)) continue;
-    seen.add(key);
-    out.push({ kind: 'meal', meal: m });
-    if (out.length >= NAME_SUGGEST_LIMIT) return out;
-  }
-  return out;
-}
-
-function mealSuggestionPool(...groups: MealRow[][]): MealRow[] {
-  const byName = new Map<string, MealRow>();
-  for (const group of groups) {
-    for (const m of group) {
-      const key = m.name.trim().toLowerCase();
-      if (!key || byName.has(key)) continue;
-      byName.set(key, m);
-    }
-  }
-  return [...byName.values()];
-}
-
 const EMPTY_FORM = {
   name: '',
   calories: '',
@@ -195,7 +151,6 @@ export function LogScreen() {
   const route = useRoute<LogRoute>();
   const targetYmd = route.params?.targetYmd;
   const [items, setItems] = useState<MealRow[]>([]);
-  const [pastMeals, setPastMeals] = useState<MealRow[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   const entrySectionY = useRef(0);
   const [recentMeals, setRecentMeals] = useState<MealRow[]>([]);
@@ -221,6 +176,9 @@ export function LogScreen() {
   const [mealInputMode, setMealInputMode] = useState<TemplateInputMode>('PORTION_COUNT');
   const [tplAmount, setTplAmount] = useState('1');
   const [editingMealId, setEditingMealId] = useState<string | null>(null);
+  const [portionBusyMealId, setPortionBusyMealId] = useState<string | null>(null);
+  const [portionInputMeal, setPortionInputMeal] = useState<MealRow | null>(null);
+  const [portionInputValue, setPortionInputValue] = useState('');
   const [nameFocused, setNameFocused] = useState(false);
 
   const scrollToEntrySection = useCallback(() => {
@@ -304,15 +262,11 @@ export function LogScreen() {
     if (!token) return;
     try {
       const { from, to } = localDayBounds();
-      const pastTo = localDayStartExclusiveUpperBound();
-      const [todayRes, pastRes, recent] = await Promise.all([
+      const [todayRes, recent] = await Promise.all([
         listMeals(token, { page: 1, size: 100, from, to }),
-        listMeals(token, { page: 1, size: PAST_PAGE_SIZE, to: pastTo }),
         listMeals(token, { page: 1, size: 30, excludeFoodTemplate: true }),
       ]);
       setItems(todayRes.items ?? []);
-      const pastItems = pastRes.items ?? [];
-      setPastMeals(pastItems);
       const seen = new Set<string>();
       const deduped: MealRow[] = [];
       for (const m of recent.items ?? []) {
@@ -326,7 +280,6 @@ export function LogScreen() {
     } catch (e) {
       if (isAuthDenied(e)) return;
       setItems([]);
-      setPastMeals([]);
       setRecentMeals([]);
     }
   }, []);
@@ -362,6 +315,14 @@ export function LogScreen() {
 
   const buildTemplateBody = (): Record<string, unknown> => {
     if (!selectedTpl) throw new Error('음식 템플릿을 선택해 주세요.');
+    if (!editingMealId) {
+      return {
+        ...mealBodyBase(),
+        foodTemplateId: selectedTpl.id,
+        mealInputMode: 'PORTION_COUNT',
+        portionQuantity: 1,
+      };
+    }
     const amt = Number(String(tplAmount).replace(',', '.'));
     if (!Number.isFinite(amt) || amt <= 0) throw new Error('수량을 올바르게 입력해 주세요.');
     const body: Record<string, unknown> = {
@@ -396,7 +357,7 @@ export function LogScreen() {
       } else {
         const perServing = parseManualNutrition({ calories, protein, carbohydrate, fat });
         if (!name.trim()) throw new Error(LOG_COPY.nameRequired);
-        const portion = parsePortionInput(manualPortion);
+        const portion = editingMealId ? parsePortionInput(manualPortion) : 1;
         const nutrition = scaleManualNutritionForSave(perServing, portion);
         const body = {
           ...mealBodyBase(),
@@ -591,14 +552,55 @@ export function LogScreen() {
     scheduleScrollToEntry();
   };
 
+  const adjustMealPortion = async (item: MealRow, nextQty: number) => {
+    setPortionBusyMealId(item.mealId);
+    try {
+      const token = await ensureAccessToken();
+      if (!token) throw new Error('로그인 필요');
+      await adjustMealPortionOnServer(token, item, nextQty);
+      await load();
+    } catch (e) {
+      if (isAuthDenied(e)) return;
+      toast.show({
+        kind: 'error',
+        message: e instanceof Error ? e.message : LOG_COPY.portionAdjustError,
+      });
+      await load();
+    } finally {
+      setPortionBusyMealId(null);
+    }
+  };
+
+  const openPortionInput = (item: MealRow) => {
+    setPortionInputMeal(item);
+    setPortionInputValue(String(effectivePortionQty(item.portionQuantity)));
+  };
+
+  const closePortionInput = () => {
+    if (portionBusyMealId) return;
+    setPortionInputMeal(null);
+    setPortionInputValue('');
+  };
+
+  const submitPortionInput = async () => {
+    if (!portionInputMeal) return;
+    const nextQty = Number(String(portionInputValue).replace(',', '.'));
+    if (!Number.isFinite(nextQty) || nextQty < 0.25 || nextQty > 50) {
+      toast.show({ kind: 'error', message: '분량은 0.25~50 범위에서 입력해 주세요.' });
+      return;
+    }
+    await adjustMealPortion(portionInputMeal, Math.round(nextQty * 100) / 100);
+    setPortionInputMeal(null);
+    setPortionInputValue('');
+  };
+
   const applyRecentMeal = (m: MealRow) => {
     if (m.foodTemplateId) {
       const tpl = templates.find((x) => x.id === m.foodTemplateId);
       if (tpl) {
         setSelectedTpl(tpl);
-        const mode = m.mealInputMode === 'TOTAL_GRAMS' ? 'TOTAL_GRAMS' : 'PORTION_COUNT';
-        setMealInputMode(mode);
-        setTplAmount(tplAmountFromMeal(m, tpl));
+        setMealInputMode('PORTION_COUNT');
+        setTplAmount('1');
         setName('');
         setCalories('');
         setProtein('');
@@ -669,7 +671,7 @@ export function LogScreen() {
   };
 
   const previewKcal =
-    selectedTpl && Number.isFinite(Number(tplAmount))
+    editingMealId && selectedTpl && Number.isFinite(Number(tplAmount))
       ? (() => {
           const amt = Number(String(tplAmount).replace(',', '.'));
           if (!Number.isFinite(amt) || amt <= 0 || !(selectedTpl.servingGrams > 0)) return null;
@@ -690,12 +692,35 @@ export function LogScreen() {
     );
   }, [editingMealId, selectedTpl, name, calories, protein, carbohydrate, fat]);
 
-  const nameSuggestions = useMemo(() => {
-    if (!nameFocused || selectedTpl) return [];
-    const q = name.trim();
-    if (q.length < 1) return [];
-    return buildNameSuggestions(q, templates, recentMeals, pastMeals, items);
-  }, [nameFocused, selectedTpl, name, templates, recentMeals, pastMeals, items]);
+  const nameSuggestEnabled = nameFocused && !selectedTpl && name.trim().length >= 1;
+  const { items: nameSuggestions, status: nameSuggestStatus, errorKind: nameSuggestErrorKind } =
+    useMealEntrySuggestions(name, nameSuggestEnabled);
+  const fallbackNameSuggestions = useMemo(() => {
+    const needle = name.trim().toLowerCase();
+    if (!needle) return [] as Array<{ kind: 'template'; template: FoodTemplateItem } | { kind: 'past_meal'; meal: MealRow }>;
+    const picked: Array<{ kind: 'template'; template: FoodTemplateItem } | { kind: 'past_meal'; meal: MealRow }> = [];
+    const seen = new Set<string>();
+    for (const tpl of templates) {
+      const n = tpl.name.trim();
+      if (!n.toLowerCase().includes(needle)) continue;
+      const key = n.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      picked.push({ kind: 'template', template: tpl });
+      if (picked.length >= 8) return picked;
+    }
+    for (const meal of recentMeals) {
+      const n = meal.name.trim();
+      if (!n.toLowerCase().includes(needle)) continue;
+      const key = n.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      picked.push({ kind: 'past_meal', meal });
+      if (picked.length >= 8) return picked;
+    }
+    return picked;
+  }, [name, templates, recentMeals]);
+  const displayNameSuggestions = nameSuggestions.length > 0 ? nameSuggestions : fallbackNameSuggestions;
 
   const macroFields = (
     <View style={{ gap: t.spacing.sm }}>
@@ -713,7 +738,7 @@ export function LogScreen() {
             setTimeout(() => setNameFocused(false), 200);
           }}
         />
-        {nameFocused && name.trim().length >= 1 && !selectedTpl ? (
+        {nameSuggestEnabled ? (
           <View
             style={{
               borderWidth: 1,
@@ -723,17 +748,28 @@ export function LogScreen() {
               overflow: 'hidden',
             }}
           >
-            {nameSuggestions.length === 0 ? (
+            {nameSuggestStatus === 'loading' ? (
+              <View style={{ padding: t.spacing.md, flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm }}>
+                <ActivityIndicator color={t.colors.primary} size="small" />
+                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                  {LOG_COPY.nameSuggestLoading}
+                </Text>
+              </View>
+            ) : nameSuggestStatus === 'error' ? (
+              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, padding: t.spacing.md }}>
+                {mealEntrySuggestionsErrorMessage(nameSuggestErrorKind)}
+              </Text>
+            ) : displayNameSuggestions.length === 0 ? (
               <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, padding: t.spacing.md }}>
                 {LOG_COPY.nameSuggestEmpty}
               </Text>
             ) : (
-              nameSuggestions.map((s, idx) => (
+              displayNameSuggestions.map((s, idx) => (
                 <Pressable
-                  key={s.kind === 'template' ? `tpl-${s.tpl.id}` : s.meal.mealId}
+                  key={s.kind === 'template' ? `tpl-${s.template.id}` : s.meal.mealId}
                   onPress={() => {
                     if (s.kind === 'template') {
-                      selectTemplate(s.tpl);
+                      selectTemplate(s.template);
                     } else {
                       applyRecentMeal(s.meal);
                     }
@@ -746,7 +782,7 @@ export function LogScreen() {
                   }}
                 >
                   <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
-                    {s.kind === 'template' ? s.tpl.name : s.meal.name}
+                    {s.kind === 'template' ? s.template.name : s.meal.name}
                     {s.kind === 'template' ? (
                       <Text style={{ color: t.colors.fgMuted, fontWeight: '400' }}>
                         {' '}
@@ -757,7 +793,7 @@ export function LogScreen() {
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                     {s.kind === 'template' ? (
                       <>
-                        {baselineSummary(s.tpl)} · {Math.round(s.tpl.calories)} kcal/1인분
+                        {baselineSummary(s.template)} · {Math.round(s.template.calories)} kcal/1인분
                       </>
                     ) : (
                       <>
@@ -780,14 +816,16 @@ export function LogScreen() {
       <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
         {LOG_COPY.manualPerServingHint}
       </Text>
-      <LabeledField
-        label={LOG_COPY.manualPortionLabel}
-        value={manualPortion}
-        onChangeText={setManualPortion}
-        keyboardType="decimal-pad"
-        placeholder="1"
-        onFocus={focusEntryField}
-      />
+      {editingMealId ? (
+        <LabeledField
+          label={LOG_COPY.manualPortionLabel}
+          value={manualPortion}
+          onChangeText={setManualPortion}
+          keyboardType="decimal-pad"
+          placeholder="1"
+          onFocus={focusEntryField}
+        />
+      ) : null}
       <LabeledField
         label="칼로리 (kcal)"
         value={calories}
@@ -1012,27 +1050,32 @@ export function LogScreen() {
               <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                 기준 분량: {baselineSummary(selectedTpl)} (영양 기준 {selectedTpl.servingGrams}g) · 기준당 약{' '}
                 {selectedTpl.calories} kcal
+                {!editingMealId ? ' · 저장 후 목록에서 분량 조절' : ''}
               </Text>
-              <Segmented<TemplateInputMode>
-                options={[
-                  { value: 'PORTION_COUNT', label: '분량 수' },
-                  { value: 'TOTAL_GRAMS', label: '총 g' },
-                ]}
-                value={mealInputMode}
-                onChange={handleMealInputModeChange}
-              />
-              <LabeledField
-                label={mealInputMode === 'PORTION_COUNT' ? `분량 (${unitHint(selectedTpl)})` : '총 중량 (g)'}
-                value={tplAmount}
-                onChangeText={setTplAmount}
-                keyboardType="decimal-pad"
-                placeholder={mealInputMode === 'PORTION_COUNT' ? `몇 ${unitHint(selectedTpl)}?` : '총 몇 g?'}
-                onFocus={focusEntryField}
-              />
-              {previewKcal != null ? (
-                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                  예상 칼로리 약 {previewKcal} kcal
-                </Text>
+              {editingMealId ? (
+                <>
+                  <Segmented<TemplateInputMode>
+                    options={[
+                      { value: 'PORTION_COUNT', label: '분량 수' },
+                      { value: 'TOTAL_GRAMS', label: '총 g' },
+                    ]}
+                    value={mealInputMode}
+                    onChange={handleMealInputModeChange}
+                  />
+                  <LabeledField
+                    label={mealInputMode === 'PORTION_COUNT' ? `분량 (${unitHint(selectedTpl)})` : '총 중량 (g)'}
+                    value={tplAmount}
+                    onChangeText={setTplAmount}
+                    keyboardType="decimal-pad"
+                    placeholder={mealInputMode === 'PORTION_COUNT' ? `몇 ${unitHint(selectedTpl)}?` : '총 몇 g?'}
+                    onFocus={focusEntryField}
+                  />
+                  {previewKcal != null ? (
+                    <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                      예상 칼로리 약 {previewKcal} kcal
+                    </Text>
+                  ) : null}
+                </>
               ) : null}
             </View>
           ) : (
@@ -1067,6 +1110,17 @@ export function LogScreen() {
             <>
               <Card>
                 <CardTitle>{LOG_COPY.todayTitle}</CardTitle>
+                {hasToday ? (
+                  <Text
+                    style={{
+                      color: t.colors.fgMuted,
+                      fontSize: t.fontSize.caption,
+                      marginBottom: t.spacing.sm,
+                    }}
+                  >
+                    {LOG_COPY.todayPortionHint}
+                  </Text>
+                ) : null}
                 {!hasToday ? (
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{LOG_COPY.todayEmpty}</Text>
                 ) : (
@@ -1083,24 +1137,49 @@ export function LogScreen() {
                         >
                           {section.title} · {section.summaryKcal} kcal
                         </Text>
-                        {section.items.map((item) => (
-                          <Pressable
-                            key={item.mealId}
-                            onPress={() => startEditMeal(item)}
-                            style={{
-                              paddingVertical: t.spacing.sm,
-                              borderBottomWidth: 1,
-                              borderBottomColor: t.colors.border,
-                            }}
-                          >
-                            <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
-                              {mealRowSubtitle(item)}
-                            </Text>
-                            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                              {item.calories} kcal · {formatMacroLine(item)}
-                            </Text>
-                          </Pressable>
-                        ))}
+                        {section.items.map((item) => {
+                          const showStepper = canAdjustPortionInList(item);
+                          const tpl = item.foodTemplateId
+                            ? templates.find((x) => x.id === item.foodTemplateId)
+                            : undefined;
+                          const unitLabel = portionUnitLabel(item, templates);
+                          return (
+                            <View
+                              key={item.mealId}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: t.spacing.sm,
+                                paddingVertical: t.spacing.sm,
+                                borderBottomWidth: 1,
+                                borderBottomColor: t.colors.border,
+                              }}
+                            >
+                              <Pressable
+                                onPress={() => startEditMeal(item)}
+                                style={{ flex: 1, minWidth: 0 }}
+                                accessibilityRole="button"
+                              >
+                                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
+                                  {mealRowSubtitle(item)}
+                                </Text>
+                                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                                  {item.calories} kcal · {formatMacroLine(item)}
+                                </Text>
+                              </Pressable>
+                              {showStepper ? (
+                                <MealPortionStepper
+                                  quantity={effectivePortionQty(item.portionQuantity)}
+                                  unitLabel={unitLabel}
+                                  busy={portionBusyMealId === item.mealId}
+                                  disabled={portionBusyMealId != null && portionBusyMealId !== item.mealId}
+                                  onChange={(nextQty) => void adjustMealPortion(item, nextQty)}
+                                  onPressCurrent={() => openPortionInput(item)}
+                                />
+                              ) : null}
+                            </View>
+                          );
+                        })}
                       </View>
                     ),
                   )
@@ -1121,6 +1200,15 @@ export function LogScreen() {
         onSubscribe={isPlayBillingEnabled ? () => void checkout() : undefined}
         onDismiss={() => setPaywallOpen(false)}
         busy={checkoutBusy}
+      />
+      <PortionQuantityModal
+        visible={portionInputMeal != null}
+        value={portionInputValue}
+        unitLabel={portionInputMeal ? portionUnitLabel(portionInputMeal, templates) : undefined}
+        busy={portionBusyMealId != null}
+        onChangeValue={setPortionInputValue}
+        onConfirm={() => void submitPortionInput()}
+        onClose={closePortionInput}
       />
     </>
   );

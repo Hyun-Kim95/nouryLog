@@ -35,4 +35,6 @@ version: 1.5-delta
 
 ## Meals
 
-변경 없음. `PUT /meals/{mealId}`, `PATCH /meals/{mealId}/deactivate` — v1.4 그대로.
+`GET /me/meal-entry-suggestions?q=&limit=` — 기록 추가 음식명 자동완성(활성 템플릿 + 사용자 활성 식사, 이름 contains, 템플릿 우선·이름 중복 제거). OpenAPI `v1.5.0`.
+
+`PUT /meals/{mealId}`, `PATCH /meals/{mealId}/deactivate` — v1.4 그대로.

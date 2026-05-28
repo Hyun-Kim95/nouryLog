@@ -85,3 +85,20 @@ export async function updateMeal(token: string, mealId: string, body: Record<str
 export async function deactivateMeal(token: string, mealId: string): Promise<void> {
   await apiFetch(`/meals/${mealId}/deactivate`, { method: 'PATCH', token });
 }
+
+export type MealEntrySuggestionItem =
+  | { kind: 'template'; template: FoodTemplateItem }
+  | { kind: 'past_meal'; meal: MealRow };
+
+export async function fetchMealEntrySuggestions(
+  token: string,
+  params: { q: string; limit?: number; signal?: AbortSignal },
+): Promise<{ items: MealEntrySuggestionItem[] }> {
+  const search = new URLSearchParams();
+  search.set('q', params.q.trim());
+  search.set('limit', String(params.limit ?? 8));
+  return apiFetch<{ items: MealEntrySuggestionItem[] }>(
+    `/me/meal-entry-suggestions?${search}`,
+    { token, signal: params.signal, onAuthFailure: 'silent' },
+  );
+}

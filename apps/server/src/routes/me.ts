@@ -1,7 +1,6 @@
 import { Router, type Response } from 'express';
 import { MealInputMode, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { resolvedReferenceAmount } from '../lib/foodTemplateReference.js';
 import { computeScaledNutritionFromGrams } from '../lib/mealFromTemplate.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
@@ -51,6 +50,11 @@ import {
 import { validateUserWithdrawalReason } from '../lib/deactivationReason.js';
 import type { MealSlot, SnackPlacement } from '@prisma/client';
 import { softDeactivateFields } from '../lib/retention.js';
+import {
+  buildMealEntrySuggestions,
+  mapFoodTemplatePublic,
+  parseMealEntrySuggestionsLimit,
+} from '../services/mealEntrySuggestions.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
@@ -888,6 +892,25 @@ meRouter.get('/me/reference-weight', async (req, res) => {
   );
 });
 
+meRouter.get('/me/meal-entry-suggestions', async (req, res) => {
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 조회할 수 있습니다.');
+    return;
+  }
+  const q = String(req.query.q ?? '').trim();
+  if (q.length < 1) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '검색어가 필요합니다.', { field: 'q' });
+    return;
+  }
+  const limit = parseMealEntrySuggestionsLimit(req.query.limit);
+  const items = await buildMealEntrySuggestions({
+    userId: req.auth!.userId,
+    q,
+    limit,
+  });
+  res.json({ items });
+});
+
 meRouter.get('/me/food-templates', async (req, res) => {
   if (req.auth!.role !== 'USER') {
     sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 조회할 수 있습니다.');
@@ -922,20 +945,7 @@ meRouter.get('/me/food-templates', async (req, res) => {
     page,
     size,
     total,
-    items: rows.map((f) => ({
-      id: f.id,
-      name: f.name,
-      memo: f.memo,
-      category: f.category,
-      portionUnit: f.portionUnit,
-      portionLabel: f.portionLabel,
-      referenceAmount: resolvedReferenceAmount(f as { referenceAmount?: number | null; portionUnit: string; servingGrams: number | null }),
-      servingGrams: f.servingGrams!,
-      calories: f.calories!,
-      protein: f.protein!,
-      fat: f.fat!,
-      carbohydrate: f.carbohydrate!,
-    })),
+    items: rows.map((f) => mapFoodTemplatePublic(f)),
   });
 });
 

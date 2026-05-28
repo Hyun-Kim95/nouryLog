@@ -50,6 +50,12 @@ export class ApiError extends Error {
   }
 }
 
+export function isRequestAborted(err: unknown): boolean {
+  if (err instanceof Error && err.name === 'AbortError') return true;
+  if (err instanceof ApiError && err.code === 'ABORTED') return true;
+  return false;
+}
+
 export function isAuthDenied(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const status = 'status' in err ? Number((err as { status: unknown }).status) : NaN;

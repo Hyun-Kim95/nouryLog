@@ -276,6 +276,61 @@ export interface paths {
         };
         trace?: never;
     };
+    "/me/meal-entry-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 기록 추가 음식명 자동완성(템플릿 + 과거 식사) */
+        get: {
+            parameters: {
+                query: {
+                    q: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MealEntrySuggestionsResponse"];
+                    };
+                };
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/food-templates": {
         parameters: {
             query?: never;
@@ -490,6 +545,14 @@ export interface paths {
                     };
                 };
                 402: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                413: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1299,6 +1362,28 @@ export interface components {
             size: number;
             total: number;
             items: components["schemas"]["FoodTemplatePublic"][];
+        };
+        MealEntrySuggestionMeal: {
+            mealId: string;
+            name: string;
+            calories: number;
+            protein: number;
+            carbohydrate: number;
+            fat: number;
+            foodTemplateId?: string | null;
+            mealInputMode?: components["schemas"]["MealInputMode"];
+            portionQuantity?: number | null;
+            /** Format: date-time */
+            consumedAt?: string | null;
+        };
+        MealEntrySuggestionItem: {
+            /** @enum {string} */
+            kind: "template" | "past_meal";
+            template?: components["schemas"]["FoodTemplatePublic"];
+            meal?: components["schemas"]["MealEntrySuggestionMeal"];
+        };
+        MealEntrySuggestionsResponse: {
+            items: components["schemas"]["MealEntrySuggestionItem"][];
         };
         MealInput: {
             name?: string;
