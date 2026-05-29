@@ -18,6 +18,7 @@
     "@react-navigation/native-stack": "^7.14.12",
     "entities": "2.2.0",
     "expo": "~54.0.33",
+    "expo-application": "~7.0.8",
     "expo-crypto": "~15.0.9",
     "expo-dev-client": "~6.0.12",
     "expo-file-system": "~19.0.22",

@@ -1,4 +1,9 @@
-import { google } from 'googleapis';
+import {
+  createAndroidPublisher,
+  getPlayPackageName,
+  getPlayServiceAccountJson,
+  isPlayServiceAccountConfigured,
+} from './playAndroidPublisher.js';
 
 export type PlaySubscriptionVerification = {
   productId: string;
@@ -14,46 +19,21 @@ export type PlayBillingConfig = {
   serviceAccountJson: string;
 };
 
-function loadServiceAccountJson(raw: string): object {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    throw new Error('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is empty');
-  }
-  try {
-    if (trimmed.startsWith('{')) {
-      return JSON.parse(trimmed) as object;
-    }
-    const decoded = Buffer.from(trimmed, 'base64').toString('utf8');
-    return JSON.parse(decoded) as object;
-  } catch {
-    throw new Error('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON must be JSON or base64-encoded JSON');
-  }
-}
-
 export function getPlayBillingConfig(): PlayBillingConfig | null {
-  const packageName = process.env.GOOGLE_PLAY_PACKAGE_NAME?.trim() || 'com.nourylog.app';
+  const serviceAccountJson = getPlayServiceAccountJson();
+  if (!serviceAccountJson) return null;
+  const packageName = getPlayPackageName();
   const subscriptionId =
     process.env.GOOGLE_PLAY_SUBSCRIPTION_ID?.trim() || 'premium_monthly';
-  const serviceAccountJson = process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON?.trim() ?? '';
-  if (!serviceAccountJson) return null;
   return { packageName, subscriptionId, serviceAccountJson };
 }
 
 export function isPlayBillingConfigured(): boolean {
-  return getPlayBillingConfig() !== null;
+  return isPlayServiceAccountConfigured();
 }
 
 export function isPlayBillingSkipVerify(): boolean {
   return process.env.BILLING_SKIP_VERIFY === '1';
-}
-
-function createAndroidPublisher(config: PlayBillingConfig) {
-  const credentials = loadServiceAccountJson(config.serviceAccountJson);
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/androidpublisher'],
-  });
-  return google.androidpublisher({ version: 'v3', auth });
 }
 
 /** Google Play 구독이 활성(미만료·결제 유효)인지 판단 */
@@ -76,7 +56,7 @@ export async function verifyPlaySubscription(
     throw new Error('PRODUCT_ID_MISMATCH');
   }
 
-  const androidPublisher = createAndroidPublisher(config);
+  const androidPublisher = createAndroidPublisher(config.serviceAccountJson);
   const { data } = await androidPublisher.purchases.subscriptions.get({
     packageName: config.packageName,
     subscriptionId: productId,
@@ -102,7 +82,7 @@ export async function acknowledgePlaySubscription(
   const config = getPlayBillingConfig();
   if (!config) return;
 
-  const androidPublisher = createAndroidPublisher(config);
+  const androidPublisher = createAndroidPublisher(config.serviceAccountJson);
   await androidPublisher.purchases.subscriptions.acknowledge({
     packageName: config.packageName,
     subscriptionId: productId,

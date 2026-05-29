@@ -13,6 +13,7 @@ import {
 } from '../lib/socialAuth.js';
 import { publishedNoticeWhere } from '../lib/noticePublish.js';
 import { renderPolicyHtmlPage } from '../lib/policyHtml.js';
+import { parseAppVersionPlatform, resolveAndroidAppVersionConfig } from '../lib/appVersion.js';
 
 export const publicRouter = Router();
 
@@ -540,4 +541,24 @@ publicRouter.get('/public/policies/:kind', async (req, res) => {
     publishedAt: doc.publishedAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   });
+});
+
+publicRouter.get('/public/app/version', async (req, res) => {
+  const platform = parseAppVersionPlatform(req.query.platform);
+  if (!platform) {
+    sendError(res, 400, ErrorCodes.VALIDATION_FAILED, 'platform=android 이 필요합니다.', {
+      field: 'platform',
+    });
+    return;
+  }
+
+  const config = await resolveAndroidAppVersionConfig();
+  if (!config.ok) {
+    sendError(res, 503, ErrorCodes.DEPENDENCY_UNAVAILABLE, '앱 버전 정보를 사용할 수 없습니다.', {
+      reason: config.reason,
+    });
+    return;
+  }
+
+  res.json(config.payload);
 });
