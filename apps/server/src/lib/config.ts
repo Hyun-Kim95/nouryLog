@@ -15,3 +15,9 @@ export const APP_ANDROID_STORE_URL = readEnv(
 export const OCR_PROVIDER = readEnv('OCR_PROVIDER', 'google_vision');
 export const OCR_API_KEY = readEnv('OCR_API_KEY');
 export const OCR_API_URL = readEnv('OCR_API_URL', 'https://vision.googleapis.com/v1/images:annotate');
+
+/** 하단 배너 광고 노출(전역). 기본값 false = 모든 사용자에게 미노출 */
+export function isBottomBannerAdsEnabled(): boolean {
+  const v = readEnv('ADS_BOTTOM_BANNER_ENABLED').toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}

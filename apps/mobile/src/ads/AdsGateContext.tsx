@@ -36,7 +36,7 @@ export function AdsGateProvider({ children }: { children: ReactNode }) {
         setShowBottomBanner(false);
         return;
       }
-      setShowBottomBanner(true);
+      setShowBottomBanner(false);
     }
   }, []);
 

@@ -38,4 +38,7 @@ yarn-error.*
 
 # generated native folders
 /ios
-/android
+/android/*
+# 로컬 Gradle bundleRelease(모노레포 Metro 루트) 설정만 버전 관리
+!/android/app/
+!/android/app/build.gradle

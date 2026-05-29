@@ -1,5 +1,6 @@
 import { Router, type Response } from 'express';
 import { MealInputMode, type Prisma } from '@prisma/client';
+import { isBottomBannerAdsEnabled } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
 import { computeScaledNutritionFromGrams } from '../lib/mealFromTemplate.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -1854,6 +1855,10 @@ meRouter.get('/me/ads/status', async (req, res) => {
   }
   const b = await prisma.billing.findUnique({ where: { userId } });
   const adFree = b?.adFreeEnabled ?? false;
+  if (!isBottomBannerAdsEnabled()) {
+    res.json({ showBottomBanner: false, reason: 'ads_globally_disabled' });
+    return;
+  }
   res.json({
     showBottomBanner: !adFree,
     reason: adFree ? 'ad_free_purchased' : 'default_free',
