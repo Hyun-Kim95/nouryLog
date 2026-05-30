@@ -33,6 +33,7 @@ import {
   parseUserIdFromAccessToken,
   setOnboardingDone,
 } from '../authStorage';
+import { AnalyticsEvents, track } from '../analytics';
 import { useDevToggles } from '../dev/devToggles';
 import { useToast } from '../toast/useToast';
 import { fetchReferenceWeight, type ReferenceWeightResponse } from '../api/referenceWeight';
@@ -238,6 +239,7 @@ export function OnboardingScreen({ navigation }: Props) {
       }
       const userId = token ? parseUserIdFromAccessToken(token) : null;
       await setOnboardingDone(true, userId ?? undefined);
+      track(AnalyticsEvents.onboardingCompleted, { skipped: false });
       setTimeout(() => goMain(), 600);
     } catch (e) {
       if (e instanceof ProfileApiError) {
@@ -278,6 +280,7 @@ export function OnboardingScreen({ navigation }: Props) {
 
   const onSkip = useCallback(() => {
     if (busy) return;
+    track(AnalyticsEvents.onboardingCompleted, { skipped: true });
     goMain();
   }, [busy, goMain]);
 

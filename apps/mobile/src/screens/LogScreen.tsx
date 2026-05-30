@@ -88,6 +88,8 @@ type LogNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 import { useTheme } from '../theme';
+import { AnalyticsEvents, track } from '../analytics';
+import type { OcrSource, PaywallTriggerAnalytics } from '../analytics';
 import { useToast } from '../toast/useToast';
 
 type Ent = {
@@ -100,6 +102,30 @@ type Ent = {
 type LastOcrMeta = {
   confidence: number;
 };
+
+type OcrFieldSnapshot = {
+  calories: string;
+  protein: string;
+  carbohydrate: string;
+  fat: string;
+};
+
+function ocrFieldsEdited(snapshot: OcrFieldSnapshot, current: OcrFieldSnapshot): boolean {
+  return (
+    snapshot.calories !== current.calories ||
+    snapshot.protein !== current.protein ||
+    snapshot.carbohydrate !== current.carbohydrate ||
+    snapshot.fat !== current.fat
+  );
+}
+
+function openPaywall(
+  setPaywallOpen: (open: boolean) => void,
+  trigger: PaywallTriggerAnalytics,
+): void {
+  setPaywallOpen(true);
+  track(AnalyticsEvents.paywallShown, { trigger });
+}
 
 function unitHint(tpl: FoodTemplateItem): string {
   if (tpl.portionUnit === 'GRAM') return 'g';
@@ -175,6 +201,7 @@ export function LogScreen() {
   const [ocrBusy, setOcrBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [lastOcrMeta, setLastOcrMeta] = useState<LastOcrMeta | null>(null);
+  const [lastOcrSnapshot, setLastOcrSnapshot] = useState<OcrFieldSnapshot | null>(null);
 
   const [templates, setTemplates] = useState<FoodTemplateItem[]>([]);
   const [tplLoading, setTplLoading] = useState(false);
@@ -223,6 +250,7 @@ export function LogScreen() {
     setFat('');
     setManualPortion('1');
     setLastOcrMeta(null);
+    setLastOcrSnapshot(null);
   }, []);
 
   const resetForm = useCallback(() => {
@@ -240,6 +268,7 @@ export function LogScreen() {
     setMealInputMode('PORTION_COUNT');
     setTplAmount('1');
     setLastOcrMeta(null);
+    setLastOcrSnapshot(null);
   }, []);
 
   const loadEntitlements = useCallback(async () => {
@@ -365,6 +394,11 @@ export function LogScreen() {
           await updateMeal(token, editingMealId, body);
         } else {
           await createMeal(token, body);
+          track(AnalyticsEvents.mealRecorded, {
+            input_mode: 'template',
+            meal_slot: mealSlot.toLowerCase(),
+            from_ocr: false,
+          });
         }
       } else {
         const perServing = parseManualNutrition({ calories, protein, carbohydrate, fat });
@@ -381,6 +415,18 @@ export function LogScreen() {
           await updateMeal(token, editingMealId, body);
         } else {
           await createMeal(token, body);
+          const fromOcr = lastOcrSnapshot != null;
+          const currentFields: OcrFieldSnapshot = { calories, protein, carbohydrate, fat };
+          const editedBeforeSave = fromOcr && ocrFieldsEdited(lastOcrSnapshot, currentFields);
+          if (fromOcr) {
+            track(AnalyticsEvents.ocrCompleted, { edited_before_save: editedBeforeSave });
+          }
+          track(AnalyticsEvents.mealRecorded, {
+            input_mode: fromOcr ? 'ocr' : 'manual',
+            meal_slot: mealSlot.toLowerCase(),
+            from_ocr: fromOcr,
+          });
+          setLastOcrSnapshot(null);
         }
       }
 
@@ -453,6 +499,12 @@ export function LogScreen() {
       body: JSON.stringify({ imageBase64 }),
     });
     setLastOcrMeta({ confidence: res.confidence });
+    setLastOcrSnapshot({
+      calories: String(Math.round(res.calories)),
+      protein: String(Math.round(res.protein)),
+      carbohydrate: String(Math.round(res.carbohydrate)),
+      fat: String(Math.round(res.fat)),
+    });
     setSelectedTpl(null);
     setEditingMealId(null);
     setName('');
@@ -468,12 +520,13 @@ export function LogScreen() {
     scheduleScrollToEntry();
   };
 
-  const pickImage = async (source: 'camera' | 'library') => {
+  const pickImage = async (source: OcrSource) => {
     if (ent?.nextPaywallTrigger === 'ocr_exhausted' && !ent.ocrPaidEnabled) {
-      setPaywallOpen(true);
+      openPaywall(setPaywallOpen, 'ocr_exhausted');
       return;
     }
     setOcrBusy(true);
+    track(AnalyticsEvents.ocrStarted, { source });
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('로그인 필요');
@@ -529,7 +582,7 @@ export function LogScreen() {
         e instanceof ApiError &&
         (e.code === 'OCR_FREE_QUOTA_EXCEEDED' || e.code === 'PAYMENT_REQUIRED')
       ) {
-        setPaywallOpen(true);
+        openPaywall(setPaywallOpen, 'ocr_quota_exceeded');
       }
       toast.show({ kind: 'error', message: msg });
     } finally {

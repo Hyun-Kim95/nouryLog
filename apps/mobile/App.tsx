@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Linking } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, type NavigationState } from '@react-navigation/native';
 import { navigationRef } from './src/authSession';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator, type InitialRoute } from './src/navigation';
 import { refreshAccessToken } from './src/authRefresh';
-import { clearTokens, getAccessToken } from './src/authStorage';
+import { clearTokens, getAccessToken, parseUserIdFromAccessToken } from './src/authStorage';
 import { flushPendingLoginRedirect } from './src/authSession';
 import { BootstrapLoading } from './src/components/BootstrapLoading';
 import { UpdateModal } from './src/components/UpdateModal';
@@ -20,14 +20,24 @@ import { useToast } from './src/toast/useToast';
 import { setAppUpdateDismissedVersion } from './src/userPrefs';
 import { ensureMobileAdsInitialized } from './src/ads/initMobileAds';
 import { setupNotifications } from './src/notifications/setup';
+import { AnalyticsEvents, identifyAnalyticsUser, initAnalytics, track, trackScreen } from './src/analytics';
+import { getActiveRouteName } from './src/analytics/navigationState';
 
 function AppRoot({ initialRoute }: { initialRoute: InitialRoute }) {
   const toast = useToast();
   const [updateState, setUpdateState] = useState<AppUpdateState>({ kind: 'none' });
+  const lastScreenRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     void resolveAppUpdateState().then(setUpdateState);
   }, []);
+
+  const onNavigationStateChange = (state: NavigationState | undefined) => {
+    const name = getActiveRouteName(state);
+    if (!name || name === lastScreenRef.current) return;
+    lastScreenRef.current = name;
+    trackScreen(name);
+  };
 
   const showUpdateModal = updateState.kind === 'required' || updateState.kind === 'optional';
 
@@ -59,7 +69,11 @@ function AppRoot({ initialRoute }: { initialRoute: InitialRoute }) {
 
   return (
     <>
-      <NavigationContainer ref={navigationRef} onReady={flushPendingLoginRedirect}>
+      <NavigationContainer
+        ref={navigationRef}
+        onReady={flushPendingLoginRedirect}
+        onStateChange={onNavigationStateChange}
+      >
         <RootNavigator initialRoute={initialRoute} />
       </NavigationContainer>
       <UpdateModal
@@ -76,6 +90,7 @@ function AppRoot({ initialRoute }: { initialRoute: InitialRoute }) {
 export default function App() {
   const [ready, setReady] = useState(false);
   const [initialRoute, setInitialRoute] = useState<InitialRoute>('Login');
+  const appOpenedTracked = useRef(false);
 
   useEffect(() => {
     void setupNotifications();
@@ -101,6 +116,8 @@ export default function App() {
             await clearTokens();
             setInitialRoute('Login');
           } else {
+            const userId = parseUserIdFromAccessToken(token);
+            if (userId) identifyAnalyticsUser(userId);
             const done = await resolveOnboardingComplete(token);
             const nextToken = await getAccessToken();
             if (!nextToken) {
@@ -115,9 +132,16 @@ export default function App() {
         setInitialRoute('Login');
       } finally {
         setReady(true);
+        initAnalytics();
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!ready || appOpenedTracked.current) return;
+    appOpenedTracked.current = true;
+    track(AnalyticsEvents.appOpened, { initial_route: initialRoute });
+  }, [ready, initialRoute]);
 
   return (
     <SafeAreaProvider>

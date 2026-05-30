@@ -22,6 +22,7 @@ import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 import type { RootStackParamList } from '../navigation';
+import { AnalyticsEvents, track } from '../analytics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -58,7 +59,7 @@ export function LoginScreen({ navigation }: Props) {
     }, []),
   );
 
-  const goAfterLogin = async (accessToken: string) => {
+  const goAfterLogin = async (accessToken: string, provider?: SocialProvider) => {
     let done = false;
     try {
       const userId = parseUserIdFromAccessToken(accessToken);
@@ -69,6 +70,11 @@ export function LoginScreen({ navigation }: Props) {
       }
     } catch (e) {
       if (__DEV__) console.warn('[Login] onboarding resolve failed', e);
+    }
+    if (provider) {
+      track(AnalyticsEvents.loginCompleted, { provider: provider.toLowerCase() });
+    } else {
+      track(AnalyticsEvents.loginCompleted, { provider: 'social' });
     }
     navigation.reset({ index: 0, routes: [{ name: done ? 'Main' : 'Onboarding' }] });
   };
@@ -86,7 +92,7 @@ export function LoginScreen({ navigation }: Props) {
   const completeTokenLogin = async (
     accessToken: string,
     refreshToken: string,
-    options?: { requiresConsent?: boolean; source?: string },
+    options?: { requiresConsent?: boolean; source?: string; provider?: SocialProvider },
   ) => {
     if (options?.requiresConsent) {
       setPendingSocial({ accessToken, refreshToken, source: options.source ?? 'social-signup' });
@@ -94,7 +100,7 @@ export function LoginScreen({ navigation }: Props) {
       return;
     }
     await saveTokens(accessToken, refreshToken);
-    await goAfterLogin(accessToken);
+    await goAfterLogin(accessToken, options?.provider);
   };
 
   const onSocialLogin = async (provider: SocialProvider) => {
@@ -133,6 +139,7 @@ export function LoginScreen({ navigation }: Props) {
         await completeTokenLogin(response.accessToken, response.refreshToken, {
           requiresConsent: response.requiresConsent === true,
           source: `social-signup:${provider}`,
+          provider,
         });
         return;
       }
@@ -197,7 +204,12 @@ export function LoginScreen({ navigation }: Props) {
       });
       await saveTokens(pendingSocial.accessToken, pendingSocial.refreshToken);
       toast.show({ kind: 'success', message: '약관 동의를 저장했어요.' });
-      await goAfterLogin(pendingSocial.accessToken);
+      const providerMatch = pendingSocial.source.match(/social-signup:(\w+)/i);
+      const provider = providerMatch?.[1]?.toLowerCase() as SocialProvider | undefined;
+      await goAfterLogin(
+        pendingSocial.accessToken,
+        provider && ['naver', 'google', 'kakao'].includes(provider) ? provider : undefined,
+      );
     } catch (e) {
       logAppError('[Login] consent', e);
       const msg = toUserMessage(e, { context: 'login', fallback: '동의 저장에 실패했어요.' });

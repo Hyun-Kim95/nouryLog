@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StatsCalendarModal } from '../components/StatsCalendarModal';
 import { Text } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Segmented } from '../components/Segmented';
 import { StatsPeriodNavigator } from '../components/StatsPeriodNavigator';
@@ -14,6 +14,7 @@ import { fetchStats, type StatsResponse } from '../api/stats';
 import { isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
 import { useFocusReload } from '../hooks/useFocusReload';
+import { AnalyticsEvents, track } from '../analytics';
 import { mealSlotLabel, type MealSlot } from '../lib/mealSlot';
 import { periodOffsetForKstDate, shiftAnchor, todayAnchorKst, type StatsRange } from '../lib/statsPeriod';
 import { fetchTodayGoals } from '../lib/todayNutrition';
@@ -63,6 +64,12 @@ export function StatsScreen() {
   );
 
   useFocusReload(load);
+
+  useFocusEffect(
+    useCallback(() => {
+      track(AnalyticsEvents.statsViewed, { period: range });
+    }, [range]),
+  );
 
   useEffect(() => {
     void load({ silent: periodOffset !== 0 });

@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { identifyAnalyticsUser, resetAnalyticsUser } from './analytics';
 
 const ACCESS = 'dm_access_token';
 const REFRESH = 'dm_refresh_token';
@@ -69,7 +70,10 @@ export async function saveTokens(access: string, refresh: string) {
   await SecureStore.setItemAsync(ACCESS, access);
   await SecureStore.setItemAsync(REFRESH, refresh);
   const userId = parseUserIdFromAccessToken(access);
-  if (userId) await rememberUserId(userId);
+  if (userId) {
+    await rememberUserId(userId);
+    identifyAnalyticsUser(userId);
+  }
 }
 
 export async function getAccessToken() {
@@ -85,6 +89,7 @@ export async function clearTokens() {
   }
   await SecureStore.deleteItemAsync(CURRENT_USER);
   await SecureStore.deleteItemAsync(ONBOARDING_DONE_LEGACY);
+  void resetAnalyticsUser();
 }
 
 export async function getOnboardingDone(userId?: string): Promise<boolean> {
