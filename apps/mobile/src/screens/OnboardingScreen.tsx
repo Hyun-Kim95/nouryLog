@@ -38,6 +38,7 @@ import { useToast } from '../toast/useToast';
 import { fetchReferenceWeight, type ReferenceWeightResponse } from '../api/referenceWeight';
 import { ReferenceWeightCard } from '../components/ReferenceWeightCard';
 import { RECOMMENDATION_COPY } from '../copy/recommendation';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import type { RootStackParamList } from '../navigation';
 
 type Props = CompositeScreenProps<
@@ -160,7 +161,8 @@ export function OnboardingScreen({ navigation }: Props) {
           setRefData(data);
         } catch (e) {
           setRefData(null);
-          setRefError(e instanceof Error ? e.message : '참고 체중을 불러오지 못했어요.');
+          logAppError('[Onboarding] referenceWeight', e);
+          setRefError(toUserMessage(e, { context: 'profile', fallback: '참고 체중을 불러오지 못했어요.' }));
         } finally {
           setRefLoading(false);
         }
@@ -259,11 +261,13 @@ export function OnboardingScreen({ navigation }: Props) {
           setBanner(e.message);
           toast.show({ kind: 'error', message: e.message });
         } else {
-          setBanner(e.message);
-          toast.show({ kind: 'error', message: e.message });
+          const msg = toUserMessage(e, { context: 'profile' });
+          setBanner(msg);
+          toast.show({ kind: 'error', message: msg });
         }
       } else {
-        const msg = '네트워크 오류로 저장하지 못했어요. 다시 시도해 주세요.';
+        logAppError('[Onboarding] save', e);
+        const msg = toUserMessage(e, { context: 'profile', fallback: '네트워크 오류로 저장하지 못했어요. 다시 시도해 주세요.' });
         setBanner(msg);
         toast.show({ kind: 'error', message: msg });
       }

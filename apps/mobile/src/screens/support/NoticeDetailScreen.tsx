@@ -5,6 +5,7 @@ import { fetchNotice, type NoticeDetail } from '../../api/notices';
 import { Banner, Card, CardTitle } from '../../components/ui';
 import { useTheme } from '../../theme';
 import type { RootStackParamList } from '../../navigation';
+import { logAppError, toUserMessage } from '../../lib/userFacingError';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NoticeDetail'>;
 
@@ -24,7 +25,10 @@ export function NoticeDetailScreen({ route }: Props) {
         const data = await fetchNotice(id);
         if (!cancelled) setNotice(data);
       } catch (e) {
-        if (!cancelled) setErr(e instanceof Error ? e.message : '공지를 불러오지 못했어요.');
+        logAppError('[NoticeDetail] load', e);
+        if (!cancelled) {
+          setErr(toUserMessage(e, { context: 'support', fallback: '공지를 불러오지 못했어요.' }));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

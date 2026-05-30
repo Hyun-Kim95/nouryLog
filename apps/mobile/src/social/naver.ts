@@ -1,4 +1,6 @@
 import NaverLogin from '@react-native-seoul/naver-login';
+import { ERRORS_COPY } from '../copy/errors';
+import { logAppError } from '../lib/userFacingError';
 import type { SocialAdapter, SocialLoginResult } from './types';
 
 const NAVER_APP_NAME = process.env.EXPO_PUBLIC_NAVER_APP_NAME ?? 'nouryLog';
@@ -48,12 +50,14 @@ async function login(): Promise<SocialLoginResult> {
     if (result.failureResponse?.isCancel) {
       return { kind: 'cancelled' };
     }
+    logAppError('[social-naver]', result.failureResponse ?? result);
     return {
       kind: 'error',
-      message: result.failureResponse?.message ?? '네이버 로그인에 실패했습니다.',
+      message: ERRORS_COPY.login,
     };
   } catch (e) {
-    return { kind: 'error', message: e instanceof Error ? e.message : '네이버 로그인에 실패했습니다.' };
+    logAppError('[social-naver]', e);
+    return { kind: 'error', message: ERRORS_COPY.login };
   }
 }
 

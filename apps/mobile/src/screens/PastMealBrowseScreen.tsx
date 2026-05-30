@@ -12,6 +12,7 @@ import { MealEditModal } from '../components/MealEditModal';
 import { PrimaryButton, ScreenLayout } from '../components/ui';
 import type { RootStackParamList } from '../navigation';
 import { LOG_COPY } from '../copy/log';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { formatKstDayTitle, kstMonthBoundsFromYm, mealDatesKstFromRows, ymFromYmd } from '../lib/dateRange';
 import { fetchAllMealsInRange } from '../lib/fetchMealsInRange';
 import { todayAnchorKst } from '../lib/statsPeriod';
@@ -80,7 +81,11 @@ export function PastMealBrowseScreen() {
       bumpReload();
     } catch (e) {
       if (isAuthDenied(e)) return;
-      toast.show({ kind: 'error', message: e instanceof Error ? e.message : '삭제 실패' });
+      logAppError('[PastMealBrowse] delete', e);
+      toast.show({
+        kind: 'error',
+        message: toUserMessage(e, { context: 'meal', fallback: '삭제에 실패했어요.' }),
+      });
     }
   };
 

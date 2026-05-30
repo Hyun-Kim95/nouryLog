@@ -5,6 +5,7 @@ import { ensureAccessToken } from '../authSession';
 import { postWeightEntry } from '../api/weightEntries';
 import { fetchReferenceWeight, type ReferenceWeightResponse } from '../api/referenceWeight';
 import { WEIGHT_COPY } from '../copy/weight';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { useWeightCheckIn } from '../hooks/useWeightCheckIn';
 import { WeightCheckInModal } from './WeightCheckInModal';
@@ -61,14 +62,16 @@ export function StatsWeightSection() {
       const [list, ref] = await Promise.all([
         listWeightEntries(token, { size: 100, from: from.toISOString() }),
         fetchReferenceWeight(token).catch((e) => {
-          setRefErr(e instanceof Error ? e.message : WEIGHT_COPY.referenceLoadError);
+          logAppError('[StatsWeight] reference', e);
+          setRefErr(toUserMessage(e, { context: 'stats', fallback: WEIGHT_COPY.referenceLoadError }));
           return null;
         }),
       ]);
       setEntries(latestEntryPerDay(list.items));
       setReference(ref);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : WEIGHT_COPY.historyLoadError);
+      logAppError('[StatsWeight] history', e);
+      setErr(toUserMessage(e, { context: 'stats', fallback: WEIGHT_COPY.historyLoadError }));
     } finally {
       if (!silent) setLoading(false);
     }

@@ -3,6 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-nat
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Markdown from 'react-native-markdown-display';
 import { getPolicyDocument, type PolicyDocument } from '../api';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import type { RootStackParamList } from '../navigation';
 import { useTheme } from '../theme';
 
@@ -29,7 +30,10 @@ export function PolicyViewScreen({ route }: Props) {
         const next = await getPolicyDocument(kind);
         if (!cancelled) setDoc(next);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : '정책 문서를 불러오지 못했어요.');
+        logAppError('[PolicyView] load', e);
+        if (!cancelled) {
+          setError(toUserMessage(e, { context: 'support', fallback: '정책 문서를 불러오지 못했어요.' }));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

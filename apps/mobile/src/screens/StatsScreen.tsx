@@ -9,6 +9,7 @@ import { CalorieRangeChart } from '../components/CalorieRangeChart';
 import { Banner, Card, CardTitle, ScreenLayout, TextButton } from '../components/ui';
 import type { RootStackParamList } from '../navigation';
 import { STATS_COPY } from '../copy/stats';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { fetchStats, type StatsResponse } from '../api/stats';
 import { isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
@@ -52,12 +53,8 @@ export function StatsScreen() {
         }
       } catch (e) {
         if (isAuthDenied(e)) return;
-        const msg = e instanceof Error ? e.message : STATS_COPY.loadError;
-        if (msg.includes('미래') || msg.includes('anchor')) {
-          setErr(STATS_COPY.periodFutureBlocked);
-        } else {
-          setErr(msg);
-        }
+        logAppError('[Stats] load', e);
+        setErr(toUserMessage(e, { context: 'stats', fallback: STATS_COPY.loadError }));
       } finally {
         if (!silent) setLoading(false);
       }

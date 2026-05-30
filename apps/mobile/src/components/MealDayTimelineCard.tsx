@@ -10,6 +10,7 @@ import { canAdjustPortionInList, MealPortionStepper } from './MealPortionStepper
 import { PortionQuantityModal } from './PortionQuantityModal';
 import { Banner, Card, CardTitle } from './ui';
 import { LOG_COPY } from '../copy/log';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { kstDayBoundsFromYmd } from '../lib/dateRange';
 import { formatMacroLine } from '../lib/formatNutrition';
 import { groupMealsBySlotTimeline, mealRowSubtitle } from '../lib/mealTimeline';
@@ -64,8 +65,9 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
       setMeals(res.items ?? []);
     } catch (e) {
       if (isAuthDenied(e)) return;
+      logAppError('[MealDayTimeline] load', e);
       setMeals([]);
-      setErr(e instanceof Error ? e.message : LOG_COPY.mealDayLoadError);
+      setErr(toUserMessage(e, { context: 'meal', fallback: LOG_COPY.mealDayLoadError }));
     } finally {
       setLoading(false);
     }
@@ -102,9 +104,10 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
       await load();
     } catch (e) {
       if (isAuthDenied(e)) return;
+      logAppError('[MealDayTimeline] portion', e);
       toast.show({
         kind: 'error',
-        message: e instanceof Error ? e.message : LOG_COPY.portionAdjustError,
+        message: toUserMessage(e, { context: 'meal', fallback: LOG_COPY.portionAdjustError }),
       });
       await load();
     } finally {

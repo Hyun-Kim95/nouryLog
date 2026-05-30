@@ -1500,11 +1500,12 @@ meRouter.post('/nutrition/ocr', async (req, res) => {
       message.includes('API_KEY_INVALID') ||
       message.toLowerCase().includes('api key not valid')
     ) {
+      console.error('[ocr]', 'provider_api_key_invalid', { message });
       sendError(
         res,
         503,
         ErrorCodes.OCR_PROVIDER_UNAVAILABLE,
-        'OCR API 키가 올바르지 않습니다. Railway의 OCR_API_KEY가 로컬 .env와 동일한지 확인해 주세요.',
+        '영양 성분 인식 서비스를 일시적으로 사용할 수 없어요. 잠시 후 다시 시도해 주세요.',
       );
       return;
     }
@@ -1514,15 +1515,22 @@ meRouter.post('/nutrition/ocr', async (req, res) => {
       message.toLowerCase().includes('api key not enabled') ||
       message.toLowerCase().includes('access denied')
     ) {
+      console.error('[ocr]', 'provider_access_denied', { message });
       sendError(
         res,
         503,
         ErrorCodes.OCR_PROVIDER_UNAVAILABLE,
-        'Google Vision API 접근이 거부되었습니다. Cloud Vision API 활성화와 API 키의 앱 제한(Android/iOS 전용) 해제를 확인해 주세요.',
+        '영양 성분 인식 서비스를 일시적으로 사용할 수 없어요. 잠시 후 다시 시도해 주세요.',
       );
       return;
     }
-    sendError(res, 503, ErrorCodes.OCR_PROVIDER_UNAVAILABLE, 'OCR 제공자 호출에 실패했습니다.');
+    console.error('[ocr]', 'provider_unavailable', { message });
+    sendError(
+      res,
+      503,
+      ErrorCodes.OCR_PROVIDER_UNAVAILABLE,
+      '영양 성분 인식 서비스를 일시적으로 사용할 수 없어요. 잠시 후 다시 시도해 주세요.',
+    );
     return;
   }
 });

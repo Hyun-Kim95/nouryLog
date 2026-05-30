@@ -5,6 +5,7 @@ import { fetchNotices, type NoticeSummary } from '../../api/notices';
 import { Banner, Card, ScreenLayout } from '../../components/ui';
 import type { RootStackParamList } from '../../navigation';
 import { useFocusReload } from '../../hooks/useFocusReload';
+import { logAppError, toUserMessage } from '../../lib/userFacingError';
 import { useTheme } from '../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NoticeList'>;
@@ -22,7 +23,8 @@ export function NoticeListScreen({ navigation }: Props) {
       const res = await fetchNotices();
       setItems(res.items);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : '공지를 불러오지 못했어요.');
+      logAppError('[NoticeList] load', e);
+      setErr(toUserMessage(e, { context: 'support', fallback: '공지를 불러오지 못했어요.' }));
     } finally {
       setLoading(false);
     }

@@ -6,6 +6,7 @@ import { Segmented } from '../components/Segmented';
 import { WithdrawReasonModal, type WithdrawReasonPayload } from '../components/WithdrawReasonModal';
 import { Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
 import { SETTINGS_COPY } from '../copy/settings';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { useTheme, useUserThemeMode, type ThemeMode } from '../theme';
 import { signOutToLogin } from '../authSession';
 import { getAccessToken } from '../authStorage';
@@ -51,7 +52,11 @@ export function SettingsScreen() {
                 toast.show({ kind: 'info', message: '탈퇴가 완료되었어요.' });
                 await signOutToLogin(null);
               } catch (e) {
-                const msg = e instanceof Error ? e.message : '탈퇴 처리 중 오류가 발생했어요.';
+                logAppError('[Settings] withdraw', e);
+                const msg = toUserMessage(e, {
+                  context: 'settings',
+                  fallback: '탈퇴 처리 중 오류가 발생했어요.',
+                });
                 toast.show({ kind: 'error', message: msg });
               }
             })();
@@ -77,7 +82,11 @@ export function SettingsScreen() {
                 await signOutToLogin(null);
                 toast.show({ kind: 'info', message: '로그아웃했어요.' });
               } catch (e) {
-                const msg = e instanceof Error ? e.message : '로그아웃 처리 중 오류가 발생했어요.';
+                logAppError('[Settings] logout', e);
+                const msg = toUserMessage(e, {
+                  context: 'settings',
+                  fallback: '로그아웃 처리 중 오류가 발생했어요.',
+                });
                 toast.show({ kind: 'error', message: msg });
               }
             })();

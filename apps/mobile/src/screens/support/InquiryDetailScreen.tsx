@@ -7,6 +7,7 @@ import { ensureAccessToken } from '../../authSession';
 import { Banner, Card, CardTitle } from '../../components/ui';
 import { inquiryStatusLabel } from '../../lib/inquiryStatus';
 import type { RootStackParamList } from '../../navigation';
+import { logAppError, toUserMessage } from '../../lib/userFacingError';
 import { useTheme } from '../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'InquiryDetail'>;
@@ -30,7 +31,10 @@ export function InquiryDetailScreen({ route }: Props) {
         if (!cancelled) setInquiry(data);
       } catch (e) {
         if (isAuthDenied(e)) return;
-        if (!cancelled) setErr(e instanceof Error ? e.message : '문의를 불러오지 못했어요.');
+        logAppError('[InquiryDetail] load', e);
+        if (!cancelled) {
+          setErr(toUserMessage(e, { context: 'support', fallback: '문의를 불러오지 못했어요.' }));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

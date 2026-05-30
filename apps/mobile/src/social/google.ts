@@ -2,6 +2,8 @@ import {
   GoogleSignin,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
+import { ERRORS_COPY } from '../copy/errors';
+import { logAppError } from '../lib/userFacingError';
 import type { SocialAdapter, SocialLoginResult } from './types';
 
 const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
@@ -58,13 +60,15 @@ async function login(): Promise<SocialLoginResult> {
       } catch (retryErr) {
         const retry = retryErr as { code?: string; message?: string };
         if (retry.code === statusCodes.SIGN_IN_CANCELLED) return { kind: 'cancelled' };
-        return { kind: 'error', message: retry.message ?? '구글 로그인에 실패했습니다.' };
+        logAppError('[social-google]', retryErr);
+        return { kind: 'error', message: ERRORS_COPY.login };
       }
     }
     if (err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
       return { kind: 'error', message: 'Google Play 서비스가 필요합니다.' };
     }
-    return { kind: 'error', message: err.message ?? '구글 로그인에 실패했습니다.' };
+    logAppError('[social-google]', e);
+    return { kind: 'error', message: ERRORS_COPY.login };
   }
 }
 

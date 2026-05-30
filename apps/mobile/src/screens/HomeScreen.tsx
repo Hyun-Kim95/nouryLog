@@ -8,6 +8,7 @@ import { ensureAccessToken } from '../authSession';
 import { WeightCheckInModal } from '../components/WeightCheckInModal';
 import { Banner, Card, CardTitle, Chip, PrimaryButton, ProgressBar, ScreenLayout } from '../components/ui';
 import { HOME_COPY } from '../copy/home';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { sortedWarnings, WARNING_COPY } from '../copy/recommendation';
 import { WEIGHT_COPY } from '../copy/weight';
 import { useFocusReload } from '../hooks/useFocusReload';
@@ -81,11 +82,13 @@ export function HomeScreen() {
 
       if (rejected.length === 4) {
         const reason = rejected[0].reason;
-        setErr(reason instanceof Error ? reason.message : HOME_COPY.loadError);
+        logAppError('[Home] load', reason);
+        setErr(toUserMessage(reason, { context: 'generic', fallback: HOME_COPY.loadError }));
       }
     } catch (e) {
       if (isAuthDenied(e)) return;
-      setErr(e instanceof Error ? e.message : HOME_COPY.loadError);
+      logAppError('[Home] load', e);
+      setErr(toUserMessage(e, { context: 'generic', fallback: HOME_COPY.loadError }));
     } finally {
       if (!silent) setLoading(false);
     }

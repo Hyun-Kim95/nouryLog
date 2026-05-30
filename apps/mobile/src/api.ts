@@ -1,5 +1,6 @@
 import { API_BASE } from './config';
 import { refreshAccessToken, isRefreshPath, shouldRetryWithRefresh } from './authRefresh';
+import { ERRORS_COPY } from './copy/errors';
 import { ApiError, parseApiErrorBody } from './lib/apiError';
 import { handleAuthFailure } from './authSession';
 
@@ -55,7 +56,10 @@ export async function apiFetch<T>(
         message: '서버 응답이 지연되고 있어요. 네트워크를 확인한 뒤 다시 시도해 주세요.',
       });
     }
-    throw e;
+    throw new ApiError(0, {
+      code: 'NETWORK_UNAVAILABLE',
+      message: ERRORS_COPY.network,
+    });
   } finally {
     clearTimeout(timer);
   }

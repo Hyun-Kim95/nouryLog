@@ -8,6 +8,7 @@ import { Banner, Card, PrimaryButton, ScreenLayout } from '../../components/ui';
 import { useFocusReload } from '../../hooks/useFocusReload';
 import { inquiryStatusLabel } from '../../lib/inquiryStatus';
 import type { RootStackParamList } from '../../navigation';
+import { logAppError, toUserMessage } from '../../lib/userFacingError';
 import { useTheme } from '../../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'InquiryList'>;
@@ -28,7 +29,8 @@ export function InquiryListScreen({ navigation }: Props) {
       setItems(res.items);
     } catch (e) {
       if (isAuthDenied(e)) return;
-      setErr(e instanceof Error ? e.message : '문의 목록을 불러오지 못했어요.');
+      logAppError('[InquiryList] load', e);
+      setErr(toUserMessage(e, { context: 'support', fallback: '문의 목록을 불러오지 못했어요.' }));
     } finally {
       setLoading(false);
     }

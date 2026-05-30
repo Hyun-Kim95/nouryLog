@@ -28,6 +28,7 @@ import {
   type PermissionState,
 } from '../../notifications';
 import { RECOMMENDATION_COPY } from '../../copy/recommendation';
+import { logAppError, toUserMessage } from '../../lib/userFacingError';
 import {
   DEFAULT_MEAL_TIME,
   DEFAULT_NUTRITION_TIME,
@@ -130,8 +131,14 @@ export function NotificationCard() {
     try {
       await Linking.openSettings();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : '기기 설정을 여는 중 오류가 발생했어요.';
-      toast.show({ kind: 'error', message: msg });
+      logAppError('[NotificationCard] openSettings', e);
+      toast.show({
+        kind: 'error',
+        message: toUserMessage(e, {
+          context: 'settings',
+          fallback: '기기 설정을 여는 중 오류가 발생했어요.',
+        }),
+      });
     }
   };
 
@@ -143,8 +150,14 @@ export function NotificationCard() {
         await scheduleAllMeals(mealTimes);
         toast.show({ kind: 'info', message: '식사 시간 알림을 켰어요.' });
       } catch (e) {
-        const msg = e instanceof Error ? e.message : '알림을 설정하는 중 오류가 발생했어요.';
-        toast.show({ kind: 'error', message: msg });
+        logAppError('[NotificationCard] scheduleMeals', e);
+        toast.show({
+          kind: 'error',
+          message: toUserMessage(e, {
+            context: 'settings',
+            fallback: '알림을 설정하는 중 오류가 발생했어요.',
+          }),
+        });
         setMealEnabledState(false);
         await setMealEnabled(false);
       }
@@ -163,8 +176,14 @@ export function NotificationCard() {
         await scheduleNutrition(nutritionTime, token);
         toast.show({ kind: 'info', message: '권장량 미달 알림을 켰어요.' });
       } catch (e) {
-        const msg = e instanceof Error ? e.message : '알림을 설정하는 중 오류가 발생했어요.';
-        toast.show({ kind: 'error', message: msg });
+        logAppError('[NotificationCard] scheduleNutrition', e);
+        toast.show({
+          kind: 'error',
+          message: toUserMessage(e, {
+            context: 'settings',
+            fallback: '알림을 설정하는 중 오류가 발생했어요.',
+          }),
+        });
         setNutritionEnabledState(false);
         await setNutritionEnabled(false);
       }
@@ -196,8 +215,14 @@ export function NotificationCard() {
                 setNutritionEnabledState(false);
                 toast.show({ kind: 'info', message: '알림을 모두 껐어요.' });
               } catch (e) {
-                const msg = e instanceof Error ? e.message : '알림을 끄는 중 오류가 발생했어요.';
-                toast.show({ kind: 'error', message: msg });
+                logAppError('[NotificationCard] disableAll', e);
+                toast.show({
+                  kind: 'error',
+                  message: toUserMessage(e, {
+                    context: 'settings',
+                    fallback: '알림을 끄는 중 오류가 발생했어요.',
+                  }),
+                });
               }
             })();
           },

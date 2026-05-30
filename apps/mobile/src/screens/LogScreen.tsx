@@ -21,7 +21,6 @@ import {
   ensureCameraPermissionForPicker,
   ensureLibraryPermissionForPicker,
   logImagePickerFailure,
-  mapImagePickerError,
 } from '../lib/imagePickerErrors';
 import { prepareOcrImageBase64 } from '../lib/prepareOcrImage';
 import { apiFetch, ApiError, isAuthDenied } from '../api';
@@ -66,6 +65,7 @@ import {
   scaleManualNutritionForSave,
 } from '../lib/manualPortion';
 import { parseManualNutrition } from '../lib/manualNutrition';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { formatKstDayTitle, kstNoonIsoFromYmd, localDayBounds } from '../lib/dateRange';
 import {
   mealEntrySuggestionsErrorMessage,
@@ -205,6 +205,12 @@ export function LogScreen() {
   const focusEntryField = useCallback(() => {
     scheduleScrollToEntry();
   }, [scheduleScrollToEntry]);
+
+  /** 사용자 입력 시 제안 재활성(제안 탭 후 네이티브 포커스 유지 시 onFocus 미재호출 보완). */
+  const handleNameChange = useCallback((text: string) => {
+    setName(text);
+    setNameFocused(true);
+  }, []);
 
   const switchToManualEntry = useCallback(() => {
     setSelectedTpl(null);
@@ -386,7 +392,11 @@ export function LogScreen() {
       await load();
     } catch (e) {
       if (isAuthDenied(e)) return;
-      toast.show({ kind: 'error', message: e instanceof Error ? e.message : '저장 실패' });
+      logAppError('[LogScreen] save', e);
+      toast.show({
+        kind: 'error',
+        message: toUserMessage(e, { context: 'meal', fallback: '저장에 실패했어요.' }),
+      });
     } finally {
       setSaveBusy(false);
     }
@@ -416,7 +426,11 @@ export function LogScreen() {
       await load();
     } catch (e) {
       if (isAuthDenied(e)) return;
-      toast.show({ kind: 'error', message: e instanceof Error ? e.message : '삭제 실패' });
+      logAppError('[LogScreen] delete', e);
+      toast.show({
+        kind: 'error',
+        message: toUserMessage(e, { context: 'meal', fallback: '삭제에 실패했어요.' }),
+      });
     } finally {
       setSaveBusy(false);
     }
@@ -507,14 +521,14 @@ export function LogScreen() {
     } catch (e) {
       if (isAuthDenied(e)) return;
       logImagePickerFailure(source, e);
-      const raw =
-        e instanceof ApiError && e.status === 413
-          ? LOG_COPY.ocrImageTooLarge
-          : e instanceof Error
-            ? e.message
-            : '사진 분석에 실패했어요';
-      const msg = mapImagePickerError(raw, source);
-      if (msg.includes('무료') || msg.includes('한도') || msg.includes('OCR')) {
+      const msg = toUserMessage(e, {
+        context: 'ocr',
+        fallback: source === 'camera' ? LOG_COPY.ocrCameraFailed : LOG_COPY.ocrAlbumFailed,
+      });
+      if (
+        e instanceof ApiError &&
+        (e.code === 'OCR_FREE_QUOTA_EXCEEDED' || e.code === 'PAYMENT_REQUIRED')
+      ) {
         setPaywallOpen(true);
       }
       toast.show({ kind: 'error', message: msg });
@@ -534,7 +548,10 @@ export function LogScreen() {
       await loadEntitlements();
     } catch (e) {
       if (isAuthDenied(e)) return;
-      toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });
+      logAppError('[LogScreen] checkout', e);
+      const msg = toUserMessage(e, { context: 'billing', fallback: BILLING_COPY.actionError });
+      const kind = msg === '결제가 취소되었습니다.' ? 'info' : 'error';
+      toast.show({ kind, message: msg });
     } finally {
       setCheckoutBusy(false);
     }
@@ -566,9 +583,10 @@ export function LogScreen() {
       await load();
     } catch (e) {
       if (isAuthDenied(e)) return;
+      logAppError('[LogScreen] portion', e);
       toast.show({
         kind: 'error',
-        message: e instanceof Error ? e.message : LOG_COPY.portionAdjustError,
+        message: toUserMessage(e, { context: 'meal', fallback: LOG_COPY.portionAdjustError }),
       });
       await load();
     } finally {
@@ -733,7 +751,7 @@ export function LogScreen() {
         <LabeledField
           label="음식명"
           value={name}
-          onChangeText={setName}
+          onChangeText={handleNameChange}
           placeholder="예: 닭가슴살 샐러드"
           onFocus={() => {
             setNameFocused(true);

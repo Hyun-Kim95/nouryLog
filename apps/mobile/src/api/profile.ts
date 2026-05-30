@@ -1,5 +1,6 @@
 import { API_BASE } from '../config';
 import { handleAuthFailure } from '../authSession';
+import { ERRORS_COPY } from '../copy/errors';
 import { isAuthDenied } from '../lib/apiError';
 
 export { isAuthDenied };
@@ -105,15 +106,24 @@ async function request<T>(
   path: string,
   init: { token: string; method: 'GET' | 'PUT' | 'POST'; body?: object; signal?: AbortSignal },
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: init.method,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${init.token}`,
-    },
-    ...(init.body ? { body: JSON.stringify(init.body) } : {}),
-    signal: init.signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: init.method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${init.token}`,
+      },
+      ...(init.body ? { body: JSON.stringify(init.body) } : {}),
+      signal: init.signal,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') throw e;
+    throw new ProfileApiError(0, {
+      code: 'NETWORK_UNAVAILABLE',
+      message: ERRORS_COPY.network,
+    });
+  }
   const text = await res.text();
   let json: unknown = {};
   if (text) {

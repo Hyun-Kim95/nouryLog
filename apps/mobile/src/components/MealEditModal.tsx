@@ -9,6 +9,7 @@ import { RadioGroup } from './RadioGroup';
 import { Segmented } from './Segmented';
 import { Banner, PrimaryButton } from './ui';
 import { LOG_COPY } from '../copy/log';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { useBottomSafeInset } from '../hooks/useBottomSafeInset';
 import {
   baselineSummary,
@@ -87,7 +88,11 @@ export function MealEditModal({ visible, meal, onClose, onSaved }: Props) {
       onClose();
     } catch (e) {
       if (isAuthDenied(e)) return;
-      toast.show({ kind: 'error', message: e instanceof Error ? e.message : '저장 실패' });
+      logAppError('[MealEditModal] save', e);
+      toast.show({
+        kind: 'error',
+        message: toUserMessage(e, { context: 'meal', fallback: '저장에 실패했어요.' }),
+      });
     } finally {
       setBusy(false);
     }

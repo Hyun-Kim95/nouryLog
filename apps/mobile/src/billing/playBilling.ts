@@ -12,6 +12,8 @@ import {
   type Purchase,
 } from 'react-native-iap';
 import { PREMIUM_SKU } from './constants';
+import { ERRORS_COPY } from '../copy/errors';
+import { logAppError } from '../lib/userFacingError';
 
 export type PlayPurchasePayload = {
   productId: string;
@@ -84,7 +86,8 @@ export async function purchasePremiumMonthly(): Promise<PlayPurchasePayload> {
         reject(new Error('결제가 취소되었습니다.'));
         return;
       }
-      reject(new Error(err.message || '결제에 실패했습니다.'));
+      logAppError('[play-billing]', err);
+      reject(new Error(ERRORS_COPY.billing));
     });
 
     void requestPurchase({

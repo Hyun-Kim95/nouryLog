@@ -1,4 +1,6 @@
 import { login as kakaoLogin, logout as kakaoLogout } from '@react-native-seoul/kakao-login';
+import { ERRORS_COPY } from '../copy/errors';
+import { logAppError } from '../lib/userFacingError';
 import type { SocialAdapter, SocialLoginResult } from './types';
 
 async function login(): Promise<SocialLoginResult> {
@@ -17,7 +19,8 @@ async function login(): Promise<SocialLoginResult> {
     /// 사용자 취소(Android: code=KakaoUserCancelled / message 에 cancel 포함, iOS: code=E_KAKAO_CANCELLED)는 분리.
     const lower = message.toLowerCase();
     if (lower.includes('cancel')) return { kind: 'cancelled' };
-    return { kind: 'error', message };
+    logAppError('[social-kakao]', e);
+    return { kind: 'error', message: ERRORS_COPY.login };
   }
 }
 

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { LOG_COPY } from '../copy/log';
+import { logAppError } from './userFacingError';
 
 export function mapImagePickerError(message: string, source: 'camera' | 'library'): string {
   const lower = message.toLowerCase();
@@ -18,7 +19,7 @@ export function mapImagePickerError(message: string, source: 'camera' | 'library
   if (lower.includes('갤러리') || lower.includes('photo') || lower.includes('media')) {
     return LOG_COPY.ocrAlbumPermissionDenied;
   }
-  return message;
+  return source === 'camera' ? LOG_COPY.ocrCameraFailed : LOG_COPY.ocrAlbumFailed;
 }
 
 export async function ensureCameraPermissionForPicker(): Promise<void> {
@@ -43,9 +44,8 @@ export async function ensureLibraryPermissionForPicker(): Promise<void> {
 }
 
 export function logImagePickerFailure(source: 'camera' | 'library', err: unknown): void {
-  if (!__DEV__) return;
-  console.warn('[image-picker]', source, {
+  logAppError('[image-picker]', err, {
+    source,
     androidApi: Platform.OS === 'android' ? Platform.Version : undefined,
-    err,
   });
 }

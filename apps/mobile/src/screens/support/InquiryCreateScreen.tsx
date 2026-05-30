@@ -6,6 +6,7 @@ import { isAuthDenied } from '../../api';
 import { ensureAccessToken } from '../../authSession';
 import { Banner, PrimaryButton, ScreenLayout } from '../../components/ui';
 import type { RootStackParamList } from '../../navigation';
+import { logAppError, toUserMessage } from '../../lib/userFacingError';
 import { useTheme } from '../../theme';
 import { useToast } from '../../toast/useToast';
 
@@ -47,7 +48,8 @@ export function InquiryCreateScreen({ navigation }: Props) {
         navigation.replace('InquiryDetail', { id: created.id });
       } catch (e) {
         if (isAuthDenied(e)) return;
-        setErr(e instanceof Error ? e.message : '문의 접수에 실패했어요.');
+        logAppError('[InquiryCreate] submit', e);
+        setErr(toUserMessage(e, { context: 'support', fallback: '문의 접수에 실패했어요.' }));
       } finally {
         setSubmitting(false);
       }

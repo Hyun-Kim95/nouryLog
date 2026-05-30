@@ -18,6 +18,7 @@ import { consumeLoginNotice } from '../authSession';
 import { getOnboardingDone, parseUserIdFromAccessToken, saveTokens } from '../authStorage';
 import { resolveOnboardingComplete } from '../lib/onboardingGate';
 import { promiseWithTimeout } from '../lib/promiseTimeout';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 import type { RootStackParamList } from '../navigation';
@@ -116,7 +117,6 @@ export function LoginScreen({ navigation }: Props) {
         return;
       }
       if (sdkResult.kind === 'error') {
-        console.warn('[social-sdk]', 'sdk_error', { provider, message: sdkResult.message });
         setErr(sdkResult.message);
         toast.show({ kind: 'error', message: sdkResult.message });
         return;
@@ -151,8 +151,8 @@ export function LoginScreen({ navigation }: Props) {
       setErr(unknownMsg);
       toast.show({ kind: 'error', message: unknownMsg });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'SNS 로그인 실패';
-      console.warn('[social-sdk]', 'exception', { provider, message: msg, err: e });
+      logAppError('[Login] social', e, { provider });
+      const msg = toUserMessage(e, { context: 'login' });
       setErr(msg);
       toast.show({ kind: 'error', message: msg });
     } finally {
@@ -175,7 +175,8 @@ export function LoginScreen({ navigation }: Props) {
         source: `social-conflict:${action}`,
       });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : '계정 연결 처리 실패';
+      logAppError('[Login] conflict', e);
+      const msg = toUserMessage(e, { context: 'login', fallback: '계정 연결 처리에 실패했어요.' });
       setErr(msg);
       toast.show({ kind: 'error', message: msg });
     } finally {
@@ -198,7 +199,8 @@ export function LoginScreen({ navigation }: Props) {
       toast.show({ kind: 'success', message: '약관 동의를 저장했어요.' });
       await goAfterLogin(pendingSocial.accessToken);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : '동의 저장 실패';
+      logAppError('[Login] consent', e);
+      const msg = toUserMessage(e, { context: 'login', fallback: '동의 저장에 실패했어요.' });
       setErr(msg);
       toast.show({ kind: 'error', message: msg });
     } finally {

@@ -3,6 +3,7 @@ import { ApiError, isAuthDenied, isRequestAborted } from '../api';
 import { fetchMealEntrySuggestions, type MealEntrySuggestionItem } from '../api/meals';
 import { ensureAccessToken } from '../authSession';
 import { LOG_COPY } from '../copy/log';
+import { logAppError } from '../lib/userFacingError';
 
 const DEBOUNCE_MS = 300;
 const SUGGEST_LIMIT = 8;
@@ -84,13 +85,9 @@ export function useMealEntrySuggestions(
         }
         if (__DEV__) {
           if (isAuthDenied(e)) {
-            console.warn('[useMealEntrySuggestions] auth denied (silent)', e);
+            logAppError('[useMealEntrySuggestions] auth denied (silent)', e);
           } else {
-            const status = e instanceof ApiError ? e.status : undefined;
-            const code = e instanceof ApiError ? e.code : undefined;
-            const name = e instanceof Error ? e.name : typeof e;
-            const message = e instanceof Error ? e.message : String(e);
-            console.warn('[useMealEntrySuggestions] failed', { status, code, name, message });
+            logAppError('[useMealEntrySuggestions] failed', e);
           }
         }
       }

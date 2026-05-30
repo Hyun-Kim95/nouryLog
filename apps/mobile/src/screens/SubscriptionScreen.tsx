@@ -6,6 +6,7 @@ import { checkoutPremiumWithPlay, restorePremiumWithPlay } from '../billing/chec
 import { isPlayBillingEnabled } from '../billing/feature';
 import { Banner, Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
 import { BILLING_COPY } from '../copy/billing';
+import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { useAdsGate } from '../ads/AdsGateContext';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { useTheme } from '../theme';
@@ -38,7 +39,8 @@ export function SubscriptionScreen() {
       setEnt(e);
     } catch (e) {
       if (isAuthDenied(e)) return;
-      setErr(e instanceof Error ? e.message : BILLING_COPY.loadError);
+      logAppError('[Subscription] load', e);
+      setErr(toUserMessage(e, { context: 'billing', fallback: BILLING_COPY.loadError }));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -59,7 +61,10 @@ export function SubscriptionScreen() {
       await refreshAds();
     } catch (e) {
       if (isAuthDenied(e)) return;
-      toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });
+      logAppError('[Subscription] checkout', e);
+      const msg = toUserMessage(e, { context: 'billing', fallback: BILLING_COPY.actionError });
+      const kind = msg === '결제가 취소되었습니다.' ? 'info' : 'error';
+      toast.show({ kind, message: msg });
     } finally {
       setBusy(false);
     }
@@ -75,7 +80,11 @@ export function SubscriptionScreen() {
       await load({ silent: true });
     } catch (e) {
       if (isAuthDenied(e)) return;
-      toast.show({ kind: 'error', message: e instanceof Error ? e.message : BILLING_COPY.actionError });
+      logAppError('[Subscription] restore', e);
+      toast.show({
+        kind: 'error',
+        message: toUserMessage(e, { context: 'billing', fallback: BILLING_COPY.actionError }),
+      });
     } finally {
       setBusy(false);
     }
