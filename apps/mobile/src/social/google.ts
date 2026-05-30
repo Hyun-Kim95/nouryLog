@@ -27,24 +27,39 @@ function ensureConfigured(): boolean {
   }
 }
 
+async function signInOnce(): Promise<SocialLoginResult> {
+  const signed = await GoogleSignin.signIn();
+  if (signed.type === 'cancelled') return { kind: 'cancelled' };
+  const idToken = signed.data.idToken;
+  if (!idToken) {
+    return { kind: 'error', message: '구글 idToken 을 가져오지 못했습니다.' };
+  }
+  return { kind: 'success', idToken };
+}
+
 async function login(): Promise<SocialLoginResult> {
   if (!ensureConfigured()) {
     return { kind: 'error', message: '구글 로그인 설정이 누락되었습니다.' };
   }
   try {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-    const signed = await GoogleSignin.signIn();
-    if (signed.type === 'cancelled') return { kind: 'cancelled' };
-    const idToken = signed.data.idToken;
-    if (!idToken) {
-      return { kind: 'error', message: '구글 idToken 을 가져오지 못했습니다.' };
-    }
-    return { kind: 'success', idToken };
+    return await signInOnce();
   } catch (e) {
     const err = e as { code?: string; message?: string };
     if (err.code === statusCodes.SIGN_IN_CANCELLED) return { kind: 'cancelled' };
     if (err.code === statusCodes.IN_PROGRESS) {
-      return { kind: 'error', message: '이미 구글 로그인이 진행 중입니다.' };
+      try {
+        await GoogleSignin.signOut();
+      } catch (signOutErr) {
+        console.warn('[social-google]', 'in_progress_signout_failed', { err: signOutErr });
+      }
+      try {
+        return await signInOnce();
+      } catch (retryErr) {
+        const retry = retryErr as { code?: string; message?: string };
+        if (retry.code === statusCodes.SIGN_IN_CANCELLED) return { kind: 'cancelled' };
+        return { kind: 'error', message: retry.message ?? '구글 로그인에 실패했습니다.' };
+      }
     }
     if (err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
       return { kind: 'error', message: 'Google Play 서비스가 필요합니다.' };

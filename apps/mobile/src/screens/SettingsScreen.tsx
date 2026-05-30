@@ -7,7 +7,8 @@ import { WithdrawReasonModal, type WithdrawReasonPayload } from '../components/W
 import { Card, CardTitle, PrimaryButton, ScreenLayout } from '../components/ui';
 import { SETTINGS_COPY } from '../copy/settings';
 import { useTheme, useUserThemeMode, type ThemeMode } from '../theme';
-import { clearTokens, getAccessToken } from '../authStorage';
+import { signOutToLogin } from '../authSession';
+import { getAccessToken } from '../authStorage';
 import { deactivateAccount } from '../api';
 import { useToast } from '../toast/useToast';
 import type { RootStackParamList } from '../navigation';
@@ -46,10 +47,9 @@ export function SettingsScreen() {
                   reasonCode: payload.reasonCode,
                   reasonText: payload.reasonText,
                 });
-                await clearTokens();
                 setWithdrawModalVisible(false);
                 toast.show({ kind: 'info', message: '탈퇴가 완료되었어요.' });
-                navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+                await signOutToLogin(null);
               } catch (e) {
                 const msg = e instanceof Error ? e.message : '탈퇴 처리 중 오류가 발생했어요.';
                 toast.show({ kind: 'error', message: msg });
@@ -74,9 +74,8 @@ export function SettingsScreen() {
           onPress: () => {
             void (async () => {
               try {
-                await clearTokens();
+                await signOutToLogin(null);
                 toast.show({ kind: 'info', message: '로그아웃했어요.' });
-                navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
               } catch (e) {
                 const msg = e instanceof Error ? e.message : '로그아웃 처리 중 오류가 발생했어요.';
                 toast.show({ kind: 'error', message: msg });

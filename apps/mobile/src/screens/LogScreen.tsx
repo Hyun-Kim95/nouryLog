@@ -17,6 +17,12 @@ import {
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
+import {
+  ensureCameraPermissionForPicker,
+  ensureLibraryPermissionForPicker,
+  logImagePickerFailure,
+  mapImagePickerError,
+} from '../lib/imagePickerErrors';
 import { prepareOcrImageBase64 } from '../lib/prepareOcrImage';
 import { apiFetch, ApiError, isAuthDenied } from '../api';
 import {
@@ -462,12 +468,10 @@ export function LogScreen() {
       const pickerOptions: ImagePicker.ImagePickerOptions = {
         mediaTypes,
         quality: 0.8,
-        base64: true,
       };
 
       if (source === 'camera') {
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) throw new Error('카메라 접근 권한이 필요합니다.');
+        await ensureCameraPermissionForPicker();
         const picked = await ImagePicker.launchCameraAsync(pickerOptions);
         if (picked.canceled) {
           toast.show({ kind: 'info', message: LOG_COPY.ocrCameraCanceled });
@@ -482,8 +486,7 @@ export function LogScreen() {
         if (!base64) throw new Error(LOG_COPY.ocrImageLoadFailed);
         await runOcrWithBase64(base64);
       } else {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) throw new Error('갤러리 접근 권한이 필요합니다.');
+        await ensureLibraryPermissionForPicker();
         const picked = await ImagePicker.launchImageLibraryAsync({
           ...pickerOptions,
           allowsEditing: false,
@@ -503,12 +506,14 @@ export function LogScreen() {
       }
     } catch (e) {
       if (isAuthDenied(e)) return;
-      const msg =
+      logImagePickerFailure(source, e);
+      const raw =
         e instanceof ApiError && e.status === 413
           ? LOG_COPY.ocrImageTooLarge
           : e instanceof Error
             ? e.message
             : '사진 분석에 실패했어요';
+      const msg = mapImagePickerError(raw, source);
       if (msg.includes('무료') || msg.includes('한도') || msg.includes('OCR')) {
         setPaywallOpen(true);
       }

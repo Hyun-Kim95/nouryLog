@@ -2,6 +2,7 @@ import { CommonActions, createNavigationContainerRef } from '@react-navigation/n
 import { refreshAccessToken } from './authRefresh';
 import { clearTokens, getAccessToken, isAccessTokenExpired } from './authStorage';
 import { isAuthDenied } from './lib/apiError';
+import { signOutAllSocialProviders } from './social';
 import type { RootStackParamList } from './navigation';
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -51,8 +52,9 @@ export async function ensureAccessToken(): Promise<string | null> {
   return token;
 }
 
-export async function signOutToLogin(notice = DEFAULT_LOGIN_NOTICE): Promise<void> {
+export async function signOutToLogin(notice: string | null = DEFAULT_LOGIN_NOTICE): Promise<void> {
   loginNotice = notice;
+  await signOutAllSocialProviders();
   await clearTokens();
   resetToLogin();
 }

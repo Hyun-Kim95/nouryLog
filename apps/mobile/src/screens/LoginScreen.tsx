@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Button, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   getPolicyDocument,
@@ -17,18 +17,23 @@ import { socialAdapter } from '../social';
 import { consumeLoginNotice } from '../authSession';
 import { getOnboardingDone, parseUserIdFromAccessToken, saveTokens } from '../authStorage';
 import { resolveOnboardingComplete } from '../lib/onboardingGate';
+import { promiseWithTimeout } from '../lib/promiseTimeout';
 import { useTheme } from '../theme';
 import { useToast } from '../toast/useToast';
 import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
+const LOGIN_TIMEOUT_MS = 90_000;
+const LOGIN_TIMEOUT_MESSAGE = '로그인 시간이 초과되었어요. 다시 시도해 주세요.';
+
 export function LoginScreen({ navigation }: Props) {
   const t = useTheme();
   const toast = useToast();
   const [err, setErr] = useState<string | null>(null);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busyProvider, setBusyProvider] = useState<SocialProvider | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [conflictToken, setConflictToken] = useState<string | null>(null);
   const [conflictEmail, setConflictEmail] = useState<string | null>(null);
   const [pendingSocial, setPendingSocial] = useState<{
@@ -43,10 +48,14 @@ export function LoginScreen({ navigation }: Props) {
     terms: null,
     privacy: null,
   });
-  useFocusEffect(() => {
-    const notice = consumeLoginNotice();
-    if (notice) setSessionNotice(notice);
-  });
+
+  useFocusEffect(
+    useCallback(() => {
+      const notice = consumeLoginNotice();
+      if (notice) setSessionNotice(notice);
+      setBusyProvider(null);
+    }, []),
+  );
 
   const goAfterLogin = async (accessToken: string) => {
     let done = false;
@@ -88,14 +97,18 @@ export function LoginScreen({ navigation }: Props) {
   };
 
   const onSocialLogin = async (provider: SocialProvider) => {
-    if (busy) return;
+    if (busyProvider || actionBusy) return;
     setErr(null);
     setConflictToken(null);
     setConflictEmail(null);
-    setBusy(true);
+    setBusyProvider(provider);
     try {
       const adapter = socialAdapter(provider);
-      const sdkResult = await adapter.login();
+      const sdkResult = await promiseWithTimeout(
+        adapter.login(),
+        LOGIN_TIMEOUT_MS,
+        LOGIN_TIMEOUT_MESSAGE,
+      );
       if (sdkResult.kind === 'cancelled') {
         const msg = 'SNS 로그인이 취소되었습니다.';
         setErr(msg);
@@ -143,14 +156,14 @@ export function LoginScreen({ navigation }: Props) {
       setErr(msg);
       toast.show({ kind: 'error', message: msg });
     } finally {
-      setBusy(false);
+      setBusyProvider(null);
     }
   };
 
   const onResolveConflict = async (action: 'link' | 'separate') => {
-    if (!conflictToken) return;
+    if (!conflictToken || busyProvider || actionBusy) return;
     setErr(null);
-    setBusy(true);
+    setActionBusy(true);
     try {
       const tokens = await socialResolveConflictRequest(conflictToken, action);
       toast.show({
@@ -166,14 +179,14 @@ export function LoginScreen({ navigation }: Props) {
       setErr(msg);
       toast.show({ kind: 'error', message: msg });
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
   };
 
   const onSubmitSocialConsent = async () => {
-    if (!pendingSocial) return;
+    if (!pendingSocial || busyProvider || actionBusy) return;
     setErr(null);
-    setBusy(true);
+    setActionBusy(true);
     try {
       const consents = await ensurePolicyVersions();
       await postConsents(pendingSocial.accessToken, {
@@ -189,36 +202,44 @@ export function LoginScreen({ navigation }: Props) {
       setErr(msg);
       toast.show({ kind: 'error', message: msg });
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
   };
+
+  const socialDisabled = busyProvider != null || actionBusy;
 
   return (
     <ScreenLayout title="식단 관리" subtitle="SNS로 로그인해요.">
       {sessionNotice ? <Banner variant="warn">{sessionNotice}</Banner> : null}
       {err ? <Banner variant="danger">{err}</Banner> : null}
 
-      <Pressable
-        style={[styles.socialBtn, { borderRadius: t.radius.md, padding: t.spacing.md }, styles.naver]}
+      <SocialLoginButton
+        label="네이버 로그인"
+        provider="naver"
+        busyProvider={busyProvider}
+        disabled={socialDisabled}
+        backgroundColor="#03c75a"
+        textColor="#fff"
         onPress={() => void onSocialLogin('naver')}
-        disabled={busy}
-      >
-        <Text style={styles.socialText}>네이버 로그인</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.socialBtn, { borderRadius: t.radius.md, padding: t.spacing.md }, styles.google]}
+      />
+      <SocialLoginButton
+        label="구글 로그인"
+        provider="google"
+        busyProvider={busyProvider}
+        disabled={socialDisabled}
+        backgroundColor="#4285f4"
+        textColor="#fff"
         onPress={() => void onSocialLogin('google')}
-        disabled={busy}
-      >
-        <Text style={styles.socialText}>구글 로그인</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.socialBtn, { borderRadius: t.radius.md, padding: t.spacing.md }, styles.kakao]}
+      />
+      <SocialLoginButton
+        label="카카오 로그인"
+        provider="kakao"
+        busyProvider={busyProvider}
+        disabled={socialDisabled}
+        backgroundColor="#fee500"
+        textColor="#1f1f1f"
         onPress={() => void onSocialLogin('kakao')}
-        disabled={busy}
-      >
-        <Text style={[styles.socialText, styles.kakaoText]}>카카오 로그인</Text>
-      </Pressable>
+      />
 
       {conflictToken ? (
         <View
@@ -241,13 +262,13 @@ export function LoginScreen({ navigation }: Props) {
           <Button
             title="기존 계정 연결"
             onPress={() => void onResolveConflict('link')}
-            disabled={busy}
+            disabled={socialDisabled}
             color={t.colors.primary}
           />
           <Button
             title="새 SNS 계정 생성"
             onPress={() => void onResolveConflict('separate')}
-            disabled={busy}
+            disabled={socialDisabled}
             color={t.colors.primary}
           />
           <Button
@@ -256,7 +277,7 @@ export function LoginScreen({ navigation }: Props) {
               setConflictToken(null);
               setConflictEmail(null);
             }}
-            disabled={busy}
+            disabled={socialDisabled}
             color={t.colors.fgMuted}
           />
         </View>
@@ -297,12 +318,61 @@ export function LoginScreen({ navigation }: Props) {
           <Button
             title="동의하고 시작"
             onPress={() => void onSubmitSocialConsent()}
-            disabled={busy || !socialAgeConfirmed || !socialTermsAgreed || !socialPrivacyAgreed}
+            disabled={socialDisabled || !socialAgeConfirmed || !socialTermsAgreed || !socialPrivacyAgreed}
             color={t.colors.primary}
           />
         </View>
       ) : null}
     </ScreenLayout>
+  );
+}
+
+function SocialLoginButton({
+  label,
+  provider,
+  busyProvider,
+  disabled,
+  backgroundColor,
+  textColor,
+  onPress,
+}: {
+  label: string;
+  provider: SocialProvider;
+  busyProvider: SocialProvider | null;
+  disabled: boolean;
+  backgroundColor: string;
+  textColor: string;
+  onPress: () => void;
+}) {
+  const t = useTheme();
+  const loading = busyProvider === provider;
+  const isDisabled = disabled && !loading;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      style={[
+        styles.socialBtn,
+        {
+          borderRadius: t.radius.md,
+          padding: t.spacing.md,
+          backgroundColor,
+          opacity: isDisabled ? 0.5 : 1,
+        },
+      ]}
+      onPress={onPress}
+      disabled={isDisabled || loading}
+    >
+      {loading ? (
+        <View style={styles.socialLoadingRow}>
+          <ActivityIndicator color={textColor} size="small" />
+          <Text style={[styles.socialText, { color: textColor }]}>로그인 중…</Text>
+        </View>
+      ) : (
+        <Text style={[styles.socialText, { color: textColor }]}>{label}</Text>
+      )}
+    </Pressable>
   );
 }
 
@@ -345,11 +415,8 @@ function ConsentRow({
 
 const styles = StyleSheet.create({
   socialBtn: { alignItems: 'center' },
-  socialText: { color: '#fff', fontWeight: '600' },
-  naver: { backgroundColor: '#03c75a' },
-  google: { backgroundColor: '#4285f4' },
-  kakao: { backgroundColor: '#fee500' },
-  kakaoText: { color: '#1f1f1f' },
+  socialLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  socialText: { fontWeight: '600' },
   consentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   checkboxWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   checkbox: { width: 22, height: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },

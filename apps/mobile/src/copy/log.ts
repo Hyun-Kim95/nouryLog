@@ -13,6 +13,12 @@ export const LOG_COPY = {
   ocrBannerExhausted: '이번 달 무료 사진 분석을 모두 사용했어요.',
   ocrPickCanceled: '이미지 선택이 취소되었습니다.',
   ocrCameraCanceled: '촬영이 취소되었습니다.',
+  ocrCameraFailed: '카메라를 열지 못했어요. 권한을 확인하거나 다시 시도해 주세요.',
+  ocrAlbumFailed: '앨범을 열지 못했어요. 권한을 확인하거나 다시 시도해 주세요.',
+  ocrCameraPermissionDenied: '카메라 접근 권한이 필요합니다.',
+  ocrCameraPermissionSettings: '카메라 권한이 꺼져 있어요. 설정에서 허용해 주세요.',
+  ocrAlbumPermissionDenied: '갤러리 접근 권한이 필요합니다.',
+  ocrAlbumPermissionSettings: '사진 접근 권한이 꺼져 있어요. 설정에서 허용해 주세요.',
   ocrImageLoadFailed: '이미지를 불러오지 못했어요. 다른 사진을 선택해 주세요.',
   ocrImageTooLarge:
     '이미지가 너무 커요. 다른 사진을 선택하거나 해상도를 낮춰 주세요.',
