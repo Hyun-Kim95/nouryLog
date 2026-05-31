@@ -701,6 +701,7 @@ export function LogScreen() {
     else if (item.mealSlot === 'SNACK') setSnackPlacement(defaultSnackPlacementForNow());
     setLastOcrMeta(null);
 
+    let templateApplied = false;
     if (item.foodTemplateId) {
       const tpl = templates.find((x) => x.id === item.foodTemplateId);
       if (tpl) {
@@ -713,19 +714,21 @@ export function LogScreen() {
         setProtein('');
         setCarbohydrate('');
         setFat('');
-        return;
+        templateApplied = true;
       }
     }
-
-    setSelectedTpl(null);
-    setName(item.name);
-    setManualPortion(
-      item.portionQuantity != null ? formatPortionAmount(item.portionQuantity) || '1' : '1',
-    );
-    setCalories(roundPerServingForForm(item.calories, item.portionQuantity));
-    setProtein(roundPerServingForForm(item.protein, item.portionQuantity));
-    setCarbohydrate(roundPerServingForForm(item.carbohydrate, item.portionQuantity));
-    setFat(roundPerServingForForm(item.fat, item.portionQuantity));
+    if (!templateApplied) {
+      setSelectedTpl(null);
+      setName(item.name);
+      setManualPortion(
+        item.portionQuantity != null ? formatPortionAmount(item.portionQuantity) || '1' : '1',
+      );
+      setCalories(roundPerServingForForm(item.calories, item.portionQuantity));
+      setProtein(roundPerServingForForm(item.protein, item.portionQuantity));
+      setCarbohydrate(roundPerServingForForm(item.carbohydrate, item.portionQuantity));
+      setFat(roundPerServingForForm(item.fat, item.portionQuantity));
+    }
+    scheduleScrollToEntry();
   };
 
   const selectTemplate = (item: FoodTemplateItem) => {
@@ -1187,15 +1190,14 @@ export function LogScreen() {
               <Card>
                 <CardTitle>{LOG_COPY.todayTitle}</CardTitle>
                 {hasToday ? (
-                  <Text
-                    style={{
-                      color: t.colors.fgMuted,
-                      fontSize: t.fontSize.caption,
-                      marginBottom: t.spacing.sm,
-                    }}
-                  >
-                    {LOG_COPY.todayPortionHint}
-                  </Text>
+                  <View style={{ gap: t.spacing.xs, marginBottom: t.spacing.sm }}>
+                    <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                      {LOG_COPY.todayEditHint}
+                    </Text>
+                    <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                      {LOG_COPY.todayPortionHint}
+                    </Text>
+                  </View>
                 ) : null}
                 {!hasToday ? (
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{LOG_COPY.todayEmpty}</Text>

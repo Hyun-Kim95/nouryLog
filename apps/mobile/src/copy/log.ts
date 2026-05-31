@@ -73,6 +73,7 @@ export const LOG_COPY = {
   manualPerServingHint:
     '칼로리·영양소는 1인분(1회 제공량) 기준으로 입력해 주세요. 분량은 저장 후 오늘 목록에서 조절해요.',
   todayPortionHint: '오늘 목록에서 − / + 로 분량을 바꿀 수 있어요.',
+  todayEditHint: '항목을 탭하면 위 입력란에서 수정할 수 있어요.',
   portionAdjustError: '분량을 바꾸지 못했어요. 다시 시도해 주세요.',
   protein: '단백질 (g)',
   carb: '탄수화물 (g)',
