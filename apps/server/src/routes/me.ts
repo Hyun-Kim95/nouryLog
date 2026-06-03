@@ -13,6 +13,12 @@ import {
 import { userStatsAggregationMeta } from '../lib/userStatsAggregationMeta.js';
 import { detectNutrition } from '../services/ocrService.js';
 import {
+  scheduleDeleteMealIndex,
+  scheduleIndexMeal,
+  scheduleReindexMealById,
+} from '../services/vector/aiIndexWorker.js';
+import { handleOcrFeedback } from '../services/ai/ocrFeedbackService.js';
+import {
   calculateRecommendationFull,
   computeGoalRanges,
   effectiveMacroGoals,
@@ -1056,6 +1062,7 @@ meRouter.post('/meals', async (req, res) => {
         snackPlacement: snackForCreate,
       },
     });
+    scheduleIndexMeal(meal);
     res.status(201).json({ mealId: meal.id });
     return;
   }
@@ -1093,6 +1100,7 @@ meRouter.post('/meals', async (req, res) => {
       snackPlacement: snackForCreate,
     },
   });
+  scheduleIndexMeal(meal);
   res.status(201).json({ mealId: meal.id });
 });
 
@@ -1259,6 +1267,7 @@ meRouter.put('/meals/:mealId', async (req, res) => {
         ...snackPatchResolved,
       },
     });
+    scheduleReindexMealById(mealId, userId);
     res.json({ ok: true });
     return;
   }
@@ -1339,6 +1348,7 @@ meRouter.put('/meals/:mealId', async (req, res) => {
         ...snackPatchResolved,
       },
     });
+    scheduleReindexMealById(mealId, userId);
     res.json({ ok: true });
     return;
   }
@@ -1376,7 +1386,57 @@ meRouter.put('/meals/:mealId', async (req, res) => {
       ...snackPatchResolved,
     },
   });
+  scheduleReindexMealById(mealId, userId);
   res.json({ ok: true });
+});
+
+meRouter.post('/ocr/feedback', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 피드백을 제출할 수 있습니다.');
+    return;
+  }
+
+  const b = req.body as Record<string, unknown>;
+  const rawOcr = b.rawOcr;
+  const corrected = b.corrected;
+  if (!rawOcr || typeof rawOcr !== 'object' || !corrected || typeof corrected !== 'object') {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'rawOcr와 corrected가 필요합니다.', {
+      field: 'rawOcr',
+    });
+    return;
+  }
+
+  try {
+    const result = await handleOcrFeedback({
+      userId,
+      rawOcr: rawOcr as Record<string, unknown>,
+      corrected: corrected as Record<string, unknown>,
+      mealId: typeof b.mealId === 'string' ? b.mealId : null,
+      imageHash: typeof b.imageHash === 'string' ? b.imageHash : null,
+      confidence: typeof b.confidence === 'number' ? b.confidence : null,
+    });
+    const status = result.created ? 201 : 200;
+    res.status(status).json({
+      id: result.id,
+      changedFields: result.changedFields,
+      indexed: result.indexed,
+    });
+  } catch (e) {
+    const err = e as Error & { code?: string; field?: string };
+    if (err.code === 'VALIDATION_FAILED') {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '입력값을 확인해 주세요.', {
+        field: err.field ?? 'corrected',
+      });
+      return;
+    }
+    if (err.code === 'NOT_FOUND') {
+      sendError(res, 404, ErrorCodes.VALIDATION_FAILED, '기록을 찾을 수 없습니다.');
+      return;
+    }
+    console.error('[ocr/feedback]', err);
+    sendError(res, 500, ErrorCodes.INTERNAL_SERVER_ERROR, '서버 오류가 발생했습니다.');
+  }
 });
 
 meRouter.patch('/meals/:mealId/deactivate', async (req, res) => {
@@ -1392,6 +1452,7 @@ meRouter.patch('/meals/:mealId/deactivate', async (req, res) => {
     return;
   }
   await prisma.meal.update({ where: { id: mealId }, data: softDeactivateFields() });
+  scheduleDeleteMealIndex(mealId, userId);
   res.json({ ok: true });
 });
 
@@ -1476,6 +1537,7 @@ meRouter.post('/nutrition/ocr', async (req, res) => {
       confidence: parsed.confidence,
       missingFields: parsed.missingFields,
       remainingFreeQuota,
+      rawText: parsed.rawText,
     });
     return;
   } catch (e) {

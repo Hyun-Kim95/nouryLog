@@ -39,6 +39,9 @@ model User {
   playSubscriptionPurchases PlaySubscriptionPurchase[]
   socialAccounts SocialAccount[]
   consents UserConsent[]
+  aiQueryLogs AiQueryLog[]
+  ocrFeedbacks OcrFeedback[]
+  aiPeriodReports AiPeriodReport[]
 }
 
 enum SocialProvider {
@@ -73,6 +76,52 @@ enum SnackPlacement {
   BETWEEN_BREAKFAST_LUNCH
   BETWEEN_LUNCH_DINNER
   AFTER_DINNER
+}
+
+model AiQueryLog {
+  id        String   @id @default(cuid())
+  userId    String
+  question  String
+  intent    String
+  usedLlm   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+/// 주간·월간 AI 리포트 캐시 (동일 anchor·식단 revision 재사용)
+model AiPeriodReport {
+  id            String   @id @default(cuid())
+  userId        String
+  kind          String
+  anchor        String
+  mealsRevision String   @default("")
+  payload       Json
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind, anchor])
+  @@index([userId, kind, createdAt])
+}
+
+model OcrFeedback {
+  id            String   @id @default(cuid())
+  userId        String
+  mealId        String?
+  imageHash     String?
+  rawJson       Json
+  correctedJson Json
+  changedFields String[]
+  createdAt     DateTime @default(now())
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meal Meal? @relation(fields: [mealId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, mealId])
 }
 
 model SocialAccount {
@@ -168,6 +217,7 @@ model Meal {
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   foodTemplate FoodTemplate? @relation(fields: [foodTemplateId], references: [id], onDelete: SetNull)
+  ocrFeedbacks OcrFeedback[]
 
   @@index([userId, consumedAt])
   @@index([foodTemplateId])

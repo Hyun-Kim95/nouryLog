@@ -109,8 +109,8 @@ android {
         applicationId 'com.nourylog.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // Play에 올린 versionCode — 업로드마다 1씩 증가 (7 사용됨 → 8)
-        versionCode 8
+        // Play에 올린 versionCode — 업로드마다 1씩 증가 (8 사용됨 → 9)
+        versionCode 9
         versionName "1.0.0"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""

@@ -9,8 +9,9 @@
   "scripts": {
     "dev:server": "npm run dev -w @diet-management/server",
     "dev:admin": "npm run dev -w @diet-management/admin-web",
+    "dev:user-web": "npm run dev -w @diet-management/user-web",
     "dev:mobile": "npm run start -w mobile",
-    "build": "npm run build -w @diet-management/server && npm run build -w @diet-management/admin-web && npm run build -w @diet-management/api-client",
+    "build": "npm run build -w @diet-management/server && npm run build -w @diet-management/admin-web && npm run build -w @diet-management/user-web && npm run build -w @diet-management/api-client",
     "generate:api": "npm run generate -w @diet-management/api-client",
     "db:generate": "npm run prisma:generate -w @diet-management/server",
     "db:migrate": "npm run prisma:migrate -w @diet-management/server",
@@ -32,7 +33,17 @@
     "smoke:dev:t": "node scripts/dev-smoke/phase-t.mjs",
     "smoke:dev:q": "node scripts/dev-smoke/phase-q-admin.mjs",
     "smoke:dev:r": "node scripts/dev-smoke/phase-r-consent.mjs",
-    "smoke:dev:s": "node scripts/dev-smoke/phase-s-social-exchange.mjs"
+    "smoke:dev:s": "node scripts/dev-smoke/phase-s-social-exchange.mjs",
+    "ai:up": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ai-local/ai-up.ps1",
+    "ai:down": "docker compose -f docker-compose.ai.yml down",
+    "ai:pull-models": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ai-local/pull-models.ps1",
+    "ai:smoke": "node scripts/ai-local/smoke-ai-deps.mjs",
+    "ai:smoke:ask": "node scripts/ai-local/smoke-rag-ask.mjs",
+    "ai:smoke:coach": "node scripts/ai-local/smoke-coach-summary.mjs",
+    "ai:smoke:weekly": "node scripts/ai-local/smoke-weekly-report.mjs",
+    "ai:smoke:monthly": "node scripts/ai-local/smoke-monthly-report.mjs",
+    "ai:backfill": "tsx apps/server/scripts/backfill-ai-embeddings.mjs",
+    "ai:seed-kb": "tsx apps/server/scripts/seed-nutrition-kb.mjs"
   },
   "devDependencies": {
     "@google/stitch-sdk": "^0.2.0",

@@ -33,6 +33,7 @@ import {
   type MealRow,
   type TemplateInputMode,
 } from '../api/meals';
+import { postOcrFeedback } from '../api/ocrFeedback';
 import { ensureAccessToken } from '../authSession';
 import { getAccessToken } from '../authStorage';
 import { LabeledField } from '../components/LabeledField';
@@ -101,6 +102,7 @@ type Ent = {
 
 type LastOcrMeta = {
   confidence: number;
+  rawText?: string;
 };
 
 type OcrFieldSnapshot = {
@@ -414,12 +416,33 @@ export function LogScreen() {
         if (editingMealId) {
           await updateMeal(token, editingMealId, body);
         } else {
-          await createMeal(token, body);
+          const created = await createMeal(token, body);
           const fromOcr = lastOcrSnapshot != null;
           const currentFields: OcrFieldSnapshot = { calories, protein, carbohydrate, fat };
           const editedBeforeSave = fromOcr && ocrFieldsEdited(lastOcrSnapshot, currentFields);
           if (fromOcr) {
             track(AnalyticsEvents.ocrCompleted, { edited_before_save: editedBeforeSave });
+          }
+          if (fromOcr && editedBeforeSave && lastOcrSnapshot) {
+            const rawOcr = {
+              calories: Math.round(Number(lastOcrSnapshot.calories)),
+              protein: Math.round(Number(lastOcrSnapshot.protein)),
+              carbohydrate: Math.round(Number(lastOcrSnapshot.carbohydrate)),
+              fat: Math.round(Number(lastOcrSnapshot.fat)),
+              rawText: lastOcrMeta?.rawText,
+            };
+            const corrected = {
+              calories: Math.round(Number(calories)),
+              protein: Math.round(Number(protein)),
+              carbohydrate: Math.round(Number(carbohydrate)),
+              fat: Math.round(Number(fat)),
+            };
+            void postOcrFeedback(token, {
+              rawOcr,
+              corrected,
+              mealId: created.mealId,
+              confidence: lastOcrMeta?.confidence,
+            }).catch(() => undefined);
           }
           track(AnalyticsEvents.mealRecorded, {
             input_mode: fromOcr ? 'ocr' : 'manual',
@@ -427,6 +450,7 @@ export function LogScreen() {
             from_ocr: fromOcr,
           });
           setLastOcrSnapshot(null);
+          setLastOcrMeta(null);
         }
       }
 
@@ -493,12 +517,13 @@ export function LogScreen() {
       confidence: number;
       missingFields: string[];
       remainingFreeQuota: number;
+      rawText?: string;
     }>('/nutrition/ocr', {
       method: 'POST',
       token,
       body: JSON.stringify({ imageBase64 }),
     });
-    setLastOcrMeta({ confidence: res.confidence });
+    setLastOcrMeta({ confidence: res.confidence, rawText: res.rawText });
     setLastOcrSnapshot({
       calories: String(Math.round(res.calories)),
       protein: String(Math.round(res.protein)),
@@ -507,7 +532,6 @@ export function LogScreen() {
     });
     setSelectedTpl(null);
     setEditingMealId(null);
-    setName('');
     setCalories(String(Math.round(res.calories)));
     setProtein(String(Math.round(res.protein)));
     setCarbohydrate(String(Math.round(res.carbohydrate)));

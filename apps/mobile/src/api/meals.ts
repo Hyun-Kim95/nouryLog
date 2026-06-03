@@ -74,8 +74,11 @@ export async function listMeals(
   return apiFetch<{ items: MealRow[]; page: number; size: number; total: number }>(`/meals?${q}`, { token });
 }
 
-export async function createMeal(token: string, body: Record<string, unknown>): Promise<void> {
-  await apiFetch('/meals', { method: 'POST', token, body: JSON.stringify(body) });
+export async function createMeal(
+  token: string,
+  body: Record<string, unknown>,
+): Promise<{ mealId: string }> {
+  return apiFetch<{ mealId: string }>('/meals', { method: 'POST', token, body: JSON.stringify(body) });
 }
 
 export async function updateMeal(token: string, mealId: string, body: Record<string, unknown>): Promise<void> {

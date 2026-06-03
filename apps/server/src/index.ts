@@ -8,7 +8,9 @@ import { traceMiddleware } from './lib/trace.js';
 import { sendError, ErrorCodes } from './lib/errors.js';
 import { publicRouter } from './routes/public.js';
 import { meRouter } from './routes/me.js';
+import { meAiRouter } from './routes/meAi.js';
 import { adminRouter } from './routes/admin.js';
+import { getAiHealthReport } from './services/ai/aiHealthService.js';
 
 const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT ?? '6mb';
 
@@ -25,13 +27,23 @@ app.use(traceMiddleware);
 fs.mkdirSync(uploadDir, { recursive: true });
 app.use('/uploads', express.static(uploadDir));
 
-app.use(publicRouter);
-app.use(meRouter);
-app.use(adminRouter);
-
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'diet-management-api', contract: 'v1.4.0' });
 });
+
+app.get('/health/ai', async (_req, res) => {
+  try {
+    const report = await getAiHealthReport();
+    res.status(report.ready ? 200 : 503).json(report);
+  } catch {
+    res.status(503).json({ enabled: false, ready: false, error: 'ai_health_failed' });
+  }
+});
+
+app.use(publicRouter);
+app.use(meRouter);
+app.use(meAiRouter);
+app.use(adminRouter);
 
 app.use(
   (

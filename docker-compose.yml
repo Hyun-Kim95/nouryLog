@@ -1,9 +1,10 @@
 # 선택: PostgreSQL 사용 시 prisma schema의 provider/url을 postgres로 바꾼 뒤 사용.
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     ports:
-      - "5432:5432"
+      # Windows 로컬 PostgreSQL(5432/5433 등) 충돌 회피 — 호스트 15432 (ai-local-demo.md)
+      - "15432:5432"
     environment:
       POSTGRES_USER: diet
       POSTGRES_PASSWORD: diet

@@ -69,7 +69,12 @@ async function fetchGoogleVisionText(input: OcrInput): Promise<string> {
   return text;
 }
 
-export async function detectNutrition(input: OcrInput): Promise<ParsedNutrition> {
+export type DetectNutritionResult = ParsedNutrition & {
+  /** Vision OCR 원문(최대 2KB). 피드백·RAG 인덱싱용 */
+  rawText: string;
+};
+
+export async function detectNutrition(input: OcrInput): Promise<DetectNutritionResult> {
   if (OCR_PROVIDER !== 'google_vision') {
     throw new Error('unsupported_ocr_provider');
   }
@@ -78,5 +83,5 @@ export async function detectNutrition(input: OcrInput): Promise<ParsedNutrition>
   if (parsed.missingFields.length === 4) {
     throw new Error('ocr_parse_failed');
   }
-  return parsed;
+  return { ...parsed, rawText: text.slice(0, 2000) };
 }

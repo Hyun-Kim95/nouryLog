@@ -15,3 +15,9 @@ apps/server/prisma/*.db-journal
 .expo/
 apps/mobile/.expo/
 scripts/stitch/out/
+
+# Store / marketing mockups (large binaries, not source)
+image/
+
+# Android keystores
+*.keystore

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "7fd99777-66e5-4467-a4c7-bff770477bac"
+      }
+    },
+    "android": {
+      "package": "com.khyun9512.dietmanagement"
+    }
+  }
+}

@@ -1,0 +1,41 @@
+# AI 로컬 데모 (Tier A): PostgreSQL(pgvector) + Ollama
+# API 서버는 호스트에서 npm run dev:server 로 실행 (apps/server/.env.ai.example 참고)
+#
+#   npm run ai:up
+#   npm run ai:pull-models
+#   npm run db:migrate
+#   npm run dev:server
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: diet
+      POSTGRES_PASSWORD: diet
+      POSTGRES_DB: diet
+    volumes:
+      - ai_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U diet -d diet"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  ai_pg_data:
+  ollama_data:

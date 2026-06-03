@@ -11,6 +11,7 @@
 | Environment | production (`047e6df9-6815-4a7f-888c-966dca7caeec`) |
 | api-server URL | https://api-server-production-52bc.up.railway.app |
 | admin-web URL | https://admin-web-production-6533.up.railway.app |
+| user-web (AI) | 신규 서비스 — `docs/release/user-web-railway-deploy.md` |
 
 CLI 링크:
 

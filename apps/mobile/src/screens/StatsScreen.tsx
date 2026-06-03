@@ -11,6 +11,7 @@ import type { RootStackParamList } from '../navigation';
 import { STATS_COPY } from '../copy/stats';
 import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { fetchStats, type StatsResponse } from '../api/stats';
+import { MonthlyPatternCard } from '../components/ai/MonthlyPatternCard';
 import { isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
 import { useFocusReload } from '../hooks/useFocusReload';
@@ -32,6 +33,7 @@ export function StatsScreen() {
   const [data, setData] = useState<StatsResponse | null>(null);
   const [goals, setGoals] = useState<Awaited<ReturnType<typeof fetchTodayGoals>> | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
 
   const load = useCallback(
     async ({ silent }: { silent: boolean }) => {
@@ -40,6 +42,7 @@ export function StatsScreen() {
       try {
         const token = await ensureAccessToken();
         if (!token) return;
+        setToken(token);
         const anchor = shiftAnchor(todayAnchorKst(), range, periodOffset);
         const [statsR, goalsR] = await Promise.allSettled([
           fetchStats(token, range, anchor),
@@ -98,6 +101,7 @@ export function StatsScreen() {
 
   const periodLabel = data?.period.label ?? '…';
   const canGoNext = periodOffset < 0;
+  const monthAnchor = shiftAnchor(todayAnchorKst(), 'month', periodOffset);
 
   const bySlotRows =
     data?.byMealSlot &&
@@ -203,6 +207,10 @@ export function StatsScreen() {
           <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{STATS_COPY.empty}</Text>
           <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>{STATS_COPY.emptyCta}</Text>
         </Card>
+      ) : null}
+
+      {range === 'month' && token && !loading ? (
+        <MonthlyPatternCard token={token} anchor={monthAnchor} />
       ) : null}
     </>
   );

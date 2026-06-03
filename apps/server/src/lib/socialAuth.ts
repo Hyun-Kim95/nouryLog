@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import type { SocialProvider } from '@prisma/client';
 import { OAUTH_STATE_SECRET } from './socialConfig.js';
 
-type ProviderProfile = {
+export type ProviderProfile = {
   providerUserId: string;
   email: string | null;
   name: string | null;
@@ -137,6 +137,43 @@ export async function fetchProviderProfileFromTokens(
 
 export function createConflictToken(payload: Omit<ConflictPayload, 'typ'>): string {
   return jwt.sign({ typ: 'social_conflict', ...payload }, OAUTH_STATE_SECRET, { expiresIn: CONFLICT_TTL_SECONDS });
+}
+
+/** 네이버 웹 OAuth authorization code → access token */
+export async function exchangeNaverAuthorizationCode(
+  code: string,
+  redirectUri: string,
+): Promise<string | null> {
+  const clientId = (process.env.NAVER_CLIENT_ID ?? '').trim();
+  const clientSecret = (process.env.NAVER_CLIENT_SECRET ?? '').trim();
+  if (!clientId || !clientSecret) return null;
+
+  const params = new URLSearchParams({
+    grant_type: 'authorization_code',
+    client_id: clientId,
+    client_secret: clientSecret,
+    code: code.trim(),
+    redirect_uri: redirectUri.trim(),
+  });
+  const res = await fetch(`https://nid.naver.com/oauth2.0/token?${params.toString()}`, {
+    method: 'GET',
+  });
+  const raw = await res.text();
+  let json: { access_token?: string; error?: string; error_description?: string };
+  try {
+    json = JSON.parse(raw) as typeof json;
+  } catch {
+    return null;
+  }
+  if (!res.ok || !json.access_token) {
+    if (process.env.SOCIAL_OAUTH_DEBUG === '1' || process.env.NODE_ENV !== 'production') {
+      console.warn(
+        `[social-oauth] naver token exchange failed status=${res.status} error=${json.error} snippet=${raw.slice(0, 300)}`,
+      );
+    }
+    return null;
+  }
+  return json.access_token;
 }
 
 export function verifyConflictToken(token: string): ConflictPayload | null {

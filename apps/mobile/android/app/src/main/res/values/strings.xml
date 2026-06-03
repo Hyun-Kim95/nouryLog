@@ -1,0 +1,6 @@
+<resources>
+  <string name="app_name">nouryLog</string>
+  <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
+  <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
+  <string name="kakao_app_key">a5b74c14f09573c6cd9ed171228a90bf</string>
+</resources>

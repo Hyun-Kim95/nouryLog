@@ -24,9 +24,32 @@ npm install
 npm run dev:server
 npm run dev:admin
 npm run dev:mobile
+npm run dev:user-web
 ```
 
 모바일 에뮬레이터 테스트 시 `apps/mobile/.env`의 `EXPO_PUBLIC_API_URL`을 환경에 맞게 사용합니다.
+
+## AI 리포트 (user-web 미리보기 + 모바일)
+
+| 기능 | user-web | 모바일 |
+|------|----------|--------|
+| 주간 AI 식단 리포트 | `/ai/weekly` | AI 코치 |
+| 월간 영양 패턴 | `/ai/monthly` | 통계 · 월 |
+| AI 코치 챗 | `/ai/coach` | AI 코치 |
+
+로컬: `dev:server` + `dev:user-web` (5175). 자동 로그인 `http://localhost:5175/demo?auto=1` — 상단 네비에 **「시연」 메뉴는 없음** (주간·월간·코치만).  
+`VITE_DEV_API_TARGET=http://localhost:3002` 등 서버 포트 맞출 것. 상세: [`docs/agent/ai-local-demo.md`](docs/agent/ai-local-demo.md).
+
+### user-web 로그인 env (`apps/user-web/.env.local`)
+
+| 변수 | 용도 |
+|------|------|
+| `VITE_DEMO_EMAIL` / `VITE_DEMO_PASSWORD` | 데모(시드) 로그인 |
+| `VITE_GOOGLE_CLIENT_ID` | Google SNS |
+| `VITE_KAKAO_JAVASCRIPT_KEY` | Kakao JS SDK |
+| `VITE_NAVER_CLIENT_ID` + `VITE_NAVER_REDIRECT_URI` | Naver 웹 OAuth (`/demo/oauth/naver`) |
+
+서버: `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` (네이버 code 교환).
 
 ## SNS 로그인 설정 (모바일 — 네이티브 SDK 방식)
 

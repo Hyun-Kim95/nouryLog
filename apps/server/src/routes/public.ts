@@ -7,9 +7,11 @@ import { signAccess, signRefresh, verifyToken } from '../lib/jwt.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
 import {
   createConflictToken,
+  exchangeNaverAuthorizationCode,
   fetchProviderProfileFromTokens,
   parseSocialProvider,
   verifyConflictToken,
+  type ProviderProfile,
 } from '../lib/socialAuth.js';
 import { publishedNoticeWhere } from '../lib/noticePublish.js';
 import { renderPolicyHtmlPage } from '../lib/policyHtml.js';
@@ -216,51 +218,11 @@ publicRouter.post('/auth/refresh', async (req, res) => {
   }
 });
 
-/**
- * 네이티브 SDK(naver/kakao/google) 로그인 결과 토큰 검증 엔드포인트.
- * 클라이언트가 SDK에서 받은 access token(또는 id_token)을 전달하면 서버가 provider 프로필을 확인해
- * 우리 서비스의 access/refresh 토큰을 JSON으로 돌려준다.
- */
-publicRouter.post('/auth/social/:provider/exchange', async (req, res) => {
-  const provider = parseSocialProvider(String(req.params.provider ?? ''));
-  if (!provider) {
-    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'provider가 유효하지 않습니다.');
-    return;
-  }
-
-  const body = (req.body ?? {}) as {
-    providerAccessToken?: unknown;
-    idToken?: unknown;
-    source?: unknown;
-  };
-  const providerAccessToken = typeof body.providerAccessToken === 'string' ? body.providerAccessToken.trim() : '';
-  const idToken = typeof body.idToken === 'string' ? body.idToken.trim() : '';
-  if (!providerAccessToken && !idToken) {
-    sendError(
-      res,
-      422,
-      ErrorCodes.VALIDATION_FAILED,
-      'providerAccessToken 또는 idToken이 필요합니다.',
-    );
-    return;
-  }
-
-  let profile;
-  try {
-    profile = await fetchProviderProfileFromTokens(provider, {
-      accessToken: providerAccessToken || undefined,
-      idToken: idToken || undefined,
-    });
-  } catch (e) {
-    console.error('[auth/social/exchange] provider profile error', { provider, err: e });
-    sendError(res, 502, ErrorCodes.OAUTH_PROVIDER_ERROR, 'SNS 토큰 검증에 실패했습니다.');
-    return;
-  }
-  if (!profile) {
-    sendError(res, 401, ErrorCodes.OAUTH_PROVIDER_ERROR, 'SNS 사용자 정보를 확인할 수 없습니다.');
-    return;
-  }
-
+async function respondSocialProfileLogin(
+  res: import('express').Response,
+  provider: import('@prisma/client').SocialProvider,
+  profile: ProviderProfile,
+): Promise<void> {
   try {
     const linked = await prisma.socialAccount.findUnique({
       where: { provider_providerUserId: { provider, providerUserId: profile.providerUserId } },
@@ -324,13 +286,94 @@ publicRouter.post('/auth/social/:provider/exchange', async (req, res) => {
       requiresConsent: true,
     });
   } catch (e) {
-    console.error('[auth/social/exchange] unhandled', { provider, err: e });
+    console.error('[auth/social] unhandled', { provider, err: e });
     const msg =
       e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'
         ? '이미 사용 중인 계정 정보입니다. 기존 계정 연결을 선택해 주세요.'
         : '계정을 만들 수 없습니다. 잠시 후 다시 시도해 주세요.';
     sendError(res, 500, ErrorCodes.OAUTH_PROVIDER_ERROR, msg);
   }
+}
+
+/**
+ * 네이버 웹 OAuth — authorization code를 서버에서 access token으로 교환 후 로그인 처리.
+ */
+publicRouter.post('/auth/social/naver/code', async (req, res) => {
+  const code = String((req.body as { code?: string })?.code ?? '').trim();
+  const redirectUri = String((req.body as { redirectUri?: string })?.redirectUri ?? '').trim();
+  if (!code || !redirectUri) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'code와 redirectUri가 필요합니다.');
+    return;
+  }
+
+  const accessToken = await exchangeNaverAuthorizationCode(code, redirectUri);
+  if (!accessToken) {
+    sendError(res, 502, ErrorCodes.OAUTH_PROVIDER_ERROR, '네이버 토큰 교환에 실패했습니다.');
+    return;
+  }
+
+  let profile: ProviderProfile | null;
+  try {
+    profile = await fetchProviderProfileFromTokens('NAVER', { accessToken });
+  } catch (e) {
+    console.error('[auth/social/naver/code] profile error', { err: e });
+    sendError(res, 502, ErrorCodes.OAUTH_PROVIDER_ERROR, 'SNS 토큰 검증에 실패했습니다.');
+    return;
+  }
+  if (!profile) {
+    sendError(res, 401, ErrorCodes.OAUTH_PROVIDER_ERROR, 'SNS 사용자 정보를 확인할 수 없습니다.');
+    return;
+  }
+
+  await respondSocialProfileLogin(res, 'NAVER', profile);
+});
+
+/**
+ * 네이티브 SDK(naver/kakao/google) 로그인 결과 토큰 검증 엔드포인트.
+ * 클라이언트가 SDK에서 받은 access token(또는 id_token)을 전달하면 서버가 provider 프로필을 확인해
+ * 우리 서비스의 access/refresh 토큰을 JSON으로 돌려준다.
+ */
+publicRouter.post('/auth/social/:provider/exchange', async (req, res) => {
+  const provider = parseSocialProvider(String(req.params.provider ?? ''));
+  if (!provider) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'provider가 유효하지 않습니다.');
+    return;
+  }
+
+  const body = (req.body ?? {}) as {
+    providerAccessToken?: unknown;
+    idToken?: unknown;
+    source?: unknown;
+  };
+  const providerAccessToken = typeof body.providerAccessToken === 'string' ? body.providerAccessToken.trim() : '';
+  const idToken = typeof body.idToken === 'string' ? body.idToken.trim() : '';
+  if (!providerAccessToken && !idToken) {
+    sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_FAILED,
+      'providerAccessToken 또는 idToken이 필요합니다.',
+    );
+    return;
+  }
+
+  let profile;
+  try {
+    profile = await fetchProviderProfileFromTokens(provider, {
+      accessToken: providerAccessToken || undefined,
+      idToken: idToken || undefined,
+    });
+  } catch (e) {
+    console.error('[auth/social/exchange] provider profile error', { provider, err: e });
+    sendError(res, 502, ErrorCodes.OAUTH_PROVIDER_ERROR, 'SNS 토큰 검증에 실패했습니다.');
+    return;
+  }
+  if (!profile) {
+    sendError(res, 401, ErrorCodes.OAUTH_PROVIDER_ERROR, 'SNS 사용자 정보를 확인할 수 없습니다.');
+    return;
+  }
+
+  await respondSocialProfileLogin(res, provider, profile);
 });
 
 publicRouter.post('/auth/social/conflict/resolve', async (req, res) => {
