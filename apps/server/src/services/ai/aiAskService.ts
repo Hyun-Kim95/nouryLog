@@ -139,28 +139,34 @@ export async function handleAiAsk(userId: string, input: AiAskInput) {
     };
   }
 
-  const agg = await aggregateMealsForAiPeriod(userId, classified.periodKind, anchorParsed.anchor);
-  const { answer, llm } = await narrateAskAnswer(question, classified, agg);
-  const meta = userStatsAggregationMeta(new Date());
+  if (classified.intent === 'stats_query') {
+    const agg = await aggregateMealsForAiPeriod(userId, classified.periodKind, anchorParsed.anchor);
+    const { answer, llm } = await narrateAskAnswer(question, classified, agg);
+    const meta = userStatsAggregationMeta(new Date());
 
-  await prisma.aiQueryLog.create({
-    data: {
-      userId,
-      question,
+    await prisma.aiQueryLog.create({
+      data: {
+        userId,
+        question,
+        intent: classified.intent,
+        usedLlm: llm.used,
+      },
+    });
+
+    return {
+      answer,
       intent: classified.intent,
-      usedLlm: llm.used,
-    },
-  });
+      citations: agg.citations,
+      computed: agg.computed,
+      isStale: meta.isStale,
+      staleHours: meta.staleHours,
+      aggregatedAt: meta.aggregatedAt.toISOString(),
+      llm,
+      disclaimer: DISCLAIMER,
+    };
+  }
 
-  return {
-    answer,
-    intent: classified.intent,
-    citations: agg.citations,
-    computed: agg.computed,
-    isStale: meta.isStale,
-    staleHours: meta.staleHours,
-    aggregatedAt: meta.aggregatedAt.toISOString(),
-    llm,
-    disclaimer: DISCLAIMER,
-  };
+  const err = new Error('unhandled_intent');
+  (err as Error & { code: string }).code = 'AI_LLM_UNAVAILABLE';
+  throw err;
 }
