@@ -44,7 +44,7 @@ npm run dev:user-web
 
 | 변수 | 용도 |
 |------|------|
-| `VITE_DEMO_EMAIL` / `VITE_DEMO_PASSWORD` | 데모(시드) 로그인 |
+| `VITE_DEMO_EMAIL` / `VITE_DEMO_PASSWORD` | 데모 로그인 (`user@example.com` / `user123` — `npm run seed:demo-user`) |
 | `VITE_GOOGLE_CLIENT_ID` | Google SNS |
 | `VITE_KAKAO_JAVASCRIPT_KEY` | Kakao JS SDK |
 | `VITE_NAVER_CLIENT_ID` + `VITE_NAVER_REDIRECT_URI` | Naver 웹 OAuth (`/demo/oauth/naver`) |

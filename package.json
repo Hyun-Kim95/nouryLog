@@ -43,7 +43,8 @@
     "ai:smoke:weekly": "node scripts/ai-local/smoke-weekly-report.mjs",
     "ai:smoke:monthly": "node scripts/ai-local/smoke-monthly-report.mjs",
     "ai:backfill": "tsx apps/server/scripts/backfill-ai-embeddings.mjs",
-    "ai:seed-kb": "tsx apps/server/scripts/seed-nutrition-kb.mjs"
+    "ai:seed-kb": "tsx apps/server/scripts/seed-nutrition-kb.mjs",
+    "seed:demo-user": "tsx apps/server/scripts/seed-demo-user.ts"
   },
   "devDependencies": {
     "@google/stitch-sdk": "^0.2.0",

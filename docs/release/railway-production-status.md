@@ -21,7 +21,7 @@
 | `AI_ENABLED` / `LLM_PROVIDER=template` (nouryLog-api) | Railway 변수 설정·재배포 완료 |
 | `nutrition_kb` seed (9 md) | 프로덕션 DB `ai:seed-kb` **9/9 indexed** |
 | Google OAuth | **사용자** — JS 원본에 `https://user-web-production-d88d.up.railway.app` 추가 |
-| 프로덕션 데모 계정 | `user@example.com` 로그인 실패 시 DB 시드·비밀번호 확인 |
+| 프로덕션 데모 계정 | `npm run seed:demo-user` + `VITE_DEMO_*` = `user@example.com` / `user123` |
 
 CLI 링크:
 

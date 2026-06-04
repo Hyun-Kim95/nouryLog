@@ -41,21 +41,38 @@ Google Cloud Console에 user-web Railway URL을 **승인된 JavaScript 원본** 
 - https://user-web-production-d88d.up.railway.app
 - 시연 로그인: `/demo` 또는 `/demo?auto=1` (Railway 변수 `VITE_DEMO_*` 설정 시)
 
-## 프로덕션 KB 인덱스 (api-server 배포·`AI_ENABLED=1` 후 1회)
+## 프로덕션 데모 계정 (user-web 시연)
 
-로컬에서 Postgres **public** URL로 실행 (내부 `postgres.railway.internal` 은 로컬에서 불가):
+| 항목 | 값 |
+|------|-----|
+| 이메일 | `user@example.com` |
+| 비밀번호 | `user123` |
+| Railway (빌드타임) | `VITE_DEMO_EMAIL`, `VITE_DEMO_PASSWORD` — 위와 **동일**해야 `/demo?auto=1` 동작 |
+| SSOT 코드 | [`apps/server/prisma/seedDemoUser.ts`](../../apps/server/prisma/seedDemoUser.ts) |
+
+프로덕션 DB에 계정·42일 식단 시드 (비밀번호 재설정·비활성 복구 포함):
 
 ```powershell
 cd d:\cursor\dietManagement
-# DATABASE_PUBLIC_URL 은 Railway → Postgres → Variables 에서 복사
+npm run db:generate
+# Railway → Postgres → Variables → DATABASE_PUBLIC_URL
+$env:DATABASE_URL = "<DATABASE_PUBLIC_URL>"
+npm run seed:demo-user
+```
+
+- 기본: 기존 `user@example.com` 이 있어도 **비밀번호를 `user123`으로 맞춤** (`SEED_DEMO_RESET_PASSWORD=0` 이면 비밀번호 유지).
+- 식단: `__nourylog_demo_seed__` 노트 기록만 삭제 후 재생성(다른 meal은 유지).
+
+## 프로덕션 KB 인덱스 (api-server 배포·`AI_ENABLED=1` 후 1회)
+
+```powershell
 $env:DATABASE_URL = "<DATABASE_PUBLIC_URL>"
 $env:AI_ENABLED = "1"
 npm run ai:seed-kb
 ```
 
-또는 `npm install` 후 `npx tsx apps/server/scripts/seed-nutrition-kb.mjs` 동일 env.
+## 로컬
 
-## 로컬 시드 계정
-
-- `user@example.com` / `user123` (`prisma/seed.ts`)
-- `apps/user-web/.env.local`: `VITE_DEV_EMAIL`, `VITE_DEV_PASSWORD`
+- 전체 시드: `npm run prisma:seed -w @diet-management/server`
+- 데모만: `npm run seed:demo-user`
+- `apps/user-web/.env.local`: `VITE_DEMO_EMAIL` / `VITE_DEMO_PASSWORD` (또는 `VITE_DEV_*`)
