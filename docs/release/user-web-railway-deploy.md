@@ -6,7 +6,7 @@
 |------|-----|
 | 서비스명(권장) | `user-web` |
 | 루트 디렉터리 | 저장소 루트 (`dietManagement`) |
-| Build | `npm ci && npm run build -w @diet-management/user-web` |
+| Build | `npm run build -w @diet-management/user-web` (의존성은 Railpack install — **빌드에 `npm ci` 중복 금지**, EBUSY) |
 | Start | `npm run preview -w @diet-management/user-web -- --host 0.0.0.0 --port $PORT` |
 | Config as Code (권장) | 서비스 설정 → **Config file path**: `/apps/user-web/railway.toml` ([`apps/user-web/railway.toml`](../../apps/user-web/railway.toml)) |
 
