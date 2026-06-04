@@ -8,6 +8,7 @@
 | 루트 디렉터리 | 저장소 루트 (`dietManagement`) |
 | Build | `npm ci && npm run build -w @diet-management/user-web` |
 | Start | `npm run preview -w @diet-management/user-web -- --host 0.0.0.0 --port $PORT` |
+| Config as Code (권장) | 서비스 설정 → **Config file path**: `/apps/user-web/railway.toml` ([`apps/user-web/railway.toml`](../../apps/user-web/railway.toml)) |
 
 ## 환경 변수 (user-web)
 
