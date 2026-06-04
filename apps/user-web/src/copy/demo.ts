@@ -28,6 +28,7 @@ export const DEMO_COPY = {
   readmeHint: '자동 로그인',
   emptyWeekTitle: '이번 주 식단 기록이 없어요',
   emptyWeekHint: '데모 DB에 시드 데이터가 있는지 확인해 주세요.',
+  unknownIntentNote: '식단·영양·내 기록과 관련된 질문만 답할 수 있어요. 아래 예시를 참고해 주세요.',
   envSetupHint:
     'apps/user-web/.env.local에 VITE_DEMO_EMAIL, VITE_DEMO_PASSWORD (또는 VITE_DEV_*)를 설정하세요.',
 } as const;

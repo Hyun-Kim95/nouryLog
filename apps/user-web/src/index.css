@@ -816,6 +816,12 @@ body {
   margin-bottom: var(--ds-space-3);
 }
 
+.chat-compose-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--ds-space-3);
+}
+
 .example-chips {
   display: flex;
   flex-wrap: wrap;
@@ -1144,12 +1150,6 @@ body {
 
 .demo-rag-list li {
   margin-bottom: var(--ds-space-2);
-}
-
-.demo-footer {
-  text-align: center;
-  padding: var(--ds-space-4) var(--ds-space-lg) var(--ds-space-xxl);
-  font-size: var(--ds-text-xs);
 }
 
 .demo-rag-panel {

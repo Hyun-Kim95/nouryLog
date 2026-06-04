@@ -5,6 +5,7 @@ import type { AiRagCitation } from './aiRagCitations.js';
 import { ragContextChunks } from './aiRagCitations.js';
 import type { VectorSearchHit } from '../vector/vectorStore.js';
 import { DISCLAIMER } from './aiTemplateAnswer.js';
+import { detectKnowledgeTopic } from './aiKnowledgeTopic.js';
 
 export function buildTemplateSemanticAnswer(question: string, citations: AiRagCitation[]): string {
   if (citations.length === 0) {
@@ -14,9 +15,19 @@ export function buildTemplateSemanticAnswer(question: string, citations: AiRagCi
   return `질문「${question}」과 관련해 아래 기록을 찾았습니다.\n\n${lines.join('\n')}\n\n자세한 영양 수치는 각 기록을 참고해 주세요. ${DISCLAIMER}`;
 }
 
-export function buildTemplateKnowledgeAnswer(question: string, citations: AiRagCitation[]): string {
+export function buildTemplateKnowledgeAnswer(
+  question: string,
+  citations: AiRagCitation[],
+  hits: VectorSearchHit[] = [],
+): string {
   if (citations.length === 0) {
-    return `영양 지식 문서에서 관련 내용을 찾지 못했습니다. 구체적인 기간·섭취 질문은 "이번 주 단백질 섭취 어때?"처럼 물어보실 수 있습니다. ${DISCLAIMER}`;
+    const topic = detectKnowledgeTopic(question);
+    const topicHint = topic ? `${topic} 관련 ` : '';
+    return `${topicHint}영양 지식 문서에서 관련 내용을 찾지 못았습니다. 구체적인 기간·섭취 질문은 "이번 주 단백질 섭취 어때?"처럼 물어보실 수 있습니다. ${DISCLAIMER}`;
+  }
+  if (hits.length === 1) {
+    const excerpt = hits[0]!.content.replace(/^#\s+.+$/m, '').trim().slice(0, 520);
+    return `질문「${question}」에 대한 참고 정보입니다.\n\n${excerpt}\n\n개인 섭취량은 별도로 기록·집계 질문을 이용해 주세요. ${DISCLAIMER}`;
   }
   const lines = citations.map((c) => `- ${c.label}`);
   return `질문「${question}」에 대해 참고할 수 있는 일반 영양 정보입니다.\n\n${lines.join('\n')}\n\n개인 섭취량은 별도로 기록·집계 질문을 이용해 주세요. ${DISCLAIMER}`;
@@ -32,7 +43,7 @@ export async function narrateRagAnswer(params: {
   const template =
     params.intent === 'semantic_meal'
       ? buildTemplateSemanticAnswer(params.question, params.citations)
-      : buildTemplateKnowledgeAnswer(params.question, params.citations);
+      : buildTemplateKnowledgeAnswer(params.question, params.citations, params.hits);
 
   if (!isAiEnabled() || params.citations.length === 0) {
     return { answer: template, llm: llmBase };

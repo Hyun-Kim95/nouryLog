@@ -16,7 +16,8 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (!token) {
     const next = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/demo?auto=1&next=${next}`} replace />;
+    // auto=1은 README /demo?auto=1 전용. 로그아웃·세션 만료 시에는 로그인 화면만 표시.
+    return <Navigate to={`/demo?next=${next}`} replace />;
   }
 
   return <>{children}</>;

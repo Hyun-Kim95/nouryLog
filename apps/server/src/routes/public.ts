@@ -183,21 +183,26 @@ publicRouter.post('/auth/signup', async (req, res) => {
 publicRouter.post('/auth/login', async (req, res) => {
   const email = String((req.body as { email?: string })?.email ?? '').trim().toLowerCase();
   const password = String((req.body as { password?: string })?.password ?? '');
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    sendError(res, 401, ErrorCodes.AUTH_UNAUTHORIZED, '이메일 또는 비밀번호가 올바르지 않습니다.');
-    return;
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+      sendError(res, 401, ErrorCodes.AUTH_UNAUTHORIZED, '이메일 또는 비밀번호가 올바르지 않습니다.');
+      return;
+    }
+    if (!user.active) {
+      sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '비활성화된 계정입니다.');
+      return;
+    }
+    const role = user.role === 'ADMIN' ? 'ADMIN' : 'USER';
+    await recordLogin(user.id);
+    res.json({
+      accessToken: signAccess(user.id, role),
+      refreshToken: signRefresh(user.id, role),
+    });
+  } catch (e) {
+    console.error('[auth/login]', e);
+    sendError(res, 503, ErrorCodes.DEPENDENCY_UNAVAILABLE, '로그인 처리 중 서버 오류가 발생했습니다. DB 연결을 확인해 주세요.');
   }
-  if (!user.active) {
-    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '비활성화된 계정입니다.');
-    return;
-  }
-  const role = user.role === 'ADMIN' ? 'ADMIN' : 'USER';
-  await recordLogin(user.id);
-  res.json({
-    accessToken: signAccess(user.id, role),
-    refreshToken: signRefresh(user.id, role),
-  });
 });
 
 publicRouter.post('/auth/refresh', async (req, res) => {

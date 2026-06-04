@@ -44,6 +44,8 @@ export const AI_COPY = {
   intentStats: '기간 집계',
   intentSemantic: '식단 검색',
   intentKnowledge: '영양 지식',
+  intentUnknown: '범위 밖 질문',
+  unknownIntentNote: '식단·영양·내 기록과 관련된 질문만 답할 수 있어요. 아래 예시를 참고해 주세요.',
   answerIntent: (label: string) => `분석 유형: ${label}`,
   answerNoLlm: '검색·집계 기준으로 답변했어요 (LLM 미사용).',
   answerNoMeals: '해당 기간 식단 기록이 없습니다. 기록을 추가해 주세요.',
@@ -81,5 +83,6 @@ export function aiIntentLabel(intent: string): string | null {
   if (intent === 'stats_query') return AI_COPY.intentStats;
   if (intent === 'semantic_meal') return AI_COPY.intentSemantic;
   if (intent === 'knowledge_query') return AI_COPY.intentKnowledge;
+  if (intent === 'unknown') return AI_COPY.intentUnknown;
   return null;
 }

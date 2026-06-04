@@ -126,7 +126,9 @@ export function AiChatSection({
 
       {result ? (
         <View style={{ gap: t.spacing.sm }}>
-          {aiIntentLabel(result.intent) ? (
+          {result.intent === 'unknown' ? (
+            <Banner variant="info">{AI_COPY.unknownIntentNote}</Banner>
+          ) : aiIntentLabel(result.intent) ? (
             <Banner variant="info">{AI_COPY.answerIntent(aiIntentLabel(result.intent)!)}</Banner>
           ) : null}
           {!result.llm.used ? <Banner variant="info">{AI_COPY.answerNoLlm}</Banner> : null}

@@ -86,6 +86,7 @@ npm run ai:backfill   # tsx — .env 로드
 npm run ai:seed-kb
 ```
 
+- **nutrition_kb** md 9개 (`apps/server/data/nutrition-kb/`) — 파일 추가·수정 후 위 `ai:seed-kb` 재실행
 - meal 저장·수정 시 비동기 재인덱싱 (`POST/PUT /meals`)
 - OCR 수정: 모바일 `POST /me/ocr/feedback` (저장 후 diff 있을 때)
 

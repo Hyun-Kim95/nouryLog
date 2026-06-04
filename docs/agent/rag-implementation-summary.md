@@ -5,6 +5,7 @@
 - **pgvector 실사용**: `embeddingService`, `vectorStore`, `aiIndexWorker` — upsert·cosine 검색
 - **`POST /me/ai/ask`**: `semantic_meal`, `knowledge_query` 분기 + `aiRagNarrative` / citation 확장
 - **인덱싱**: meal `POST/PUT` 비동기, `PATCH deactivate` 시 벡터 삭제, `npm run ai:backfill` / `ai:seed-kb`
+- **nutrition_kb** (9 md): `protein-basics`, `high-protein-foods`, `calorie-basics`, `fat-basics`, `fiber-basics`, `carb-basics`, `hydration`, `balanced-meal`, `meal-logging-basics` — 신규·수정 md 반영 시 **`npm run ai:seed-kb` 재실행**
 - **`POST /me/ocr/feedback`**: `OcrFeedback` 테이블, `ocr_raw` / `ocr_corrections` 임베딩
 - **`POST /nutrition/ocr`**: 응답에 `rawText` (최대 2KB)
 - **모바일**: OCR 저장 후 diff 시 피드백 fire-and-forget

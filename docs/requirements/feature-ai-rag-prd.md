@@ -178,7 +178,10 @@ POST /me/ai/ask
 - LLM 타임아웃: **30초**, 초과 시 템플릿 fallback
 - **과금**: 현행 무료 출시 — AI 호출 **결제 게이트 없음** (`402`/`PAYMENT_REQUIRED` 미사용)
 - 면책(고정): “본 답변은 **추정 권장값·일반 정보**이며, 의료 진단·치료·처방을 대체하지 않습니다.” (recommendation v14 톤)
-- `knowledge_query`/`semantic_meal` MVP 요청 시 → `intent: unknown` + 2차 안내 (404/503 아님)
+- **무관 질문**(식단·영양·내 기록 신호 없음) → `intent: unknown` + 고정 안내 (HTTP 200). `knowledge_query`/`semantic_meal`은 **키워드 매칭 시 허용**(구현됨)
+- **식단 기록 방법**(예: 「식단 기록을 어떻게 시작하면 좋을까?」) → `knowledge_query` + `meal-logging-basics` KB (코치 칩 `intentHint`와 정합)
+- **영양 개념 질문**(기간 신호 없이 「탄수화물은 왜 필요한가요?」 등) → `knowledge_query` (집계 `stats_query`와 분리)
+- **영양 KB corpus** (`apps/server/data/nutrition-kb/`): `protein-basics`, `high-protein-foods`, `calorie-basics`, `fat-basics`, `fiber-basics`, `carb-basics`, `hydration`, `balanced-meal`, `meal-logging-basics` — **md 추가·수정 후 `npm run ai:seed-kb` 필수**
 
 ### 7.2 주간 리포트 (`GET /me/ai/reports/weekly`)
 
@@ -275,7 +278,7 @@ POST /me/ai/ask
 | `proteinGoalG`/`calorieGoalKcal` 미설정 | **200**, `goalComparison: null` | 목표 없이 **섭취만** 설명, 프로필 설정 CTA(선택) |
 | LLM 타임아웃·연결 실패 | **200**, `llm.used=false`, 템플릿 `answer` | **info** 배지 “집계 기준 답변” + `computed`·citation **동일 표시** |
 | LLM+템플릿 모두 불가 | 503 `AI_LLM_UNAVAILABLE` | 오류 + 재시도 |
-| `intent: unknown`·2차 intent(MVP) | **200** | 예시 질문 칩 + “아직 지원하지 않는 질문” 안내 |
+| `intent: unknown`(식단·영양·기록 무관) | **200** | 고정 안내 + 예시 질문 칩 |
 | `isStale=true` | **200** | stats와 **동일** 지연 배너 + `aggregatedAt` 표시 |
 | citation `mealId`가 **비활성화됨** | — | 카드는 유지, 탭 시 “삭제된 기록” **info** (상세 이동 안 함) |
 | LLM이 숫자를 바꿔 출력 | — | 서버 **사후 검증**: `answer` 내 수치는 `computed`와 불일치 시 **템플릿으로 대체** |

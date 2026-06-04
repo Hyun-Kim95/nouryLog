@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth';
 import { DemoModeBanner } from './components/auth/DemoModeBanner';
 import { useTheme } from './theme';
@@ -13,6 +13,12 @@ const NAV = [
 export function Layout() {
   const { token, logout } = useAuth();
   const { dark, toggle } = useTheme();
+  const nav = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    nav('/demo', { replace: true });
+  };
 
   return (
     <div className="app-shell">
@@ -26,7 +32,7 @@ export function Layout() {
               {dark ? '☀' : '☾'}
             </button>
             {token ? (
-              <button type="button" className="btn-ghost btn-compact" onClick={logout}>
+              <button type="button" className="btn-ghost btn-compact" onClick={handleLogout}>
                 로그아웃
               </button>
             ) : (
@@ -48,9 +54,6 @@ export function Layout() {
         <DemoModeBanner />
         <Outlet />
       </main>
-      <footer className="demo-footer muted">
-        AI 미리보기 — 실제 기록·구독은 모바일 앱
-      </footer>
     </div>
   );
 }

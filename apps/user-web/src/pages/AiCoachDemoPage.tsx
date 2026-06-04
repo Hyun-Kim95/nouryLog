@@ -9,6 +9,7 @@ import { ApiError } from '../apiWithAuth';
 import { staleBannerMessage } from '../lib/staleMessage';
 import { AnchorDatePicker } from '../components/AnchorDatePicker';
 import { todayAnchorKst } from '../lib/statsPeriod';
+import { DEMO_COPY } from '../copy/demo';
 
 function CoachInner() {
   const [anchor, setAnchor] = useState(todayAnchorKst);
@@ -56,6 +57,8 @@ function CoachInner() {
     summary?.staleHours ?? result?.staleHours ?? null,
   );
 
+  const canSubmit = !askLoading && question.trim().length > 0;
+
   return (
     <>
       <PageTitle title="AI 코치" subtitle="RAG 질문 + 근거 식단 citation" />
@@ -87,13 +90,24 @@ function CoachInner() {
             ))}
           </div>
         ) : null}
-        <button type="button" className="btn" disabled={askLoading || !question.trim()} onClick={() => void submit()}>
-          {askLoading ? '분석 중…' : '질문하기'}
-        </button>
+        <div className="chat-compose-actions">
+          <button
+            type="button"
+            className="btn"
+            disabled={!canSubmit}
+            aria-label={askLoading ? '분석 중' : '질문하기'}
+            onClick={() => void submit()}
+          >
+            {askLoading ? '분석 중…' : '질문하기'}
+          </button>
+        </div>
       </div>
       {askError ? <Banner variant="error">{askError}</Banner> : null}
       {result ? (
         <div className="chat-thread">
+          {result.intent === 'unknown' ? (
+            <Banner variant="info">{DEMO_COPY.unknownIntentNote}</Banner>
+          ) : null}
           <div className="bubble bubble-user">{question}</div>
           <div className="bubble bubble-ai">
             <div className="answer-box">{result.answer}</div>

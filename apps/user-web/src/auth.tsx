@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { API_BASE, setAuthDeniedHandler } from './api';
 import { clearTokens, getAccessToken, saveTokens } from './authStorage';
 import { clearAuthMode, getAuthMode, setAuthMode, type AuthMode } from './lib/authMode';
+import { parseJsonResponse } from './lib/fetchJson';
 
 type SocialProviderSlug = 'google' | 'kakao' | 'naver';
 
@@ -64,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const data = (await res.json()) as { accessToken?: string; refreshToken?: string; message?: string };
+    const data = await parseJsonResponse<{ accessToken?: string; refreshToken?: string; message?: string }>(res);
     if (!res.ok) throw new Error(data.message ?? '로그인 실패');
     if (!data.accessToken || !data.refreshToken) throw new Error('토큰 없음');
     await saveTokens(data.accessToken, data.refreshToken);
@@ -79,12 +80,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...body, source: 'web' }),
     });
-    const data = (await res.json()) as {
+    const data = await parseJsonResponse<{
       result?: string;
       accessToken?: string;
       refreshToken?: string;
       message?: string;
-    };
+    }>(res);
     if (!res.ok) throw new Error(data.message ?? 'SNS 로그인 실패');
     await applySocialTokens(data);
     setToken((await getAccessToken()) ?? null);
@@ -111,12 +112,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, redirectUri }),
     });
-    const data = (await res.json()) as {
+    const data = await parseJsonResponse<{
       result?: string;
       accessToken?: string;
       refreshToken?: string;
       message?: string;
-    };
+    }>(res);
     if (!res.ok) throw new Error(data.message ?? '네이버 로그인 실패');
     await applySocialTokens(data);
     setToken((await getAccessToken()) ?? null);

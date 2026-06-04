@@ -6,6 +6,7 @@ import { aggregateMealsForAiPeriod } from './aiMealAggregate.js';
 import { parseAiAnchor } from './aiStatsPeriod.js';
 import { narrateAskAnswer } from './aiLlmNarrative.js';
 import { DISCLAIMER } from './aiTemplateAnswer.js';
+import { UNKNOWN_ASK_ANSWER } from './aiRejectionCopy.js';
 import { todayAnchorKst } from '../../lib/statsPeriod.js';
 import { searchByText } from '../vector/vectorStore.js';
 import {
@@ -13,6 +14,7 @@ import {
   citationsFromSemanticHits,
 } from './aiRagCitations.js';
 import { narrateRagAnswer } from './aiRagNarrative.js';
+import { filterKnowledgeHitsByQuestion } from './aiKnowledgeTopic.js';
 
 const QUESTION_MAX = 500;
 
@@ -60,11 +62,12 @@ async function handleSemanticMealAsk(userId: string, question: string) {
 }
 
 async function handleKnowledgeAsk(userId: string, question: string) {
-  const { hits } = await searchByText({
+  const { hits: rawHits } = await searchByText({
     query: question,
     collections: ['nutrition_kb'],
     userId: null,
   });
+  const hits = filterKnowledgeHitsByQuestion(question, rawHits);
   const citations = citationsFromKnowledgeHits(hits);
   const { answer, llm } = await narrateRagAnswer({
     question,
@@ -127,21 +130,8 @@ export async function handleAiAsk(userId: string, input: AiAskInput) {
 
   if (classified.intent === 'unknown') {
     return {
-      answer:
-        '질문을 이해하지 못했습니다. 예: "이번 주 단백질 섭취 어때?", "단백질 권장량이란?", "예전에 먹었던 닭가슴살 비슷한 식사 찾아줘" ' +
-        DISCLAIMER,
+      answer: UNKNOWN_ASK_ANSWER,
       intent: 'unknown' as const,
-      citations: [] as [],
-      ...ragAskMeta(),
-      llm: { provider: 'none', model: 'none', used: false },
-      disclaimer: DISCLAIMER,
-    };
-  }
-
-  if (classified.intent !== 'stats_query') {
-    return {
-      answer: '지원하지 않는 질문 유형입니다. ' + DISCLAIMER,
-      intent: classified.intent,
       citations: [] as [],
       ...ragAskMeta(),
       llm: { provider: 'none', model: 'none', used: false },

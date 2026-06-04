@@ -42,6 +42,8 @@ async function main() {
     { label: 'stats_query', question: '이번 주 단백질 섭취 어때?', intent: 'stats_query' },
     { label: 'semantic_meal', question: '예전에 먹었던 닭가슴살 비슷한 식사 찾아줘', intent: 'semantic_meal' },
     { label: 'knowledge_query', question: '일반적으로 식이섬유는 왜 필요한가요?', intent: 'knowledge_query' },
+    { label: 'knowledge_query_carb', question: '탄수화물은 왜 필요한가요?', intent: 'knowledge_query' },
+    { label: 'unknown_off_topic', question: '안녕하세요', intent: 'unknown' },
   ];
 
   let failed = 0;
