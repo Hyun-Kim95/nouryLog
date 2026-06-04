@@ -11,7 +11,17 @@
 | Environment | production (`047e6df9-6815-4a7f-888c-966dca7caeec`) |
 | api-server URL | https://api-server-production-52bc.up.railway.app |
 | admin-web URL | https://admin-web-production-6533.up.railway.app |
-| user-web (AI) | 신규 서비스 — `docs/release/user-web-railway-deploy.md` |
+| user-web URL | https://user-web-production-d88d.up.railway.app |
+| user-web 배포 | `docs/release/user-web-railway-deploy.md`, Config path `/apps/user-web/railway.toml` |
+
+### user-web·AI 후속 (2026-06-04)
+
+| 항목 | 상태 |
+|------|------|
+| `AI_ENABLED` / `LLM_PROVIDER=template` (nouryLog-api) | Railway 변수 설정·재배포 완료 |
+| `nutrition_kb` seed (9 md) | 프로덕션 DB `ai:seed-kb` **9/9 indexed** |
+| Google OAuth | **사용자** — JS 원본에 `https://user-web-production-d88d.up.railway.app` 추가 |
+| 프로덕션 데모 계정 | `user@example.com` 로그인 실패 시 DB 시드·비밀번호 확인 |
 
 CLI 링크:
 
