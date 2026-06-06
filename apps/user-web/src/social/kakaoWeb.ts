@@ -13,27 +13,85 @@ declare global {
   }
 }
 
-const SDK_URL = 'https://t1.kakaocdn.net/kakao/v2/kakao.min.js';
+/** Legacy v1 SDK — `kakao/v2/kakao.min.js`는 CDN 403으로 사용 불가 */
+const SDK_URLS = [
+  'https://t1.kakaocdn.net/kakao_js_sdk/v1/kakao.min.js',
+  'https://t1.kakaocdn.net/kakao_js_sdk/v1/kakao.js',
+] as const;
 
 let sdkPromise: Promise<void> | null = null;
+
+function loadScript(src: string): Promise<void> {
+  if (window.Kakao) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
+    if (existing) {
+      if (window.Kakao) {
+        resolve();
+        return;
+      }
+      if (existing.dataset.kakaoLoaded === 'ok') {
+        window.Kakao ? resolve() : reject(new Error('Kakao SDK를 사용할 수 없습니다.'));
+        return;
+      }
+      if (existing.dataset.kakaoLoaded === 'error') {
+        reject(new Error('Kakao SDK 로드 실패'));
+        return;
+      }
+      existing.addEventListener(
+        'load',
+        () => {
+          existing.dataset.kakaoLoaded = window.Kakao ? 'ok' : 'error';
+          window.Kakao ? resolve() : reject(new Error('Kakao SDK를 사용할 수 없습니다.'));
+        },
+        { once: true },
+      );
+      existing.addEventListener(
+        'error',
+        () => {
+          existing.dataset.kakaoLoaded = 'error';
+          reject(new Error('Kakao SDK 로드 실패'));
+        },
+        { once: true },
+      );
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.onload = () => {
+      script.dataset.kakaoLoaded = window.Kakao ? 'ok' : 'error';
+      if (window.Kakao) resolve();
+      else reject(new Error('Kakao SDK를 사용할 수 없습니다.'));
+    };
+    script.onerror = () => {
+      script.dataset.kakaoLoaded = 'error';
+      reject(new Error('Kakao SDK 로드 실패'));
+    };
+    document.head.appendChild(script);
+  });
+}
 
 function loadKakaoSdk(): Promise<void> {
   if (window.Kakao) return Promise.resolve();
   if (sdkPromise) return sdkPromise;
-  sdkPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${SDK_URL}"]`);
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Kakao SDK 로드 실패')));
-      return;
+
+  sdkPromise = (async () => {
+    let lastError: Error | undefined;
+    for (const url of SDK_URLS) {
+      try {
+        await loadScript(url);
+        return;
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error(String(e));
+      }
     }
-    const script = document.createElement('script');
-    script.src = SDK_URL;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Kakao SDK 로드 실패'));
-    document.head.appendChild(script);
-  });
+    throw lastError ?? new Error('Kakao SDK 로드 실패');
+  })();
+
   return sdkPromise;
 }
 

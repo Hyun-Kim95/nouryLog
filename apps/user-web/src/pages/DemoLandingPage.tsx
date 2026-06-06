@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { GoogleLogin } from '@react-oauth/google';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
 import { Banner } from '../components/ui/Banner';
 import { DEMO_COPY } from '../copy/demo';
 import { demoAutoLoginEnabled, getDemoCredentials } from '../lib/demoCredentials';
@@ -10,7 +10,7 @@ import { buildNaverAuthorizeUrl, naverWebConfigured, saveNaverOAuthState } from 
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '';
 
-/** /demo — 로그인 전용. 데모(상단) + SNS(하단) */
+/** /demo — 로그인 전용 */
 export function DemoLandingPage() {
   const { token, ready, loginEmail, loginGoogleIdToken, loginSocialAccessToken } = useAuth();
   const nav = useNavigate();
@@ -92,44 +92,27 @@ export function DemoLandingPage() {
     <div className="demo-landing">
       <section className="demo-hero card">
         <h1>{DEMO_COPY.heroTitle}</h1>
-        <p className="demo-hero-sub">{DEMO_COPY.heroSubtitle}</p>
-        <p className="muted">{DEMO_COPY.heroNote}</p>
         {!hasCredentials ? <Banner variant="warn">{DEMO_COPY.envSetupHint}</Banner> : null}
         {err ? <Banner variant="error">{err}</Banner> : null}
 
-        <button type="button" className="btn" disabled={busy} onClick={() => void startDemo()}>
-          {busy ? DEMO_COPY.ctaDemoLoading : DEMO_COPY.ctaDemo}
-        </button>
-        <p className="muted demo-readme-hint">
-          <code>/demo?auto=1</code> — {DEMO_COPY.readmeHint}
-        </p>
-
-        <div className="login-divider" aria-hidden>
-          <span>{DEMO_COPY.snsDivider}</span>
-        </div>
-
         <div className="sns-login-stack">
           {googleClientId ? (
-            <div className="google-login-wrap">
-              <GoogleLogin
-                onSuccess={(cred) => {
-                  if (!cred.credential) {
-                    setErr('Google 인증 정보를 받지 못했습니다.');
-                    return;
-                  }
-                  setBusy(true);
-                  setErr(null);
-                  void loginGoogleIdToken(cred.credential)
-                    .then(() => nav(next, { replace: true }))
-                    .catch((e) => setErr(e instanceof Error ? e.message : 'Google 로그인 실패'))
-                    .finally(() => setBusy(false));
-                }}
-                onError={() => setErr('Google 로그인에 실패했습니다.')}
-                text="signin_with"
-                shape="rectangular"
-                width="320"
-              />
-            </div>
+            <GoogleSignInButton
+              disabled={busy}
+              onSuccess={(cred) => {
+                if (!cred.credential) {
+                  setErr('Google 인증 정보를 받지 못했습니다.');
+                  return;
+                }
+                setBusy(true);
+                setErr(null);
+                void loginGoogleIdToken(cred.credential)
+                  .then(() => nav(next, { replace: true }))
+                  .catch((e) => setErr(e instanceof Error ? e.message : 'Google 로그인 실패'))
+                  .finally(() => setBusy(false));
+              }}
+              onError={() => setErr('Google 로그인에 실패했습니다.')}
+            />
           ) : (
             <p className="muted">{DEMO_COPY.googleEnvHint}</p>
           )}
@@ -153,19 +136,17 @@ export function DemoLandingPage() {
             {DEMO_COPY.ctaNaver}
           </button>
           {!naverWebConfigured() ? <p className="muted sns-env-hint">{DEMO_COPY.naverEnvHint}</p> : null}
+
+          <button
+            type="button"
+            className="btn btn-demo"
+            disabled={busy}
+            onClick={() => void startDemo()}
+          >
+            {busy ? DEMO_COPY.ctaDemoLoading : DEMO_COPY.ctaDemo}
+          </button>
         </div>
       </section>
-      <div className="action-grid">
-        <Link to="/ai/weekly" className="action-card">
-          <span className="action-card-title">{DEMO_COPY.featureWeekly}</span>
-        </Link>
-        <Link to="/ai/monthly" className="action-card">
-          <span className="action-card-title">{DEMO_COPY.featureMonthly}</span>
-        </Link>
-        <Link to="/ai/coach" className="action-card">
-          <span className="action-card-title">{DEMO_COPY.featureCoach}</span>
-        </Link>
-      </div>
     </div>
   );
 }

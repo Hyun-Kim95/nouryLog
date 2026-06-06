@@ -751,15 +751,41 @@ body {
   margin: 0 0 var(--ds-space-4);
 }
 
-.google-login-wrap {
-  display: flex;
-  justify-content: center;
+.google-sign-in-host {
+  position: relative;
+  width: 100%;
   min-height: 44px;
 }
 
-.google-login-wrap > div {
+.google-sign-in-host.is-disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.btn-google {
+  display: flex;
   width: 100%;
-  max-width: 320px;
+  justify-content: center;
+  align-items: center;
+  background: #fff;
+  color: #1f1f1f;
+  border-color: var(--ds-border);
+  pointer-events: none;
+}
+
+.google-sign-in-overlay {
+  position: absolute;
+  inset: 0;
+  opacity: 0.01;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.google-sign-in-overlay .google-sign-in-gis,
+.google-sign-in-overlay .google-sign-in-gis > div {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 44px;
 }
 
 .login-divider {
@@ -782,7 +808,8 @@ body {
 }
 
 .sns-login-stack .btn-kakao,
-.sns-login-stack .btn-naver {
+.sns-login-stack .btn-naver,
+.sns-login-stack .btn-demo {
   width: 100%;
 }
 

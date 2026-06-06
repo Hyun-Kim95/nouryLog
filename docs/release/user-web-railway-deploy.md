@@ -36,6 +36,24 @@
 
 Google Cloud Console에 user-web Railway URL을 **승인된 JavaScript 원본** 및 리다이렉트에 등록.
 
+api-server에 `GOOGLE_ALLOWED_AUDIENCES`에 동일 웹 클라이언트 ID를 포함해야 idToken 교환이 통과한다.
+
+## Kakao (웹)
+
+| 항목 | 값 |
+|------|-----|
+| SDK URL (코드) | `https://t1.kakaocdn.net/kakao_js_sdk/v1/kakao.min.js` — 구 `kakao/v2/kakao.min.js`는 CDN **403** |
+| Railway | `VITE_KAKAO_JAVASCRIPT_KEY` = 앱 **JavaScript 키** (REST 키 아님) |
+| Kakao Developers | [앱] → 플랫폼 **Web** 추가 → 사이트 도메인에 `https://user-web-production-d88d.up.railway.app` |
+| Redirect URI | 카카오 로그인 → Redirect URI에 동일 origin 등록 |
+
+변경 후 **user-web 재배포** 필수 (`VITE_*`는 빌드타임).
+
+## Naver (웹)
+
+| Railway | `VITE_NAVER_CLIENT_ID`, `VITE_NAVER_REDIRECT_URI` |
+| Naver Developers | Callback URL = `https://user-web-production-d88d.up.railway.app/demo/oauth/naver` |
+
 ## 프로덕션 URL (2026-06-04)
 
 - https://user-web-production-d88d.up.railway.app
