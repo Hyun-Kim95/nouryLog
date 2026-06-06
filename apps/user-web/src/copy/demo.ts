@@ -1,6 +1,7 @@
 export const DEMO_COPY = {
   brand: 'nouryLog AI',
   heroTitle: 'RAG 기반 개인화 영양 AI',
+  heroTagline: '내 식단 기록으로 답하는 AI 코치',
   ctaDemo: '데모 계정으로 바로 체험',
   ctaDemoLoading: '데모 로그인 중…',
   ctaNoCredentials: '데모 계정 env가 없습니다 (VITE_DEMO_EMAIL / VITE_DEMO_PASSWORD)',

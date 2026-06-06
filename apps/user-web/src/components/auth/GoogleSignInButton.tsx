@@ -1,4 +1,5 @@
 import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
+import { GoogleIcon } from './LoginProviderIcons';
 import { DEMO_COPY } from '../../copy/demo';
 
 type Props = {
@@ -7,12 +8,13 @@ type Props = {
   onError: () => void;
 };
 
-/** 카카오·네이버와 동일한 폭/높이. GIS 개인화 버튼 대신 커스텀 라벨을 보여준다. */
+/** 커스텀 login-btn 라벨 + 투명 GIS 클릭 영역 */
 export function GoogleSignInButton({ disabled, onSuccess, onError }: Props) {
   return (
     <div className={`google-sign-in-host${disabled ? ' is-disabled' : ''}`}>
-      <span className="btn btn-google" aria-hidden="true">
-        {DEMO_COPY.ctaGoogle}
+      <span className="login-btn login-btn--google" aria-hidden="true">
+        <GoogleIcon className="login-btn__icon" />
+        <span>{DEMO_COPY.ctaGoogle}</span>
       </span>
       <div className="google-sign-in-overlay">
         <GoogleLogin
