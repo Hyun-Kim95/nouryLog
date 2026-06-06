@@ -5,7 +5,12 @@ import { navigationRef } from './src/authSession';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator, type InitialRoute } from './src/navigation';
 import { refreshAccessToken } from './src/authRefresh';
-import { clearTokens, getAccessToken, parseUserIdFromAccessToken } from './src/authStorage';
+import {
+  clearTokens,
+  getAccessToken,
+  isAccessTokenExpired,
+  parseUserIdFromAccessToken,
+} from './src/authStorage';
 import { flushPendingLoginRedirect } from './src/authSession';
 import { BootstrapLoading } from './src/components/BootstrapLoading';
 import { UpdateModal } from './src/components/UpdateModal';
@@ -107,6 +112,14 @@ export default function App() {
         if (!token) {
           setInitialRoute('Login');
         } else {
+          if (isAccessTokenExpired(token)) {
+            token = await refreshAccessToken();
+          }
+          if (!token) {
+            await clearTokens();
+            setInitialRoute('Login');
+            return;
+          }
           let valid = await isAccessTokenValid(token);
           if (!valid) {
             token = await refreshAccessToken();

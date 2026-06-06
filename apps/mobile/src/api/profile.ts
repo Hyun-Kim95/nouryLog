@@ -1,4 +1,5 @@
 import { API_BASE } from '../config';
+import { refreshAccessToken } from '../authRefresh';
 import { handleAuthFailure } from '../authSession';
 import { ERRORS_COPY } from '../copy/errors';
 import { isAuthDenied } from '../lib/apiError';
@@ -104,7 +105,13 @@ export class ProfileApiError extends Error {
 
 async function request<T>(
   path: string,
-  init: { token: string; method: 'GET' | 'PUT' | 'POST'; body?: object; signal?: AbortSignal },
+  init: {
+    token: string;
+    method: 'GET' | 'PUT' | 'POST';
+    body?: object;
+    signal?: AbortSignal;
+    _authRetried?: boolean;
+  },
 ): Promise<T> {
   let res: Response;
   try {
@@ -135,7 +142,17 @@ async function request<T>(
   }
   if (!res.ok) {
     const err = new ProfileApiError(res.status, (json ?? {}) as ApiErrorBody);
-    handleAuthFailure(err);
+    if (
+      !init._authRetried &&
+      err.status === 401 &&
+      (err.code === 'AUTH_TOKEN_EXPIRED' || err.code === 'AUTH_UNAUTHORIZED')
+    ) {
+      const next = await refreshAccessToken();
+      if (next) {
+        return request<T>(path, { ...init, token: next, _authRetried: true });
+      }
+    }
+    if (isAuthDenied(err)) handleAuthFailure(err);
     throw err;
   }
   return json as T;
