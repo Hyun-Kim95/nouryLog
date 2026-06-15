@@ -1,3 +1,6 @@
+# DEPRECATED (2026-06-15): RAG/Ollama 로컬 스택. 식단 인사이트 전환 후 미사용.
+# 현행: SQL·규칙 기반 `/me/insights/*` — 일반 Postgres + `npm run dev:server` 만으로 동작.
+#
 # AI 로컬 데모 (Tier A): PostgreSQL(pgvector) + Ollama
 # API 서버는 호스트에서 npm run dev:server 로 실행 (apps/server/.env.ai.example 참고)
 #

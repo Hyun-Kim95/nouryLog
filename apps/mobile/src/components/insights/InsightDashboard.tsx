@@ -1,15 +1,15 @@
 import { Text, View } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
-import type { CoachSummaryResponse } from '../../api/ai';
-import { AI_COPY } from '../../copy/ai';
+import type { InsightSummaryResponse } from '../../api/insights';
+import { INSIGHT_COPY } from '../../copy/insights';
 import type { RootStackParamList } from '../../navigation';
 import { useTheme } from '../../theme';
-import { Banner, Card, CardTitle, Chip, PrimaryButton } from '../ui';
+import { Card, CardTitle, Chip, PrimaryButton } from '../ui';
 import { MacroBarRow } from './MacroBarRow';
 
 type Props = {
-  summary: CoachSummaryResponse | null;
+  summary: InsightSummaryResponse | null;
   loading: boolean;
 };
 
@@ -48,7 +48,7 @@ function KpiCell({
   );
 }
 
-export function CoachDashboard({ summary, loading }: Props) {
+export function InsightDashboard({ summary, loading }: Props) {
   const t = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -56,7 +56,7 @@ export function CoachDashboard({ summary, loading }: Props) {
     return (
       <View style={{ gap: t.spacing.md }}>
         <Card>
-          <Text style={{ color: t.colors.fgMuted }}>{AI_COPY.loading}</Text>
+          <Text style={{ color: t.colors.fgMuted }}>{INSIGHT_COPY.loading}</Text>
         </Card>
       </View>
     );
@@ -76,10 +76,10 @@ export function CoachDashboard({ summary, loading }: Props) {
           {summary.insight.text}
         </Text>
         <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body, marginBottom: t.spacing.md }}>
-          {AI_COPY.emptyWeekHint}
+          {INSIGHT_COPY.emptyWeekHint}
         </Text>
         <PrimaryButton
-          title={AI_COPY.emptyWeekCta}
+          title={INSIGHT_COPY.emptyWeekCta}
           onPress={() => navigation.navigate('Main', { screen: 'Log' })}
         />
       </Card>
@@ -90,75 +90,76 @@ export function CoachDashboard({ summary, loading }: Props) {
     <View style={{ gap: t.spacing.md }}>
       <Card>
         <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, marginBottom: t.spacing.xs }}>
-          {summary.week.period.label} · {AI_COPY.weekMeta(summary.week.recordedDays, summary.week.mealCount)}
+          {summary.week.period.label} · {INSIGHT_COPY.weekMeta(summary.week.recordedDays, summary.week.mealCount)}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm }}>
           {ga.proteinShortDays > 0 ? (
-            <Chip label={AI_COPY.proteinShortChip(ga.proteinShortDays)} tone="muted" />
+            <Chip label={INSIGHT_COPY.proteinShortChip(ga.proteinShortDays)} tone="muted" />
           ) : (
-            <Chip label={AI_COPY.proteinOkChip} />
+            <Chip label={INSIGHT_COPY.proteinOkChip} />
           )}
-          {ga.calorieShortDays > 0 ? <Chip label={AI_COPY.calorieShortChip(ga.calorieShortDays)} tone="muted" /> : null}
+          {ga.calorieShortDays > 0 ? (
+            <Chip label={INSIGHT_COPY.calorieShortChip(ga.calorieShortDays)} tone="muted" />
+          ) : null}
         </View>
       </Card>
 
       <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, fontWeight: '600' }}>
-        {AI_COPY.todaySection(summary.today.period.label)}
+        {INSIGHT_COPY.todaySection(summary.today.period.label)}
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm }}>
         <KpiCell
-          label={AI_COPY.calorie}
+          label={INSIGHT_COPY.calorie}
           value={summary.today.summary.calories}
-          unit={AI_COPY.kcalUnit}
+          unit={INSIGHT_COPY.kcalUnit}
           hint={
             gcToday
-              ? AI_COPY.goalLine(gcToday.calorieGoalKcal, gcToday.calorieMet, ` ${AI_COPY.kcalUnit}`)
+              ? INSIGHT_COPY.goalLine(gcToday.calorieGoalKcal, gcToday.calorieMet, ` ${INSIGHT_COPY.kcalUnit}`)
               : undefined
           }
         />
         <KpiCell
-          label={AI_COPY.protein}
+          label={INSIGHT_COPY.protein}
           value={summary.today.summary.protein}
           unit="g"
-          hint={gcToday ? AI_COPY.goalLine(gcToday.proteinGoalG, gcToday.proteinMet, 'g') : undefined}
+          hint={gcToday ? INSIGHT_COPY.goalLine(gcToday.proteinGoalG, gcToday.proteinMet, 'g') : undefined}
         />
       </View>
 
       <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, fontWeight: '600' }}>
-        {AI_COPY.weekAvgSection}
+        {INSIGHT_COPY.weekAvgSection}
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm }}>
-        <KpiCell label={AI_COPY.calorie} value={summary.week.summary.calories} unit={AI_COPY.kcalUnit} />
-        <KpiCell label={AI_COPY.protein} value={summary.week.summary.protein} unit="g" />
-        <KpiCell label={AI_COPY.carb} value={summary.week.summary.carbohydrate} unit="g" />
-        <KpiCell label={AI_COPY.fat} value={summary.week.summary.fat} unit="g" />
+        <KpiCell label={INSIGHT_COPY.calorie} value={summary.week.summary.calories} unit={INSIGHT_COPY.kcalUnit} />
+        <KpiCell label={INSIGHT_COPY.protein} value={summary.week.summary.protein} unit="g" />
+        <KpiCell label={INSIGHT_COPY.carb} value={summary.week.summary.carbohydrate} unit="g" />
+        <KpiCell label={INSIGHT_COPY.fat} value={summary.week.summary.fat} unit="g" />
       </View>
       {gcWeek ? (
         <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-          {AI_COPY.weekGoalLine(gcWeek.proteinMet, Math.round(gcWeek.proteinAvgGapG), gcWeek.calorieMet)}
+          {INSIGHT_COPY.weekGoalLine(gcWeek.proteinMet, Math.round(gcWeek.proteinAvgGapG), gcWeek.calorieMet)}
         </Text>
       ) : null}
 
       <Card>
-        <CardTitle>{AI_COPY.insightTitle}</CardTitle>
-        <Banner variant="info">{AI_COPY.insightTemplateNote}</Banner>
+        <CardTitle>{INSIGHT_COPY.insightTitle}</CardTitle>
         <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, lineHeight: 22, marginTop: t.spacing.sm }}>
           {summary.insight.text}
         </Text>
       </Card>
 
       <Card>
-        <CardTitle>{AI_COPY.macroTitle}</CardTitle>
+        <CardTitle>{INSIGHT_COPY.macroTitle}</CardTitle>
         <View style={{ gap: t.spacing.sm, marginTop: t.spacing.sm }}>
-          <MacroBarRow label={AI_COPY.carb} pct={summary.week.macroBreakdown.carbPct} />
-          <MacroBarRow label={AI_COPY.protein} pct={summary.week.macroBreakdown.proteinPct} />
-          <MacroBarRow label={AI_COPY.fat} pct={summary.week.macroBreakdown.fatPct} />
+          <MacroBarRow label={INSIGHT_COPY.carb} pct={summary.week.macroBreakdown.carbPct} />
+          <MacroBarRow label={INSIGHT_COPY.protein} pct={summary.week.macroBreakdown.proteinPct} />
+          <MacroBarRow label={INSIGHT_COPY.fat} pct={summary.week.macroBreakdown.fatPct} />
         </View>
       </Card>
 
       {summary.evidenceMeals.length > 0 ? (
         <Card>
-          <CardTitle>{AI_COPY.evidenceTitle}</CardTitle>
+          <CardTitle>{INSIGHT_COPY.evidenceTitle}</CardTitle>
           {summary.evidenceMeals.map((m) => (
             <Text
               key={m.mealId}
@@ -172,10 +173,10 @@ export function CoachDashboard({ summary, loading }: Props) {
 
       {summary.frequentFoods.length > 0 ? (
         <Card>
-          <CardTitle>{AI_COPY.frequentTitle}</CardTitle>
+          <CardTitle>{INSIGHT_COPY.frequentTitle}</CardTitle>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm, marginTop: t.spacing.sm }}>
             {summary.frequentFoods.map((f) => (
-              <Chip key={f.name} label={AI_COPY.frequentCount(f.name, f.count)} tone="muted" />
+              <Chip key={f.name} label={INSIGHT_COPY.frequentCount(f.name, f.count)} tone="muted" />
             ))}
           </View>
         </Card>

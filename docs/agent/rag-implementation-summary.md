@@ -1,5 +1,7 @@
 # RAG 완성 구현 요약 (2026-06-03)
 
+> **Deprecated (2026-06-15):** RAG·임베딩·`/me/ai/*`는 제거되었습니다. 현행: [`api-contract-v1.14-insights-delta.md`](../requirements/api-contract-v1.14-insights-delta.md), [`mobile-insights-spec.md`](../design/mobile-insights-spec.md).
+
 ## 변경 요약
 
 - **pgvector 실사용**: `embeddingService`, `vectorStore`, `aiIndexWorker` — upsert·cosine 검색

@@ -15,7 +15,15 @@ async function login() {
 
 async function main() {
   const token = await login();
-  const res = await fetch(`${API}/me/ai/reports/weekly`, {
+  const legacy = await fetch(`${API}/me/ai/reports/weekly`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (legacy.status !== 404) {
+    console.error('FAIL: /me/ai/reports/weekly should be 404');
+    process.exit(1);
+  }
+
+  const res = await fetch(`${API}/me/insights/reports/weekly`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const body = await res.json();
@@ -27,7 +35,8 @@ async function main() {
     body.sections?.keyMetrics &&
     Array.isArray(body.sections.evidence) &&
     Array.isArray(body.sections.nextWeekGoals) &&
-    typeof body.summaryText === 'string';
+    typeof body.summaryText === 'string' &&
+    body.llm === undefined;
   if (!ok) {
     console.error('FAIL shape', body);
     process.exit(1);

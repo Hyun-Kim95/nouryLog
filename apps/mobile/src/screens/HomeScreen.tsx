@@ -3,9 +3,9 @@ import { Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { apiFetch, isAuthDenied } from '../api';
-import { getCoachSummary, type CoachSummaryResponse } from '../api/ai';
+import { getInsightSummary, type InsightSummaryResponse } from '../api/insights';
 import { getWeightCheckInStatus, type WeightCheckInStatus } from '../api/weightEntries';
-import { CoachHomeCard } from '../components/ai/CoachHomeCard';
+import { InsightHomeCard } from '../components/insights/InsightHomeCard';
 import { ensureAccessToken } from '../authSession';
 import { WeightCheckInModal } from '../components/WeightCheckInModal';
 import { Banner, Card, CardTitle, Chip, PrimaryButton, ProgressBar, ScreenLayout } from '../components/ui';
@@ -45,9 +45,9 @@ export function HomeScreen() {
   const [weightStatus, setWeightStatus] = useState<WeightCheckInStatus | null>(null);
   const [weightModalVisible, setWeightModalVisible] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
-  const [coachSummary, setCoachSummary] = useState<CoachSummaryResponse | null>(null);
-  const [coachLoading, setCoachLoading] = useState(false);
-  const [coachError, setCoachError] = useState<string | null>(null);
+  const [insightSummary, setInsightSummary] = useState<InsightSummaryResponse | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
 
   const load = useCallback(async ({ silent }: { silent: boolean }) => {
     if (!silent) setLoading(true);
@@ -58,33 +58,33 @@ export function HomeScreen() {
 
       setAuthToken(token);
       const { from, to } = localDayBounds();
-      setCoachLoading(true);
-      setCoachError(null);
+      setInsightLoading(true);
+      setInsightError(null);
 
-      const [settled, coachSettled, weightR, dismissedYmd] = await Promise.all([
+      const [settled, insightSettled, weightR, dismissedYmd] = await Promise.all([
         Promise.allSettled([
           apiFetch<Ent>('/me/billing/entitlements', { token }),
           fetchTodayIntake(token),
           fetchTodayGoals(token),
           listMeals(token, { page: 1, size: 100, from, to }),
         ]),
-        Promise.allSettled([getCoachSummary(token, todayAnchorKst())]),
+        Promise.allSettled([getInsightSummary(token, todayAnchorKst())]),
         getWeightCheckInStatus(token).catch(() => null),
         getWeightPromptDismissedYmd(),
       ]);
 
-      setCoachLoading(false);
+      setInsightLoading(false);
 
       const [entR, intakeR, goalsR, mealsR] = settled;
       const rejected = [entR, intakeR, goalsR, mealsR].filter((r) => r.status === 'rejected');
-      const coachR = coachSettled[0];
-      if (coachR.status === 'fulfilled') {
-        setCoachSummary(coachR.value);
-        setCoachError(null);
-      } else if (!isAuthDenied(coachR.reason)) {
-        setCoachSummary(null);
-        setCoachError(
-          toUserMessage(coachR.reason, { context: 'generic', fallback: '코치 요약을 불러오지 못했어요.' }),
+      const insightR = insightSettled[0];
+      if (insightR.status === 'fulfilled') {
+        setInsightSummary(insightR.value);
+        setInsightError(null);
+      } else if (!isAuthDenied(insightR.reason)) {
+        setInsightSummary(null);
+        setInsightError(
+          toUserMessage(insightR.reason, { context: 'generic', fallback: '인사이트를 불러오지 못했어요.' }),
         );
       }
       if (rejected.some((r) => r.status === 'rejected' && isAuthDenied(r.reason))) return;
@@ -188,11 +188,11 @@ export function HomeScreen() {
         </Card>
       ) : null}
 
-      <CoachHomeCard
-        summary={coachSummary}
-        loading={coachLoading}
-        error={coachError}
-        onPressOpen={() => navigation.navigate('AiCoach', { anchor: todayAnchorKst() })}
+      <InsightHomeCard
+        summary={insightSummary}
+        loading={insightLoading}
+        error={insightError}
+        onPressOpen={() => navigation.navigate('DietInsight', { anchor: todayAnchorKst() })}
         onRetry={() => void load({ silent: false })}
       />
 

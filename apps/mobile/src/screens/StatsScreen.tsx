@@ -11,7 +11,7 @@ import type { RootStackParamList } from '../navigation';
 import { STATS_COPY } from '../copy/stats';
 import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { fetchStats, type StatsResponse } from '../api/stats';
-import { MonthlyPatternCard } from '../components/ai/MonthlyPatternCard';
+import { MonthlyPatternCard } from '../components/insights/MonthlyPatternCard';
 import { isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
 import { useFocusReload } from '../hooks/useFocusReload';

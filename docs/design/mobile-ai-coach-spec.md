@@ -6,6 +6,9 @@ updated_at: 2026-06-03
 
 # 모바일 AI 코치·리포트 UI
 
+> **Deprecated (2026-06-15):** `AiCoach`·`CoachHomeCard`·`/me/ai/*`는 **식단 인사이트**(`DietInsight`, `InsightHomeCard`, `/me/insights/*`)로 대체되었습니다.  
+> 질문하기(RAG) UI는 제거되었습니다. **현행 스펙:** [`mobile-insights-spec.md`](./mobile-insights-spec.md)
+
 API: v1.12 coach summary, v1.11 ask/RAG, **v1.13** weekly/monthly reports
 
 ## 정보 구조

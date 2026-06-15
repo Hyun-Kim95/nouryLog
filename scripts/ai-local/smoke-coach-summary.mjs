@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Coach summary smoke — requires dev server + AI_ENABLED + seed user.
+ * Insight summary smoke — requires dev server + seed user (no AI_ENABLED).
  */
 const API = process.env.API_URL ?? 'http://localhost:3000';
 const EMAIL = process.env.SMOKE_EMAIL ?? 'user@example.com';
@@ -21,13 +21,22 @@ async function main() {
   const token = await login();
   console.log('OK: login');
 
-  const res = await fetch(`${API}/me/ai/coach/summary`, {
+  const legacy = await fetch(`${API}/me/ai/coach/summary`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (legacy.status !== 404) {
+    console.error('FAIL: /me/ai/coach/summary should be 404, got', legacy.status);
+    process.exit(1);
+  }
+  console.log('OK: /me/ai/coach/summary → 404');
+
+  const res = await fetch(`${API}/me/insights/summary`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const body = await res.json();
 
   if (res.status !== 200) {
-    console.error('FAIL: coach/summary', res.status, body);
+    console.error('FAIL: insights/summary', res.status, body);
     process.exit(1);
   }
 
@@ -36,14 +45,13 @@ async function main() {
     body.today?.summary &&
     body.week?.goalAchievement &&
     typeof body.insight?.text === 'string' &&
-    Array.isArray(body.suggestedQuestions) &&
-    body.suggestedQuestions.length >= 1;
+    body.suggestedQuestions === undefined &&
+    body.llm === undefined;
 
   console.log(
-    'OK: coach/summary',
+    'OK: insights/summary',
     `anchor=${body.anchor}`,
     `weekMeals=${body.week?.mealCount}`,
-    `questions=${body.suggestedQuestions?.length}`,
     `evidence=${body.evidenceMeals?.length}`,
     `frequent=${body.frequentFoods?.length}`,
   );

@@ -1,21 +1,13 @@
-import { isAiEnabled } from '../../lib/aiConfig.js';
 import { userStatsAggregationMeta } from '../../lib/userStatsAggregationMeta.js';
 import { todayAnchorKst } from '../../lib/statsPeriod.js';
 import { aggregateMealsForAiPeriod } from './aiMealAggregate.js';
 import { parseAiAnchor, resolveAiPeriodBounds } from './aiStatsPeriod.js';
 import { computeMacroBreakdown, computeWeekGoalAchievement } from './aiCoachWeekMetrics.js';
 import { buildMealPatternAnalysis } from './aiMealPatterns.js';
-import { narrateWeeklySummary } from './aiLlmNarrative.js';
-import { DISCLAIMER } from './aiTemplateAnswer.js';
+import { buildPeriodPatternSummary, DISCLAIMER } from './aiTemplateAnswer.js';
 import { getCachedPeriodReport, setCachedPeriodReport } from './aiPeriodReportCache.js';
 
 export async function handleWeeklyReport(userId: string, anchorRaw?: string | null) {
-  if (!isAiEnabled()) {
-    const err = new Error('ai_disabled');
-    (err as Error & { code: string }).code = 'AI_LLM_UNAVAILABLE';
-    throw err;
-  }
-
   const anchorParsed = parseAiAnchor(anchorRaw ?? todayAnchorKst());
   if (anchorParsed.error) {
     const err = new Error('future_anchor');
@@ -66,7 +58,7 @@ async function buildWeeklyPayload(userId: string, anchor: string) {
     highlights.push({ type: 'top_protein_meal', citationIndex: citations.indexOf(mealCitations[0]!) });
   }
 
-  const { summaryText, llm } = await narrateWeeklySummary(agg, analysis);
+  const summaryText = buildPeriodPatternSummary(agg, analysis);
   const meta = userStatsAggregationMeta(new Date());
 
   return {
@@ -98,7 +90,6 @@ async function buildWeeklyPayload(userId: string, anchor: string) {
     isStale: meta.isStale,
     staleHours: meta.staleHours,
     aggregatedAt: meta.aggregatedAt.toISOString(),
-    llm,
     disclaimer: DISCLAIMER,
   };
 }

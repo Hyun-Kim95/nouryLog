@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getMonthlyReport, type MonthlyReportResponse } from '../api/ai';
+import { getMonthlyReport, type MonthlyReportResponse } from '../api/insights';
 import { RequireAuth } from '../components/auth/RequireAuth';
 import { Banner } from '../components/ui/Banner';
 import { PageTitle } from '../components/ui/PageTitle';
@@ -97,8 +97,7 @@ function MonthlyInner() {
             </div>
           ) : null}
           <div className="card">
-            <h3 className="card-heading">AI 분석</h3>
-            {!report.llm.used ? <Banner variant="info">템플릿 요약 (LLM 미사용 가능)</Banner> : null}
+            <h3 className="card-heading">한 달 요약</h3>
             <div className="answer-box">{report.summaryText}</div>
           </div>
           {report.sections.nextMonthGoals.length > 0 ? (

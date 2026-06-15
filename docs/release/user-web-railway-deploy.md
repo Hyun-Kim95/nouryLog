@@ -22,11 +22,11 @@
 
 | 변수 | 권장 값 |
 |------|---------|
-| `AI_ENABLED` | `1` |
-| `LLM_PROVIDER` | `template` (Railway에 Ollama 없음) |
-| `DATABASE_URL` | Postgres + pgvector migrate 완료 |
+| `DATABASE_URL` | Postgres (일반 이미지로 충분 — pgvector·`AI_ENABLED` 불필요) |
 
-프로덕션 외부 LLM 사용 전 `docs/legal/privacy.md` v5 갱신.
+식단 인사이트는 SQL·규칙 템플릿만 사용합니다. `AI_ENABLED`, `LLM_*` 변수는 **설정하지 않음**.
+
+프로덕션 URL (인사이트): `/insights`, `/insights/weekly`, `/insights/monthly` (구 `/ai/*`는 리다이렉트).
 
 ## CORS
 
@@ -80,14 +80,6 @@ npm run seed:demo-user
 
 - 기본: 기존 `user@example.com` 이 있어도 **비밀번호를 `user123`으로 맞춤** (`SEED_DEMO_RESET_PASSWORD=0` 이면 비밀번호 유지).
 - 식단: `__nourylog_demo_seed__` 노트 기록만 삭제 후 재생성(다른 meal은 유지).
-
-## 프로덕션 KB 인덱스 (api-server 배포·`AI_ENABLED=1` 후 1회)
-
-```powershell
-$env:DATABASE_URL = "<DATABASE_PUBLIC_URL>"
-$env:AI_ENABLED = "1"
-npm run ai:seed-kb
-```
 
 ## 로컬
 

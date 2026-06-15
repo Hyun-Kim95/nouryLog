@@ -405,14 +405,16 @@ export function LogScreen() {
       } else {
         const perServing = parseManualNutrition({ calories, protein, carbohydrate, fat });
         if (!name.trim()) throw new Error(LOG_COPY.nameRequired);
-        const portion = editingMealId ? parsePortionInput(manualPortion) : 1;
+        const portion = editingMealId ? effectivePortionQty(parsePortionInput(manualPortion)) : 1;
         const nutrition = scaleManualNutritionForSave(perServing, portion);
-        const body = {
+        const body: Record<string, unknown> = {
           ...mealBodyBase(),
           name: name.trim(),
-          portionQuantity: portion,
           ...nutrition,
         };
+        if (!editingMealId) {
+          body.portionQuantity = 1;
+        }
         if (editingMealId) {
           await updateMeal(token, editingMealId, body);
         } else {
@@ -774,12 +776,11 @@ export function LogScreen() {
   };
 
   const previewKcal =
-    editingMealId && selectedTpl && Number.isFinite(Number(tplAmount))
+    editingMealId && selectedTpl && mealInputMode === 'TOTAL_GRAMS' && Number.isFinite(Number(tplAmount))
       ? (() => {
           const amt = Number(String(tplAmount).replace(',', '.'));
           if (!Number.isFinite(amt) || amt <= 0 || !(selectedTpl.servingGrams > 0)) return null;
-          const g = mealInputMode === 'PORTION_COUNT' ? amt * selectedTpl.servingGrams : amt;
-          const scale = g / selectedTpl.servingGrams;
+          const scale = amt / selectedTpl.servingGrams;
           return Math.round(selectedTpl.calories * scale);
         })()
       : null;
@@ -919,16 +920,6 @@ export function LogScreen() {
       <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
         {LOG_COPY.manualPerServingHint}
       </Text>
-      {editingMealId ? (
-        <LabeledField
-          label={LOG_COPY.manualPortionLabel}
-          value={manualPortion}
-          onChangeText={setManualPortion}
-          keyboardType="decimal-pad"
-          placeholder="1"
-          onFocus={focusEntryField}
-        />
-      ) : null}
       <LabeledField
         label="칼로리 (kcal)"
         value={calories}
@@ -1153,9 +1144,13 @@ export function LogScreen() {
               <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                 기준 분량: {baselineSummary(selectedTpl)} (영양 기준 {selectedTpl.servingGrams}g) · 기준당 약{' '}
                 {selectedTpl.calories} kcal
-                {!editingMealId ? ' · 저장 후 목록에서 분량 조절' : ''}
+                {!editingMealId
+                  ? ' · 저장 후 목록에서 분량 조절'
+                  : mealInputMode === 'PORTION_COUNT'
+                    ? ' · 분량은 목록에서 − / + 로 조절해요'
+                    : ''}
               </Text>
-              {editingMealId ? (
+              {editingMealId && mealInputMode === 'TOTAL_GRAMS' ? (
                 <>
                   <Segmented<TemplateInputMode>
                     options={[
@@ -1166,11 +1161,11 @@ export function LogScreen() {
                     onChange={handleMealInputModeChange}
                   />
                   <LabeledField
-                    label={mealInputMode === 'PORTION_COUNT' ? `분량 (${unitHint(selectedTpl)})` : '총 중량 (g)'}
+                    label="총 중량 (g)"
                     value={tplAmount}
                     onChangeText={setTplAmount}
                     keyboardType="decimal-pad"
-                    placeholder={mealInputMode === 'PORTION_COUNT' ? `몇 ${unitHint(selectedTpl)}?` : '총 몇 g?'}
+                    placeholder="총 몇 g?"
                     onFocus={focusEntryField}
                   />
                   {previewKcal != null ? (

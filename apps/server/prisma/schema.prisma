@@ -39,7 +39,6 @@ model User {
   playSubscriptionPurchases PlaySubscriptionPurchase[]
   socialAccounts SocialAccount[]
   consents UserConsent[]
-  aiQueryLogs AiQueryLog[]
   ocrFeedbacks OcrFeedback[]
   aiPeriodReports AiPeriodReport[]
 }
@@ -78,20 +77,7 @@ enum SnackPlacement {
   AFTER_DINNER
 }
 
-model AiQueryLog {
-  id        String   @id @default(cuid())
-  userId    String
-  question  String
-  intent    String
-  usedLlm   Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-}
-
-/// 주간·월간 AI 리포트 캐시 (동일 anchor·식단 revision 재사용)
+/// 주간·월간 인사이트 리포트 캐시 (동일 anchor·식단 revision 재사용)
 model AiPeriodReport {
   id            String   @id @default(cuid())
   userId        String

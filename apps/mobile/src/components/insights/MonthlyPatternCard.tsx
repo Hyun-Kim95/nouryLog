@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { getMonthlyReport, type MonthlyReportResponse } from '../../api/ai';
+import { getMonthlyReport, type MonthlyReportResponse } from '../../api/insights';
 import { ApiError } from '../../lib/apiError';
-import { AI_COPY } from '../../copy/ai';
+import { INSIGHT_COPY } from '../../copy/insights';
 import { useTheme } from '../../theme';
 import { Banner, Card, CardTitle, Chip } from '../ui';
 
@@ -24,7 +24,7 @@ export function MonthlyPatternCard({ token, anchor }: Props) {
       const res = await getMonthlyReport(token, anchor);
       setReport(res);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : AI_COPY.monthlyLoadError);
+      setError(e instanceof ApiError ? e.message : INSIGHT_COPY.monthlyLoadError);
     } finally {
       setLoading(false);
     }
@@ -38,27 +38,25 @@ export function MonthlyPatternCard({ token, anchor }: Props) {
 
   return (
     <Card>
-      <CardTitle>{AI_COPY.monthlyPatternTitle}</CardTitle>
+      <CardTitle>{INSIGHT_COPY.monthlyPatternTitle}</CardTitle>
       <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, marginBottom: t.spacing.sm }}>
-        {AI_COPY.monthlyPatternDesc}
+        {INSIGHT_COPY.monthlyPatternDesc}
       </Text>
 
-      {loading ? <Text style={{ color: t.colors.fgMuted }}>{AI_COPY.loading}</Text> : null}
+      {loading ? <Text style={{ color: t.colors.fgMuted }}>{INSIGHT_COPY.loading}</Text> : null}
       {error ? (
-        <Banner variant="danger" actionLabel={AI_COPY.retry} onAction={() => void load()}>
+        <Banner variant="danger" actionLabel={INSIGHT_COPY.retry} onAction={() => void load()}>
           {error}
         </Banner>
       ) : null}
 
-      {report && empty ? (
-        <Text style={{ color: t.colors.fgMuted }}>{AI_COPY.answerNoMeals}</Text>
-      ) : null}
+      {report && empty ? <Text style={{ color: t.colors.fgMuted }}>{INSIGHT_COPY.noMealsInPeriod}</Text> : null}
 
       {report && !empty && !loading ? (
         <View style={{ gap: t.spacing.md }}>
           {report.sections.recurringPatterns.length > 0 ? (
             <View style={{ gap: t.spacing.xs }}>
-              <Text style={{ color: t.colors.fg, fontWeight: '700' }}>{AI_COPY.monthlyRecurringTitle}</Text>
+              <Text style={{ color: t.colors.fg, fontWeight: '700' }}>{INSIGHT_COPY.monthlyRecurringTitle}</Text>
               {report.sections.recurringPatterns.map((p) => (
                 <Text key={p.id} style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
                   · {p.title}: {p.detail}
@@ -69,7 +67,7 @@ export function MonthlyPatternCard({ token, anchor }: Props) {
 
           {report.sections.improvementTrends.length > 0 ? (
             <View style={{ gap: t.spacing.xs }}>
-              <Text style={{ color: t.colors.fg, fontWeight: '700' }}>{AI_COPY.monthlyTrendTitle}</Text>
+              <Text style={{ color: t.colors.fg, fontWeight: '700' }}>{INSIGHT_COPY.monthlyTrendTitle}</Text>
               {report.sections.improvementTrends.map((p) => (
                 <Text key={p.id} style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
                   · {p.detail}
@@ -79,8 +77,7 @@ export function MonthlyPatternCard({ token, anchor }: Props) {
           ) : null}
 
           <View style={{ gap: t.spacing.xs }}>
-            <Text style={{ color: t.colors.fg, fontWeight: '700' }}>{AI_COPY.monthlyAiComment}</Text>
-            {!report.llm.used ? <Banner variant="info">{AI_COPY.weeklyTemplateNote}</Banner> : null}
+            <Text style={{ color: t.colors.fg, fontWeight: '700' }}>{INSIGHT_COPY.monthlyComment}</Text>
             <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, lineHeight: 22 }}>{report.summaryText}</Text>
           </View>
 
@@ -94,7 +91,7 @@ export function MonthlyPatternCard({ token, anchor }: Props) {
 
           {report.sections.nextMonthGoals.length > 0 ? (
             <View style={{ gap: t.spacing.xs }}>
-              <Text style={{ color: t.colors.fg, fontWeight: '700' }}>{AI_COPY.monthlyGoalsTitle}</Text>
+              <Text style={{ color: t.colors.fg, fontWeight: '700' }}>{INSIGHT_COPY.monthlyGoalsTitle}</Text>
               {report.sections.nextMonthGoals.map((g) => (
                 <Text key={g} style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>
                   · {g}

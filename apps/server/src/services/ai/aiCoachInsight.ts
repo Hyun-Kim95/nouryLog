@@ -51,62 +51,7 @@ export function buildCoachInsight(
   }
 
   return {
-    text: `${computed.period.label} 기준 ${goalAchievement.countedDays}일 기록이 있습니다. AI에게 구체적으로 질문해 보세요.`,
+    text: `${computed.period.label} 기준 ${goalAchievement.countedDays}일 기록이 있습니다. 통계 탭에서 자세히 확인해 보세요.`,
     source: 'template',
   };
-}
-
-export type SuggestedQuestion = {
-  label: string;
-  question: string;
-  intentHint: 'stats_query' | 'semantic_meal' | 'knowledge_query';
-};
-
-export type SuggestedQuestionContext = {
-  weekMealCount: number;
-  proteinShortDays: number;
-  topFrequentFoodName: string | null;
-};
-
-export function buildSuggestedQuestions(ctx: SuggestedQuestionContext): SuggestedQuestion[] {
-  const out: SuggestedQuestion[] = [];
-
-  if (ctx.weekMealCount === 0) {
-    out.push({
-      label: '기록 시작',
-      question: '식단 기록을 어떻게 시작하면 좋을까?',
-      intentHint: 'knowledge_query',
-    });
-    return out;
-  }
-
-  out.push({
-    label: '이번 주 식단 평가',
-    question: '이번 주 단백질 섭취 어때?',
-    intentHint: 'stats_query',
-  });
-
-  if (ctx.proteinShortDays >= 2) {
-    out.push({
-      label: '부족한 영양소',
-      question: '이번 주에 단백질이 부족했던 날이 많아?',
-      intentHint: 'stats_query',
-    });
-  }
-
-  if (ctx.topFrequentFoodName) {
-    out.push({
-      label: '비슷한 식사 찾기',
-      question: `예전에 먹었던 ${ctx.topFrequentFoodName} 비슷한 식사 찾아줘`,
-      intentHint: 'semantic_meal',
-    });
-  }
-
-  out.push({
-    label: '영양 기본',
-    question: '일반적으로 단백질은 왜 중요한가요?',
-    intentHint: 'knowledge_query',
-  });
-
-  return out.slice(0, 5);
 }

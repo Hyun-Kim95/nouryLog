@@ -1,11 +1,10 @@
 import { prisma } from '../../lib/prisma.js';
-import { isAiEnabled } from '../../lib/aiConfig.js';
 import { userStatsAggregationMeta } from '../../lib/userStatsAggregationMeta.js';
 import { todayAnchorKst } from '../../lib/statsPeriod.js';
 import { aggregateMealsForAiPeriod, type AiMealCitation } from './aiMealAggregate.js';
 import { parseAiAnchor } from './aiStatsPeriod.js';
 import { computeMacroBreakdown, computeWeekGoalAchievement } from './aiCoachWeekMetrics.js';
-import { buildCoachInsight, buildSuggestedQuestions } from './aiCoachInsight.js';
+import { buildCoachInsight } from './aiCoachInsight.js';
 import { formatMealCitationLabel } from './aiStatsPeriod.js';
 import { DISCLAIMER } from './aiTemplateAnswer.js';
 
@@ -116,13 +115,7 @@ export function pickEvidenceMeals(
   return topProtein;
 }
 
-export async function handleCoachSummary(userId: string, anchorRaw?: string | null) {
-  if (!isAiEnabled()) {
-    const err = new Error('ai_disabled');
-    (err as Error & { code: string }).code = 'AI_LLM_UNAVAILABLE';
-    throw err;
-  }
-
+export async function handleInsightSummary(userId: string, anchorRaw?: string | null) {
   const anchorParsed = parseAiAnchor(anchorRaw ?? todayAnchorKst());
   if (anchorParsed.error) {
     const err = new Error('future_anchor');
@@ -150,11 +143,6 @@ export async function handleCoachSummary(userId: string, anchorRaw?: string | nu
 
   const macroBreakdown = computeMacroBreakdown(weekAgg.computed.summary);
   const insight = buildCoachInsight(weekAgg, goalAchievement);
-  const suggestedQuestions = buildSuggestedQuestions({
-    weekMealCount: weekAgg.computed.mealCount,
-    proteinShortDays: goalAchievement.proteinShortDays,
-    topFrequentFoodName: frequentFoods[0]?.name ?? null,
-  });
 
   const evidenceMeals = pickEvidenceMeals(weekMeals, weekAgg.computed.goalComparison?.proteinGoalG);
 
@@ -182,7 +170,6 @@ export async function handleCoachSummary(userId: string, anchorRaw?: string | nu
     insight,
     evidenceMeals,
     frequentFoods,
-    suggestedQuestions,
     citations,
     isStale: meta.isStale,
     staleHours: meta.staleHours,
@@ -190,3 +177,6 @@ export async function handleCoachSummary(userId: string, anchorRaw?: string | nu
     disclaimer: DISCLAIMER,
   };
 }
+
+/** @deprecated use handleInsightSummary */
+export const handleCoachSummary = handleInsightSummary;

@@ -1,9 +1,9 @@
-import type { CoachSummaryResponse } from '../../api/ai';
+import type { InsightSummaryResponse } from '../../api/insights';
 import { Banner } from '../ui/Banner';
 import { DEMO_COPY } from '../../copy/demo';
 
 type Props = {
-  summary: CoachSummaryResponse | null;
+  summary: InsightSummaryResponse | null;
   loading: boolean;
 };
 

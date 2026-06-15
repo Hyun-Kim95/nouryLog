@@ -3,35 +3,32 @@ import { Pressable, Text, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { getCoachSummary, postAiAsk, type CoachSummaryResponse } from '../api/ai';
-import { ApiError, isAuthDenied } from '../api';
+import { getInsightSummary, type InsightSummaryResponse } from '../api/insights';
+import { isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
-import { AiChatSection } from '../components/ai/AiChatSection';
-import { CoachDashboard } from '../components/ai/CoachDashboard';
-import { WeeklyReportCard } from '../components/ai/WeeklyReportCard';
+import { InsightDashboard } from '../components/insights/InsightDashboard';
+import { WeeklyReportCard } from '../components/insights/WeeklyReportCard';
 import { StatsCalendarModal } from '../components/StatsCalendarModal';
 import { Banner, ScreenLayout } from '../components/ui';
-import { AI_COPY } from '../copy/ai';
+import { INSIGHT_COPY } from '../copy/insights';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { todayAnchorKst } from '../lib/statsPeriod';
 import type { RootStackParamList } from '../navigation';
-import { useToast } from '../toast/useToast';
 import { useTheme } from '../theme';
 
-type AiCoachRoute = RouteProp<RootStackParamList, 'AiCoach'>;
+type InsightRoute = RouteProp<RootStackParamList, 'DietInsight'>;
 
-export function AiCoachScreen() {
+export function InsightScreen() {
   const t = useTheme();
-  const toast = useToast();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const route = useRoute<AiCoachRoute>();
+  const route = useRoute<InsightRoute>();
   const [anchor, setAnchor] = useState(route.params?.anchor ?? todayAnchorKst());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<CoachSummaryResponse | null>(null);
+  const [summary, setSummary] = useState<InsightSummaryResponse | null>(null);
 
   const load = useCallback(
     async ({ silent }: { silent: boolean }) => {
@@ -41,13 +38,13 @@ export function AiCoachScreen() {
         const tok = await ensureAccessToken();
         if (!tok) return;
         setToken(tok);
-        const res = await getCoachSummary(tok, anchor);
+        const res = await getInsightSummary(tok, anchor);
         setSummary(res);
       } catch (e) {
         if (isAuthDenied(e)) return;
-        logAppError('[AiCoach] load', e);
+        logAppError('[Insight] load', e);
         setSummary(null);
-        setError(toUserMessage(e, { context: 'generic', fallback: AI_COPY.summaryLoadError }));
+        setError(toUserMessage(e, { context: 'generic', fallback: INSIGHT_COPY.summaryLoadError }));
       } finally {
         if (!silent) setLoading(false);
       }
@@ -61,16 +58,10 @@ export function AiCoachScreen() {
 
   useFocusReload(load);
 
-  const handleAsk = async (question: string) => {
-    const tok = token ?? (await ensureAccessToken());
-    if (!tok) throw new ApiError(401, { code: 'AUTH_REQUIRED', message: '로그인이 필요해요.' });
-    return postAiAsk(tok, { question, contextAnchor: anchor });
-  };
-
   return (
     <ScreenLayout
-      title={AI_COPY.screenTitle}
-      subtitle={AI_COPY.screenSubtitle}
+      title={INSIGHT_COPY.screenTitle}
+      subtitle={INSIGHT_COPY.screenSubtitle}
       loading={loading}
       keyboardAvoiding
       scroll
@@ -78,30 +69,20 @@ export function AiCoachScreen() {
       <CardAnchorBar anchor={anchor} onOpenCalendar={() => setCalendarOpen(true)} />
 
       {error ? (
-        <Banner variant="danger" actionLabel={AI_COPY.retry} onAction={() => void load({ silent: false })}>
+        <Banner variant="danger" actionLabel={INSIGHT_COPY.retry} onAction={() => void load({ silent: false })}>
           {error}
         </Banner>
       ) : null}
 
-      {summary?.isStale ? <Banner variant="warn">{AI_COPY.staleBanner}</Banner> : null}
+      {summary?.isStale ? <Banner variant="warn">{INSIGHT_COPY.staleBanner}</Banner> : null}
 
-      <CoachDashboard summary={summary} loading={loading} />
+      <InsightDashboard summary={summary} loading={loading} />
 
       {token ? (
         <WeeklyReportCard
           token={token}
           anchor={anchor}
           onGoLog={() => navigation.navigate('Main', { screen: 'Log' })}
-        />
-      ) : null}
-
-      {token ? (
-        <AiChatSection
-          summary={summary}
-          summaryLoading={loading}
-          onAsk={handleAsk}
-          onRateLimit={() => toast.show({ kind: 'info', message: AI_COPY.rateLimitToast })}
-          onAskError={(message) => toast.show({ kind: 'error', message })}
         />
       ) : null}
 
@@ -132,13 +113,13 @@ function CardAnchorBar({ anchor, onOpenCalendar }: { anchor: string; onOpenCalen
       }}
     >
       <View>
-        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>{AI_COPY.anchorLabel}</Text>
+        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>{INSIGHT_COPY.anchorLabel}</Text>
         <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>{anchor}</Text>
       </View>
       <Pressable
         onPress={onOpenCalendar}
         accessibilityRole="button"
-        accessibilityLabel={AI_COPY.anchorCalendarOpen}
+        accessibilityLabel={INSIGHT_COPY.anchorCalendarOpen}
         hitSlop={8}
         style={{
           width: 40,

@@ -14,16 +14,29 @@
 | user-web URL | https://user-web-production-d88d.up.railway.app |
 | user-web 배포 | `docs/release/user-web-railway-deploy.md`, Config path `/apps/user-web/railway.toml` |
 
-### user-web·AI 후속 (2026-06-04)
+### user-web·식단 인사이트 (2026-06-15)
 
 | 항목 | 상태 |
 |------|------|
-| `AI_ENABLED` / `LLM_PROVIDER=template` (nouryLog-api) | Railway 변수 설정·재배포 완료 |
-| `nutrition_kb` seed (9 md) | 프로덕션 DB `ai:seed-kb` **9/9 indexed** |
+| `AI_ENABLED` / `LLM_*` (nouryLog-api) | **제거 완료** — 인사이트는 SQL·템플릿만 사용 |
 | Google OAuth | **사용자** — JS 원본에 `https://user-web-production-d88d.up.railway.app` 추가 |
 | 프로덕션 데모 계정 | `npm run seed:demo-user` + `VITE_DEMO_*` = `user@example.com` / `user123` |
 
-CLI 링크:
+### 식단 인사이트 DB 정리 (2026-06-15)
+
+| 항목 | 상태 |
+|------|------|
+| 마이그레이션 `20260615120000_drop_ai_rag_tables` | **적용 완료** — `AiQueryLog`·`AiEmbedding`·`vector` 제거 |
+| 마이그레이션 `20260615120100_policy_insights_v5` | **적용 완료** — 개인정보처리방침 v5 (시행 2026-07-01, `docs/legal/privacy.md` 동기) |
+
+프로덕션 적용 (기존 Postgres migrate 절차와 동일):
+
+```powershell
+cd apps\server
+npx @railway/cli run --service Postgres -- cmd /c "set DATABASE_URL=%DATABASE_PUBLIC_URL% && npx prisma migrate deploy"
+```
+
+이후 api-server 재배포(`start:release`가 migrate deploy 포함).
 
 ```powershell
 cd d:\cursor\dietManagement

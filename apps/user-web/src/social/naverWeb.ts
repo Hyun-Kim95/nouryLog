@@ -30,7 +30,7 @@ export function saveNaverOAuthState(state: string, next: string): void {
 
 export function consumeNaverOAuthState(received: string): { ok: boolean; next: string } {
   const expected = sessionStorage.getItem('nourylog:naverOAuthState');
-  const next = sessionStorage.getItem('nourylog:naverOAuthNext') ?? '/ai/coach';
+  const next = sessionStorage.getItem('nourylog:naverOAuthNext') ?? '/insights';
   sessionStorage.removeItem('nourylog:naverOAuthState');
   sessionStorage.removeItem('nourylog:naverOAuthNext');
   return { ok: Boolean(expected && expected === received), next };

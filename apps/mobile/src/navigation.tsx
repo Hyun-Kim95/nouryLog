@@ -14,7 +14,7 @@ import { StatsScreen } from './screens/StatsScreen';
 import { isPlayBillingEnabled } from './billing/feature';
 import { SubscriptionScreen } from './screens/SubscriptionScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { AiCoachScreen } from './screens/AiCoachScreen';
+import { InsightScreen } from './screens/InsightScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import { ProfileEditScreen } from './screens/ProfileEditScreen';
 import { WeightHistoryScreen } from './screens/WeightHistoryScreen';
@@ -50,7 +50,7 @@ export type RootStackParamList = {
   InquiryList: undefined;
   InquiryCreate: undefined;
   InquiryDetail: { id: string };
-  AiCoach: { anchor?: string } | undefined;
+  DietInsight: { anchor?: string } | undefined;
 };
 
 export type InitialRoute = 'Login' | 'Onboarding' | 'Main';
@@ -178,9 +178,9 @@ export function RootNavigator({ initialRoute }: { initialRoute: InitialRoute }) 
         options={{ ...themed, headerShown: true, title: '문의 상세' }}
       />
       <Stack.Screen
-        name="AiCoach"
-        component={AiCoachScreen}
-        options={{ ...themed, headerShown: true, title: 'AI 영양 코치' }}
+        name="DietInsight"
+        component={InsightScreen}
+        options={{ ...themed, headerShown: true, title: '식단 인사이트' }}
       />
     </Stack.Navigator>
   );

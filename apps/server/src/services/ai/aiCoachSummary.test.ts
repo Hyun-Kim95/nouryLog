@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCoachInsight, buildSuggestedQuestions } from './aiCoachInsight.js';
+import { buildCoachInsight } from './aiCoachInsight.js';
 import { computeMacroBreakdown } from './aiCoachWeekMetrics.js';
 import { pickEvidenceMeals, mealRowToCitation } from './aiCoachSummaryService.js';
 import type { AiAggregateResult } from './aiMealAggregate.js';
@@ -63,28 +63,6 @@ describe('buildCoachInsight', () => {
       calorieShortDays: 1,
     });
     assert.match(insight.text, /단백질/);
-  });
-});
-
-describe('buildSuggestedQuestions', () => {
-  it('returns at least 3 questions when week has meals', () => {
-    const q = buildSuggestedQuestions({
-      weekMealCount: 10,
-      proteinShortDays: 3,
-      topFrequentFoodName: '닭가슴살',
-    });
-    assert.ok(q.length >= 3);
-    assert.equal(q[0]!.intentHint, 'stats_query');
-  });
-
-  it('returns record CTA when week empty', () => {
-    const q = buildSuggestedQuestions({
-      weekMealCount: 0,
-      proteinShortDays: 0,
-      topFrequentFoodName: null,
-    });
-    assert.equal(q.length, 1);
-    assert.equal(q[0]!.intentHint, 'knowledge_query');
   });
 });
 

@@ -12,11 +12,6 @@ import {
 } from '../lib/ocrQuota.js';
 import { userStatsAggregationMeta } from '../lib/userStatsAggregationMeta.js';
 import { detectNutrition } from '../services/ocrService.js';
-import {
-  scheduleDeleteMealIndex,
-  scheduleIndexMeal,
-  scheduleReindexMealById,
-} from '../services/vector/aiIndexWorker.js';
 import { handleOcrFeedback } from '../services/ai/ocrFeedbackService.js';
 import {
   calculateRecommendationFull,
@@ -1062,7 +1057,6 @@ meRouter.post('/meals', async (req, res) => {
         snackPlacement: snackForCreate,
       },
     });
-    scheduleIndexMeal(meal);
     res.status(201).json({ mealId: meal.id });
     return;
   }
@@ -1100,7 +1094,6 @@ meRouter.post('/meals', async (req, res) => {
       snackPlacement: snackForCreate,
     },
   });
-  scheduleIndexMeal(meal);
   res.status(201).json({ mealId: meal.id });
 });
 
@@ -1267,7 +1260,6 @@ meRouter.put('/meals/:mealId', async (req, res) => {
         ...snackPatchResolved,
       },
     });
-    scheduleReindexMealById(mealId, userId);
     res.json({ ok: true });
     return;
   }
@@ -1348,7 +1340,6 @@ meRouter.put('/meals/:mealId', async (req, res) => {
         ...snackPatchResolved,
       },
     });
-    scheduleReindexMealById(mealId, userId);
     res.json({ ok: true });
     return;
   }
@@ -1386,7 +1377,6 @@ meRouter.put('/meals/:mealId', async (req, res) => {
       ...snackPatchResolved,
     },
   });
-  scheduleReindexMealById(mealId, userId);
   res.json({ ok: true });
 });
 
@@ -1420,7 +1410,6 @@ meRouter.post('/ocr/feedback', async (req, res) => {
     res.status(status).json({
       id: result.id,
       changedFields: result.changedFields,
-      indexed: result.indexed,
     });
   } catch (e) {
     const err = e as Error & { code?: string; field?: string };
@@ -1452,7 +1441,6 @@ meRouter.patch('/meals/:mealId/deactivate', async (req, res) => {
     return;
   }
   await prisma.meal.update({ where: { id: mealId }, data: softDeactivateFields() });
-  scheduleDeleteMealIndex(mealId, userId);
   res.json({ ok: true });
 });
 

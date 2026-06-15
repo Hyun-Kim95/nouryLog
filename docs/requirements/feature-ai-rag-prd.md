@@ -16,6 +16,9 @@ aligns_with:
 
 # AI 식단 분석·영양 지식 RAG 확장 PRD (초안)
 
+> **Deprecated (2026-06-15):** 본 PRD의 RAG·LLM·`/me/ai/*` 범위는 **식단 인사이트**로 대체되었습니다.  
+> 현행 계약: [`api-contract-v1.14-insights-delta.md`](api-contract-v1.14-insights-delta.md) — SQL·규칙 기반 `/me/insights/*` only.
+
 ## 1) 문서 목적
 
 - nouryLog에 **OCR → 구조화 저장 → 통계 → RAG → 개인화 분석** 파이프라인을 추가한다.

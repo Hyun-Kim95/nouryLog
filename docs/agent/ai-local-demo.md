@@ -1,6 +1,9 @@
 # AI 로컬 데모 (Tier A) — Postgres **pgvector** + Ollama
 
-PRD: `docs/requirements/feature-ai-rag-prd.md` (approved)  
+> **Deprecated (2026-06-15):** RAG·Ollama 로컬 데모는 **식단 인사이트** 전환으로 더 이상 필요하지 않습니다.  
+> 인사이트 스모크: `npm run insights:smoke:summary` (일반 `dev:server` + `seed:demo-user`).
+
+PRD: `docs/requirements/feature-ai-rag-prd.md` (deprecated — see v1.14 insights delta)  
 **벡터 SSOT: PostgreSQL pgvector** (로컬 = Railway, Chroma **미사용**)
 
 ## 사전 요구
@@ -76,7 +79,9 @@ npm run ai:pull-models
 
 ~~`CHROMA_URL`~~ — **사용하지 않음**
 
-## 4) RAG 인덱스 (semantic + knowledge)
+## 4) RAG 인덱스 (deprecated — 2026-06-15 제거)
+
+> `nutrition-kb/`, `ai:backfill`, `ai:seed-kb`, meal 임베딩 훅은 삭제되었습니다. 아래는 역사 참고용입니다.
 
 Ollama **`nomic-embed-text`** 필요 (`npm run ai:pull-models`).
 
@@ -86,11 +91,11 @@ npm run ai:backfill   # tsx — .env 로드
 npm run ai:seed-kb
 ```
 
-- **nutrition_kb** md 9개 (`apps/server/data/nutrition-kb/`) — 파일 추가·수정 후 위 `ai:seed-kb` 재실행
-- meal 저장·수정 시 비동기 재인덱싱 (`POST/PUT /meals`)
-- OCR 수정: 모바일 `POST /me/ocr/feedback` (저장 후 diff 있을 때)
+- ~~**nutrition_kb** md 9개~~ — 디렉터리 삭제됨
+- ~~meal 저장·수정 시 비동기 재인덱싱~~ — 제거됨
+- OCR 수정: `POST /ocr/feedback` — **DB 저장만** (임베딩 없음)
 
-## 5) 모바일 AI 리포트 + API
+## 5) 모바일 식단 인사이트 + API
 
 ```powershell
 npm run dev:server          # PORT 충돌 시: $env:PORT='3002'
@@ -98,9 +103,9 @@ npm run dev:mobile
 ```
 
 - API 스모크 (포트 맞출 것):  
-  `$env:API_URL='http://localhost:3002'; npm run ai:smoke:weekly`  
-  `$env:API_URL='http://localhost:3002'; npm run ai:smoke:monthly`
-- smoke: `npm run ai:smoke` / `ai:smoke:ask` / `ai:smoke:coach` (backfill·seed-kb 후)
+  `$env:API_URL='http://localhost:3002'; npm run insights:smoke:summary`  
+  `$env:API_URL='http://localhost:3002'; npm run insights:smoke:weekly`  
+  `$env:API_URL='http://localhost:3002'; npm run insights:smoke:monthly`
 
 ### 모바일 수동 DoD
 

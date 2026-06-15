@@ -29,16 +29,16 @@ npm run dev:user-web
 
 모바일 에뮬레이터 테스트 시 `apps/mobile/.env`의 `EXPO_PUBLIC_API_URL`을 환경에 맞게 사용합니다.
 
-## AI 리포트 (user-web 미리보기 + 모바일)
+## 식단 인사이트 (user-web 미리보기 + 모바일)
 
 | 기능 | user-web | 모바일 |
 |------|----------|--------|
-| 주간 AI 식단 리포트 | `/ai/weekly` | AI 코치 |
-| 월간 영양 패턴 | `/ai/monthly` | 통계 · 월 |
-| AI 코치 챗 | `/ai/coach` | AI 코치 |
+| 주간 식단 리포트 | `/insights/weekly` | 식단 인사이트 |
+| 월간 영양 패턴 | `/insights/monthly` | 통계 · 월 |
+| 요약 대시보드 | `/insights` | 홈 · 식단 인사이트 |
 
-로컬: `dev:server` + `dev:user-web` (5175). 자동 로그인 `http://localhost:5175/demo?auto=1` — 상단 네비에 **「시연」 메뉴는 없음** (주간·월간·코치만).  
-`VITE_DEV_API_TARGET=http://localhost:3002` 등 서버 포트 맞출 것. 상세: [`docs/agent/ai-local-demo.md`](docs/agent/ai-local-demo.md).
+로컬: `dev:server` + `dev:user-web` (5175). 자동 로그인 `http://localhost:5175/demo?auto=1` — 상단 네비에 **주간·월간·식단 인사이트**만 표시.  
+`VITE_DEV_API_TARGET=http://localhost:3002` 등 서버 포트 맞출 것. 스모크: `npm run insights:smoke:summary` (서버 기동 후).
 
 ### user-web 로그인 env (`apps/user-web/.env.local`)
 

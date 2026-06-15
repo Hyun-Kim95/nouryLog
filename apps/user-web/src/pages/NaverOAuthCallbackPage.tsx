@@ -13,7 +13,7 @@ export function NaverOAuthCallbackPage() {
   useEffect(() => {
     if (!ready) return;
     if (token) {
-      nav('/ai/coach', { replace: true });
+      nav('/insights', { replace: true });
       return;
     }
 

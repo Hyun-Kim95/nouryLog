@@ -1,5 +1,4 @@
 import { prisma } from '../../lib/prisma.js';
-import { indexOcrCorrectionPattern, indexOcrRawText } from '../vector/aiIndexWorker.js';
 
 const NUTRITION_FIELDS = ['calories', 'protein', 'carbohydrate', 'fat'] as const;
 
@@ -47,14 +46,6 @@ function assertNonNegative(fields: OcrNutritionFields): string | null {
     if (v !== undefined && v < 0) return field;
   }
   return null;
-}
-
-function correctionPatternSummary(changedFields: string[], raw: OcrNutritionFields, corrected: OcrNutritionFields): string {
-  const parts = changedFields.map((f) => {
-    const key = f as (typeof NUTRITION_FIELDS)[number];
-    return `${key}:${raw[key]}->${corrected[key]}`;
-  });
-  return `ocr_correction:${parts.join(';')}`;
 }
 
 export type OcrFeedbackInput = {
@@ -107,7 +98,7 @@ export async function handleOcrFeedback(input: OcrFeedbackInput) {
   });
 
   if (existing) {
-    return { id: existing.id, changedFields: existing.changedFields, indexed: true, created: false };
+    return { id: existing.id, changedFields: existing.changedFields, created: false };
   }
 
   const row = await prisma.ocrFeedback.create({
@@ -121,18 +112,5 @@ export async function handleOcrFeedback(input: OcrFeedbackInput) {
     },
   });
 
-  let indexed = false;
-  if (raw.rawText?.trim()) {
-    const rawIndex = await indexOcrRawText({
-      userId: input.userId,
-      sourceId: row.id,
-      rawText: raw.rawText,
-    });
-    indexed = rawIndex.indexed;
-  }
-
-  const pattern = correctionPatternSummary(changedFields, raw, corrected);
-  await indexOcrCorrectionPattern(pattern);
-
-  return { id: row.id, changedFields, indexed, created: true };
+  return { id: row.id, changedFields, created: true };
 }

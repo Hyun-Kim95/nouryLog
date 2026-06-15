@@ -21,7 +21,7 @@ export function DemoLandingPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const next = params.get('next') ?? '/ai/coach';
+  const next = params.get('next') ?? '/insights';
   const auto = params.get('auto') === '1';
   const hasCredentials = demoAutoLoginEnabled();
 

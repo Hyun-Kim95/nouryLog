@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getWeeklyReport, type WeeklyReportResponse } from '../api/ai';
+import { getWeeklyReport, type WeeklyReportResponse } from '../api/insights';
 import { RequireAuth } from '../components/auth/RequireAuth';
 import { Banner } from '../components/ui/Banner';
 import { PageTitle } from '../components/ui/PageTitle';
@@ -38,7 +38,7 @@ function WeeklyInner() {
 
   return (
     <>
-      <PageTitle title="주간 AI 식단 리포트" subtitle="최근 7일 기록 기반 패턴·다음 주 목표" />
+      <PageTitle title="주간 식단 리포트" subtitle="최근 7일 기록 기반 패턴·다음 주 목표" />
       <div className="card coach-anchor-bar">
         <AnchorDatePicker label="주 기준일" value={anchor} onChange={setAnchor} maxDate={todayAnchorKst()} />
       </div>
@@ -68,8 +68,7 @@ function WeeklyInner() {
             </div>
           ) : null}
           <div className="card">
-            <h3 className="card-heading">AI 코멘트</h3>
-            {!report.llm.used ? <Banner variant="info">템플릿 요약 (LLM 미사용 가능)</Banner> : null}
+            <h3 className="card-heading">한 줄 요약</h3>
             <div className="answer-box">{report.summaryText}</div>
           </div>
           {report.sections.evidence.length > 0 ? (
