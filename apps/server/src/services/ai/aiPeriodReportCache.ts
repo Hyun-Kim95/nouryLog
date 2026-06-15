@@ -9,7 +9,11 @@ export const AI_PERIOD_REPORT_PAYLOAD_VERSION = 2;
 
 export const AI_PERIOD_REPORT_VERSION_KEY = '_payloadVersion';
 
-type VersionedPayload = { [typeof AI_PERIOD_REPORT_VERSION_KEY]?: number };
+function readPayloadVersion(payload: unknown): number | undefined {
+  if (!payload || typeof payload !== 'object') return undefined;
+  const v = (payload as Record<string, unknown>)[AI_PERIOD_REPORT_VERSION_KEY];
+  return typeof v === 'number' ? v : undefined;
+}
 
 function formatYmd(y: number, m: number, d: number): string {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -23,8 +27,7 @@ export function normalizeCacheAnchor(kind: ReportKind, anchorYmd: string): strin
 }
 
 export function isCurrentPeriodReportPayload(payload: unknown): boolean {
-  if (!payload || typeof payload !== 'object') return false;
-  return (payload as VersionedPayload)[AI_PERIOD_REPORT_VERSION_KEY] === AI_PERIOD_REPORT_PAYLOAD_VERSION;
+  return readPayloadVersion(payload) === AI_PERIOD_REPORT_PAYLOAD_VERSION;
 }
 
 export function attachPeriodReportPayloadVersion(payload: unknown): object {
@@ -36,8 +39,9 @@ export function attachPeriodReportPayloadVersion(payload: unknown): object {
 
 export function stripPeriodReportPayloadVersion<T>(payload: unknown): T {
   if (!payload || typeof payload !== 'object') return payload as T;
-  const { [AI_PERIOD_REPORT_VERSION_KEY]: _v, ...rest } = payload as VersionedPayload & Record<string, unknown>;
-  return rest as T;
+  const record = { ...(payload as Record<string, unknown>) };
+  delete record[AI_PERIOD_REPORT_VERSION_KEY];
+  return record as T;
 }
 
 export async function getCachedPeriodReport<T>(
