@@ -60,3 +60,7 @@ tags: [api, contract, insights, delta]
 ## 6) 하위 호환
 
 v1.14 클라이언트는 삭제 필드를 참조할 수 있음. 모바일·user-web은 v1.15와 함께 배포한다.
+
+## 7) 리포트 캐시
+
+`AiPeriodReport.payload`에 `_payloadVersion` 메타를 저장한다. 서버의 `AI_PERIOD_REPORT_PAYLOAD_VERSION`과 다르거나 없으면 캐시를 무시하고 재집계한다. API 응답에는 `_payloadVersion`을 포함하지 않는다.

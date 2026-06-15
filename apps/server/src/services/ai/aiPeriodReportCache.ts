@@ -4,6 +4,13 @@ import { getMealsRevision } from './aiMealsRevision.js';
 
 export type ReportKind = 'week' | 'month';
 
+/** Bump when report payload shape or analysis rules change (invalidates DB cache). */
+export const AI_PERIOD_REPORT_PAYLOAD_VERSION = 2;
+
+export const AI_PERIOD_REPORT_VERSION_KEY = '_payloadVersion';
+
+type VersionedPayload = { [typeof AI_PERIOD_REPORT_VERSION_KEY]?: number };
+
 function formatYmd(y: number, m: number, d: number): string {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
@@ -13,6 +20,24 @@ export function normalizeCacheAnchor(kind: ReportKind, anchorYmd: string): strin
   if (kind === 'week') return anchorYmd;
   const { y, m } = parseYmdParts(anchorYmd);
   return formatYmd(y, m, 1);
+}
+
+export function isCurrentPeriodReportPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') return false;
+  return (payload as VersionedPayload)[AI_PERIOD_REPORT_VERSION_KEY] === AI_PERIOD_REPORT_PAYLOAD_VERSION;
+}
+
+export function attachPeriodReportPayloadVersion(payload: unknown): object {
+  return {
+    ...(payload as object),
+    [AI_PERIOD_REPORT_VERSION_KEY]: AI_PERIOD_REPORT_PAYLOAD_VERSION,
+  };
+}
+
+export function stripPeriodReportPayloadVersion<T>(payload: unknown): T {
+  if (!payload || typeof payload !== 'object') return payload as T;
+  const { [AI_PERIOD_REPORT_VERSION_KEY]: _v, ...rest } = payload as VersionedPayload & Record<string, unknown>;
+  return rest as T;
 }
 
 export async function getCachedPeriodReport<T>(
@@ -30,7 +55,8 @@ export async function getCachedPeriodReport<T>(
   });
   if (!row) return null;
   if (!row.mealsRevision || row.mealsRevision !== currentRevision) return null;
-  return row.payload as T;
+  if (!isCurrentPeriodReportPayload(row.payload)) return null;
+  return stripPeriodReportPayloadVersion<T>(row.payload);
 }
 
 export async function setCachedPeriodReport(
@@ -43,10 +69,11 @@ export async function setCachedPeriodReport(
 ): Promise<void> {
   const cacheAnchor = normalizeCacheAnchor(kind, anchor);
   const mealsRevision = await getMealsRevision(userId, from, toExclusive);
+  const stored = attachPeriodReportPayloadVersion(payload);
 
   await prisma.aiPeriodReport.upsert({
     where: { userId_kind_anchor: { userId, kind, anchor: cacheAnchor } },
-    create: { userId, kind, anchor: cacheAnchor, mealsRevision, payload: payload as object },
-    update: { payload: payload as object, mealsRevision, createdAt: new Date() },
+    create: { userId, kind, anchor: cacheAnchor, mealsRevision, payload: stored },
+    update: { payload: stored, mealsRevision, createdAt: new Date() },
   });
 }
