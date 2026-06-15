@@ -1,7 +1,7 @@
 import { prisma } from '../../lib/prisma.js';
 import { isGoalMet } from '../../lib/goalFulfillment.js';
 import type { NutritionSum } from '../../lib/statsAggregate.js';
-import { addDaysYmd, sundayOfWeekYmd } from '../../lib/statsPeriod.js';
+import { addDaysYmd } from '../../lib/statsPeriod.js';
 import { aggregateMealsForAiPeriod } from './aiMealAggregate.js';
 
 export type MacroBreakdown = {
@@ -36,11 +36,11 @@ export async function computeWeekGoalAchievement(
   let calorieShortDays = 0;
   let countedDays = 0;
 
-  const weekStart = sundayOfWeekYmd(anchorYmd);
+  const windowStart = addDaysYmd(anchorYmd, -6);
   const profileRow = await prisma.profile.findUnique({ where: { userId } });
 
   for (let i = 0; i < 7; i++) {
-    const dayYmd = addDaysYmd(weekStart, i);
+    const dayYmd = addDaysYmd(windowStart, i);
     const dayAgg = await aggregateMealsForAiPeriod(userId, 'day_single', dayYmd);
     if (dayAgg.computed.mealCount === 0) continue;
 

@@ -1,10 +1,9 @@
 import {
-  addDaysYmd,
   boundsForRange,
+  boundsForRolling7Days,
   isPeriodInFuture,
   parseAnchorDate,
   parseYmdParts,
-  sundayOfWeekYmd,
   todayAnchorKst,
   type StatsPeriodBounds,
 } from '../../lib/statsPeriod.js';
@@ -21,8 +20,8 @@ export function resolveAiPeriodBounds(
   kind: AiPeriodKind,
   anchorYmd: string,
 ): StatsPeriodBounds & { kind: AiPeriodKind; timezone: 'Asia/Seoul' } {
-  const range = KIND_TO_RANGE[kind];
-  const period = boundsForRange(range, anchorYmd);
+  const period =
+    kind === 'week_single' ? boundsForRolling7Days(anchorYmd) : boundsForRange(KIND_TO_RANGE[kind], anchorYmd);
   return { ...period, kind, timezone: 'Asia/Seoul' };
 }
 
@@ -38,7 +37,7 @@ export function parseAiAnchor(raw: unknown): { anchor: string; error?: string } 
 /** Period end date (KST YMD) for goal snapshot — stats v1.8 규칙 */
 export function periodEndGoalDateYmd(kind: AiPeriodKind, anchorYmd: string): string {
   if (kind === 'day_single') return anchorYmd;
-  if (kind === 'week_single') return addDaysYmd(sundayOfWeekYmd(anchorYmd), 6);
+  if (kind === 'week_single') return anchorYmd;
   const parts = anchorYmd.match(/^(\d{4})-(\d{2})/);
   if (!parts) return anchorYmd;
   const y = Number(parts[1]);
@@ -59,6 +58,7 @@ export function calendarDaysInPeriod(kind: AiPeriodKind, anchorYmd: string): num
 
 export function formatStatPeriodCitationLabel(period: StatsPeriodBounds, kind: AiPeriodKind): string {
   if (kind === 'day_single') return `${period.label} 집계`;
+  if (kind === 'week_single') return `${period.label} 최근 7일 집계`;
   return `${period.label} 주간 집계`;
 }
 

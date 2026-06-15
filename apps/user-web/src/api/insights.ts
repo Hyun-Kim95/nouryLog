@@ -20,8 +20,6 @@ export type InsightCitation =
 export type PeriodKeyMetrics = {
   breakfastSkipDays: number;
   proteinShortMeals: number;
-  outsideMealCount: number;
-  vegetableMealCount: number;
 };
 
 export type PatternItem = { id: string; title: string; detail: string };
@@ -73,8 +71,6 @@ export type MonthlyReportResponse = {
   };
   comparison: {
     recordedDaysDelta: number;
-    vegetableMealDelta: number;
-    outsideMealDelta: number;
     previousLabel: string;
   } | null;
   summaryText: string;

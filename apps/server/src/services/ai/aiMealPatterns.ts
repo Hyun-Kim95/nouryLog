@@ -6,15 +6,9 @@ import type { AiAggregateResult } from './aiMealAggregate.js';
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'] as const;
 
-const OUTSIDE_FOOD_RE =
-  /치킨|피자|라면|햄버거|배달|편의점|술|맥주|소주|찜닭|족발|떡볶이|김밥|도시락|패스트|외식/i;
-const VEGETABLE_FOOD_RE = /샐러드|채소|나물|야채|브로콜리|시금치|상추|양배추/i;
-
 export type PeriodKeyMetrics = {
   breakfastSkipDays: number;
   proteinShortMeals: number;
-  outsideMealCount: number;
-  vegetableMealCount: number;
 };
 
 export type PatternItem = { id: string; title: string; detail: string };
@@ -28,8 +22,6 @@ export type EvidenceItem = {
 
 export type PeriodComparison = {
   recordedDaysDelta: number;
-  vegetableMealDelta: number;
-  outsideMealDelta: number;
   previousLabel: string;
 };
 
@@ -119,8 +111,6 @@ function analyzeMeals(
   const daysWithAny = new Set<string>();
   const weekdayBreakfastSkip = new Map<number, number>();
   let proteinShortMeals = 0;
-  let outsideMealCount = 0;
-  let vegetableMealCount = 0;
   const foodCounts = new Map<string, number>();
   const dinnerHighCal: MealRow[] = [];
 
@@ -131,8 +121,6 @@ function analyzeMeals(
     daysWithAny.add(ymd);
     if (m.mealSlot === 'BREAKFAST') daysWithBreakfast.add(ymd);
     if (m.protein < proteinPerMealThreshold) proteinShortMeals += 1;
-    if (OUTSIDE_FOOD_RE.test(m.name)) outsideMealCount += 1;
-    if (VEGETABLE_FOOD_RE.test(m.name)) vegetableMealCount += 1;
     foodCounts.set(m.name, (foodCounts.get(m.name) ?? 0) + 1);
     if (m.mealSlot === 'DINNER' && m.calories >= 500) dinnerHighCal.push(m);
   }
@@ -153,8 +141,6 @@ function analyzeMeals(
   const keyMetrics: PeriodKeyMetrics = {
     breakfastSkipDays,
     proteinShortMeals,
-    outsideMealCount,
-    vegetableMealCount,
   };
 
   const patterns: PatternItem[] = [];
@@ -170,20 +156,6 @@ function analyzeMeals(
       id: 'dinner_heavy',
       title: '저녁 고칼로리·나트륨 식사',
       detail: `저녁에 칼로리가 높은 식사(500kcal 이상)가 ${dinnerHighCal.length}회 기록되었습니다.`,
-    });
-  }
-  if (outsideMealCount >= 2) {
-    patterns.push({
-      id: 'outside_food',
-      title: '외식·배달 비중',
-      detail: `기록 기준으로 외식·배달·편의 식사로 보이는 항목이 ${outsideMealCount}회 있습니다.`,
-    });
-  }
-  if (vegetableMealCount <= 1 && meals.length >= 5) {
-    patterns.push({
-      id: 'low_vegetable',
-      title: '채소·식이섬유 부족',
-      detail: '채소·샐러드류 기록이 적어 식이섬유 섭취가 부족해 보입니다.',
     });
   }
   if (proteinShortMeals >= 3) {
@@ -206,13 +178,6 @@ function analyzeMeals(
       id: 'more_records',
       title: '기록 증가',
       detail: `${comparison.previousLabel} 대비 기록일이 ${comparison.recordedDaysDelta}일 늘었습니다.`,
-    });
-  }
-  if (comparison && comparison.vegetableMealDelta > 0) {
-    patterns.push({
-      id: 'veg_improved',
-      title: '채소 기록 증가',
-      detail: `지난 기간보다 채소·샐러드류 기록이 ${comparison.vegetableMealDelta}회 늘었습니다.`,
     });
   }
 
@@ -243,20 +208,6 @@ function analyzeMeals(
   const nextGoals: string[] = [];
   if (breakfastSkipDays >= 2) {
     nextGoals.push('아침에 삶은 달걀·요거트·두부 등 간단한 단백질을 추가해 보세요.');
-  }
-  if (outsideMealCount >= 2) {
-    nextGoals.push(
-      kind === 'week_single'
-        ? '저녁 배달·외식은 주 2회 이하로 줄여 보세요.'
-        : '배달·외식 빈도를 줄이고 점심을 가볍게 조정해 보세요.',
-    );
-  }
-  if (vegetableMealCount < 3) {
-    nextGoals.push(
-      kind === 'week_single'
-        ? '이번 주 채소가 포함된 식사를 3회 이상 기록해 보세요.'
-        : '다음 달 채소·샐러드 포함 식사를 주 3회 이상 목표로 삼아 보세요.',
-    );
   }
   if (proteinShortMeals >= 3) {
     nextGoals.push('단백질이 부족한 끼니에 달걀·두부·살코기를 추가해 보세요.');
@@ -300,16 +251,10 @@ export async function buildMealPatternAnalysis(
   const prevMeals = await fetchMealsInPeriod(userId, kind, prevAnchor);
   const prevDays = new Set(prevMeals.map((m) => todayAnchorKst(m.consumedAt))).size;
   const curDays = agg.computed.periodMeta.recordedDays;
-  const prevVeg = prevMeals.filter((m) => VEGETABLE_FOOD_RE.test(m.name)).length;
-  const curVeg = meals.filter((m) => VEGETABLE_FOOD_RE.test(m.name)).length;
-  const prevOut = prevMeals.filter((m) => OUTSIDE_FOOD_RE.test(m.name)).length;
-  const curOut = meals.filter((m) => OUTSIDE_FOOD_RE.test(m.name)).length;
   const prevBounds = resolveAiPeriodBounds(kind, prevAnchor);
 
   comparison = {
     recordedDaysDelta: curDays - prevDays,
-    vegetableMealDelta: curVeg - prevVeg,
-    outsideMealDelta: curOut - prevOut,
     previousLabel: prevBounds.label,
   };
 

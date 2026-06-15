@@ -7,7 +7,7 @@ import {
 import { effectiveMacroGoals, calculateRecommendationFull } from '../../lib/recommendation.js';
 import { isGoalMet } from '../../lib/goalFulfillment.js';
 import { buildEffectiveGoalsByDate, type GoalSnapshot } from '../../lib/weightEntry.js';
-import { sundayOfWeekYmd, todayAnchorKst } from '../../lib/statsPeriod.js';
+import { addDaysYmd, todayAnchorKst } from '../../lib/statsPeriod.js';
 import {
   calendarDaysInPeriod,
   formatMealCitationLabel,
@@ -194,7 +194,7 @@ export async function aggregateMealsForAiPeriod(
 
   const statCitation: AiStatPeriodCitation = {
     type: 'stat_period',
-    date: kind === 'week_single' ? sundayOfWeekYmd(anchorYmd) : anchorYmd,
+    date: kind === 'week_single' ? addDaysYmd(anchorYmd, -6) : anchorYmd,
     label: formatStatPeriodCitationLabel(period, kind),
     nutrients: { ...summary },
   };

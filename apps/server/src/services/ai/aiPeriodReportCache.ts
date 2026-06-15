@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma.js';
-import { parseYmdParts, sundayOfWeekYmd } from '../../lib/statsPeriod.js';
+import { parseYmdParts } from '../../lib/statsPeriod.js';
 import { getMealsRevision } from './aiMealsRevision.js';
 
 export type ReportKind = 'week' | 'month';
@@ -10,7 +10,7 @@ function formatYmd(y: number, m: number, d: number): string {
 
 /** 캐시 키용 anchor 정규화 */
 export function normalizeCacheAnchor(kind: ReportKind, anchorYmd: string): string {
-  if (kind === 'week') return sundayOfWeekYmd(anchorYmd);
+  if (kind === 'week') return anchorYmd;
   const { y, m } = parseYmdParts(anchorYmd);
   return formatYmd(y, m, 1);
 }

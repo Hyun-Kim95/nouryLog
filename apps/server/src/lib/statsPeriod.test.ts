@@ -4,6 +4,7 @@ import {
   STATS_WINDOW_SIZE,
   addDaysYmd,
   boundsForRange,
+  boundsForRolling7Days,
   boundsForStatsWindow,
   formatWeekLabelKst,
   isPeriodInFuture,
@@ -41,6 +42,14 @@ describe('statsPeriod', () => {
     assert.equal(b.from.toISOString(), '2026-05-09T15:00:00.000Z');
     assert.equal(b.toExclusive.toISOString(), '2026-05-16T15:00:00.000Z');
     assert.match(b.label, /5월 10일 – 5월 16일/);
+  });
+
+  it('boundsForRolling7Days is anchor minus 6 through anchor', () => {
+    const b = boundsForRolling7Days('2026-06-03');
+    assert.equal(b.anchor, '2026-06-03');
+    assert.equal(b.from.toISOString(), '2026-05-27T15:00:00.000Z');
+    assert.equal(b.toExclusive.toISOString(), '2026-06-03T15:00:00.000Z');
+    assert.equal(b.label, '5월 28일 – 6월 3일');
   });
 
   it('sundayOfWeekYmd returns Sunday for anchor in same week', () => {

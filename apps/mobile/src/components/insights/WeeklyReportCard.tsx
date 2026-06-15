@@ -68,8 +68,6 @@ export function WeeklyReportCard({ token, anchor, onGoLog }: Props) {
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs }}>
                 <Chip label={INSIGHT_COPY.weeklyMetricBreakfastSkip(km.breakfastSkipDays)} />
                 <Chip label={INSIGHT_COPY.weeklyMetricProteinShort(km.proteinShortMeals)} />
-                <Chip label={INSIGHT_COPY.weeklyMetricOutside(km.outsideMealCount)} />
-                <Chip label={INSIGHT_COPY.weeklyMetricVeg(km.vegetableMealCount)} />
               </View>
             </View>
           ) : null}

@@ -48,12 +48,8 @@ async function buildMonthlyPayload(userId: string, anchor: string) {
   const macroBreakdown = computeMacroBreakdown(s);
   const analysis = await buildMealPatternAnalysis(userId, kind, anchor, agg);
 
-  const improvementTrends = analysis.patterns.filter((p) =>
-    ['more_records', 'veg_improved'].includes(p.id),
-  );
-  const recurringPatterns = analysis.patterns.filter((p) =>
-    !['more_records', 'veg_improved'].includes(p.id),
-  );
+  const improvementTrends = analysis.patterns.filter((p) => p.id === 'more_records');
+  const recurringPatterns = analysis.patterns.filter((p) => p.id !== 'more_records');
 
   const summaryText = buildPeriodPatternSummary(agg, analysis);
   const meta = userStatsAggregationMeta(new Date());

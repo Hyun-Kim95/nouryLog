@@ -250,6 +250,21 @@ export function isPeriodInFuture(from: Date, todayYmd = todayAnchorKst()): boole
   return from.getTime() >= tomorrowStart.getTime();
 }
 
+/** 인사이트 week_single: anchor 포함 과거 6일 = 최근 7일 (KST) */
+export function boundsForRolling7Days(anchorYmd: string): StatsPeriodBounds {
+  const windowStart = addDaysYmd(anchorYmd, -6);
+  const sp = parseYmdParts(windowStart);
+  const from = kstMidnightUtc(sp.y, sp.m, sp.d);
+  const next = parseYmdParts(addDaysYmd(anchorYmd, 1));
+  const toExclusive = kstMidnightUtc(next.y, next.m, next.d);
+  return {
+    anchor: anchorYmd,
+    from,
+    toExclusive,
+    label: `${formatShortMd(windowStart)} – ${formatShortMd(anchorYmd)}`,
+  };
+}
+
 /** @deprecated meal range 등 레거시 — 통계는 boundsForStatsWindow 사용 */
 export function boundsForRange(range: 'day' | 'week' | 'month', anchorYmd: string): StatsPeriodBounds {
   if (range === 'day') {

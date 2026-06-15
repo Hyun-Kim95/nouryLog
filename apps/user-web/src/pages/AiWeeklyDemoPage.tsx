@@ -58,12 +58,10 @@ function WeeklyInner() {
         <>
           {km ? (
             <div className="card">
-              <h3 className="card-heading">이번 주 핵심 요약</h3>
+              <h3 className="card-heading">최근 7일 핵심 요약</h3>
               <div className="kpi-chips">
                 <span className="chip">아침 결식 {km.breakfastSkipDays}일</span>
                 <span className="chip">단백질 부족 끼니 {km.proteinShortMeals}회</span>
-                <span className="chip">외식·배달 {km.outsideMealCount}회</span>
-                <span className="chip">채소 포함 {km.vegetableMealCount}회</span>
               </div>
             </div>
           ) : null}
