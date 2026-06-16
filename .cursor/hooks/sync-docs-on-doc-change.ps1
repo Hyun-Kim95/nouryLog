@@ -96,7 +96,7 @@ try {
     $cooldownMarker = Join-Path $stateDir "obsidian-sync-docs.last-run"
     if (Test-Path -LiteralPath $cooldownMarker) {
         try {
-            $lastRunRaw = (Get-Content -LiteralPath $cooldownMarker -Raw).Trim()
+            $lastRunRaw = (Get-Content -LiteralPath $cooldownMarker -Raw -Encoding UTF8).Trim()
             if (-not [string]::IsNullOrWhiteSpace($lastRunRaw)) {
                 $lastRun = [datetime]::Parse($lastRunRaw)
                 $elapsed = (Get-Date) - $lastRun

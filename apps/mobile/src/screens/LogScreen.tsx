@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -121,6 +122,18 @@ function ocrFieldsEdited(snapshot: OcrFieldSnapshot, current: OcrFieldSnapshot):
   );
 }
 
+const MEAL_CREATE_TIMEOUT_MS = 45_000;
+
+function isAmbiguousMealSaveError(e: unknown): boolean {
+  if (!(e instanceof ApiError)) return false;
+  return (
+    e.code === 'TIMEOUT' ||
+    e.code === 'NETWORK_UNAVAILABLE' ||
+    e.status === 408 ||
+    e.status === 0
+  );
+}
+
 function openPaywall(
   setPaywallOpen: (open: boolean) => void,
   trigger: PaywallTriggerAnalytics,
@@ -202,6 +215,8 @@ export function LogScreen() {
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
+  const saveInFlightRef = useRef(false);
+  const pendingCreateRequestIdRef = useRef<string | null>(null);
   const [lastOcrMeta, setLastOcrMeta] = useState<LastOcrMeta | null>(null);
   const [lastOcrSnapshot, setLastOcrSnapshot] = useState<OcrFieldSnapshot | null>(null);
 
@@ -271,6 +286,7 @@ export function LogScreen() {
     setTplAmount('1');
     setLastOcrMeta(null);
     setLastOcrSnapshot(null);
+    pendingCreateRequestIdRef.current = null;
   }, []);
 
   const loadEntitlements = useCallback(async () => {
@@ -382,6 +398,8 @@ export function LogScreen() {
   };
 
   const saveMeal = async () => {
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     setSaveBusy(true);
     try {
       const token = await getAccessToken();
@@ -390,12 +408,27 @@ export function LogScreen() {
         throw new Error(LOG_COPY.snackPlacementRequired);
       }
 
+      const createMealOnce = async (body: Record<string, unknown>) => {
+        if (!pendingCreateRequestIdRef.current) {
+          pendingCreateRequestIdRef.current = Crypto.randomUUID();
+        }
+        const payload = { ...body, clientRequestId: pendingCreateRequestIdRef.current };
+        try {
+          return await createMeal(token, payload, { timeoutMs: MEAL_CREATE_TIMEOUT_MS });
+        } catch (e) {
+          if (isAmbiguousMealSaveError(e)) {
+            return await createMeal(token, payload, { timeoutMs: MEAL_CREATE_TIMEOUT_MS });
+          }
+          throw e;
+        }
+      };
+
       if (selectedTpl) {
         const body = buildTemplateBody();
         if (editingMealId) {
           await updateMeal(token, editingMealId, body);
         } else {
-          await createMeal(token, body);
+          await createMealOnce(body);
           track(AnalyticsEvents.mealRecorded, {
             input_mode: 'template',
             meal_slot: mealSlot.toLowerCase(),
@@ -418,7 +451,7 @@ export function LogScreen() {
         if (editingMealId) {
           await updateMeal(token, editingMealId, body);
         } else {
-          const created = await createMeal(token, body);
+          const created = await createMealOnce(body);
           const fromOcr = lastOcrSnapshot != null;
           const currentFields: OcrFieldSnapshot = { calories, protein, carbohydrate, fat };
           const editedBeforeSave = fromOcr && ocrFieldsEdited(lastOcrSnapshot, currentFields);
@@ -456,6 +489,7 @@ export function LogScreen() {
         }
       }
 
+      pendingCreateRequestIdRef.current = null;
       toast.show({
         kind: 'success',
         message: editingMealId ? LOG_COPY.editSuccess : LOG_COPY.saveSuccess,
@@ -470,6 +504,7 @@ export function LogScreen() {
         message: toUserMessage(e, { context: 'meal', fallback: '저장에 실패했어요.' }),
       });
     } finally {
+      saveInFlightRef.current = false;
       setSaveBusy(false);
     }
   };

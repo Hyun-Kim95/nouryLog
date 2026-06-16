@@ -41,23 +41,38 @@ try {
         exit 0
     }
 
+    $ingestCommon = Join-Path $projectRoot "scripts\obsidian\Obsidian-IngestCommon.ps1"
+    $wantJournal = $false
+    if (Test-Path -LiteralPath $ingestCommon) {
+        . $ingestCommon
+        $ingest = Get-ObsidianIngestSettings -RepoPath $projectRoot
+        $wantJournal = [bool]$ingest.CommitJournal
+    }
+
     function Test-HookLooksCurrent {
-        param([string]$Path)
+        param(
+            [string]$Path,
+            [bool]$ExpectJournal
+        )
         if (-not (Test-Path -LiteralPath $Path)) {
             return $false
         }
-        $content = Get-Content -LiteralPath $Path -Raw
-        return ($content -match 'sync-docs\.ps1' -and $content -match 'write-commit-journal')
+        $content = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+        $hasSync = ($content -match 'sync-docs\.ps1')
+        $hasJournal = ($content -match 'write-commit-journal')
+        if (-not $hasSync) { return $false }
+        if ($ExpectJournal) { return $hasJournal }
+        return -not $hasJournal
     }
 
-    $hookGood = Test-HookLooksCurrent -Path $hookFile
+    $hookGood = Test-HookLooksCurrent -Path $hookFile -ExpectJournal $wantJournal
     if ($hookGood -and (Test-Path -LiteralPath $markerFile)) {
         exit 0
     }
 
     if (-not $hookGood) {
         powershell -NoProfile -ExecutionPolicy Bypass -File $installScript -TargetRepo $projectRoot 2>$null | Out-Null
-        $hookGood = Test-HookLooksCurrent -Path $hookFile
+        $hookGood = Test-HookLooksCurrent -Path $hookFile -ExpectJournal $wantJournal
     }
 
     if ($hookGood) {

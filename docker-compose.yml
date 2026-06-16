@@ -9,3 +9,6 @@ services:
       POSTGRES_USER: diet
       POSTGRES_PASSWORD: diet
       POSTGRES_DB: diet
+  ollama:
+    environment:
+      - OLLAMA_CONTEXT_LENGTH=64000

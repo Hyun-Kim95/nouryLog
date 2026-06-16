@@ -1,8 +1,9 @@
 import { Router, type Response } from 'express';
-import { MealInputMode, type Prisma } from '@prisma/client';
+import { MealInputMode, Prisma } from '@prisma/client';
 import { isBottomBannerAdsEnabled } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
 import { computeScaledNutritionFromGrams } from '../lib/mealFromTemplate.js';
+import { parseMealClientRequestId } from '../lib/mealClientRequestId.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
 import {
@@ -236,6 +237,40 @@ function mealRollingBounds(now = new Date()) {
   const toExclusive = now;
   const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   return { from, toExclusive, anchor: todayAnchorKst(now), label: '최근 24시간' };
+}
+
+async function createMealIdempotent(
+  userId: string,
+  clientRequestId: string | null,
+  data: Prisma.MealUncheckedCreateInput,
+): Promise<{ mealId: string; created: boolean }> {
+  if (clientRequestId) {
+    const existing = await prisma.meal.findFirst({
+      where: { userId, clientRequestId, active: true },
+      select: { id: true },
+    });
+    if (existing) return { mealId: existing.id, created: false };
+  }
+
+  try {
+    const meal = await prisma.meal.create({
+      data: { ...data, clientRequestId },
+    });
+    return { mealId: meal.id, created: true };
+  } catch (e) {
+    if (
+      clientRequestId &&
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === 'P2002'
+    ) {
+      const existing = await prisma.meal.findFirst({
+        where: { userId, clientRequestId, active: true },
+        select: { id: true },
+      });
+      if (existing) return { mealId: existing.id, created: false };
+    }
+    throw e;
+  }
 }
 
 meRouter.post('/me/consents', async (req, res) => {
@@ -958,6 +993,7 @@ meRouter.post('/meals', async (req, res) => {
     return;
   }
   const b = req.body as Record<string, unknown>;
+  const clientRequestId = parseMealClientRequestId(b.clientRequestId);
   const consumedAt = b.consumedAt ? new Date(String(b.consumedAt)) : new Date();
   const slotParsed = parseMealSlot(b.mealSlot);
   if (b.mealSlot != null && b.mealSlot !== '' && slotParsed === null) {
@@ -1038,8 +1074,7 @@ meRouter.post('/meals', async (req, res) => {
       return;
     }
 
-    const meal = await prisma.meal.create({
-      data: {
+    const { mealId, created } = await createMealIdempotent(userId, clientRequestId, {
         userId,
         name: template.name,
         consumedAt,
@@ -1055,9 +1090,8 @@ meRouter.post('/meals', async (req, res) => {
         portionQuantity,
         mealSlot,
         snackPlacement: snackForCreate,
-      },
-    });
-    res.status(201).json({ mealId: meal.id });
+      });
+    res.status(created ? 201 : 200).json({ mealId });
     return;
   }
 
@@ -1075,26 +1109,24 @@ meRouter.post('/meals', async (req, res) => {
   const manualPortion = parseOptionalManualPortionQuantity(b, res);
   if (manualPortion === 'invalid') return;
 
-  const meal = await prisma.meal.create({
-    data: {
-      userId,
-      name,
-      consumedAt,
-      grams: Number(b.grams ?? 100),
-      calories,
-      carbohydrate,
-      protein,
-      fat,
-      note: b.note ? String(b.note) : null,
-      imageUrl: b.imageUrl ? String(b.imageUrl) : null,
-      foodTemplateId: null,
-      mealInputMode: null,
-      portionQuantity: manualPortion,
-      mealSlot,
-      snackPlacement: snackForCreate,
-    },
+  const { mealId, created } = await createMealIdempotent(userId, clientRequestId, {
+    userId,
+    name,
+    consumedAt,
+    grams: Number(b.grams ?? 100),
+    calories,
+    carbohydrate,
+    protein,
+    fat,
+    note: b.note ? String(b.note) : null,
+    imageUrl: b.imageUrl ? String(b.imageUrl) : null,
+    foodTemplateId: null,
+    mealInputMode: null,
+    portionQuantity: manualPortion,
+    mealSlot,
+    snackPlacement: snackForCreate,
   });
-  res.status(201).json({ mealId: meal.id });
+  res.status(created ? 201 : 200).json({ mealId });
 });
 
 meRouter.get('/meals', async (req, res) => {

@@ -77,8 +77,14 @@ export async function listMeals(
 export async function createMeal(
   token: string,
   body: Record<string, unknown>,
+  opts?: { timeoutMs?: number },
 ): Promise<{ mealId: string }> {
-  return apiFetch<{ mealId: string }>('/meals', { method: 'POST', token, body: JSON.stringify(body) });
+  return apiFetch<{ mealId: string }>('/meals', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body),
+    timeoutMs: opts?.timeoutMs,
+  });
 }
 
 export async function updateMeal(token: string, mealId: string, body: Record<string, unknown>): Promise<void> {

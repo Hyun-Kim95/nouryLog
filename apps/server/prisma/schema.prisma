@@ -200,6 +200,8 @@ model Meal {
   mealSlot        MealSlot?
   /// `mealSlot === SNACK`일 때만 사용. 끼니 사이 위치.
   snackPlacement  SnackPlacement?
+  /// 클라이언트 멱등 키(UUID). 동일 userId+키 재전송 시 기존 meal을 반환한다.
+  clientRequestId   String?
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   foodTemplate FoodTemplate? @relation(fields: [foodTemplateId], references: [id], onDelete: SetNull)
@@ -207,6 +209,7 @@ model Meal {
 
   @@index([userId, consumedAt])
   @@index([foodTemplateId])
+  @@unique([userId, clientRequestId])
 }
 
 model FoodTemplate {
