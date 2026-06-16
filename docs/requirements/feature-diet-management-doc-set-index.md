@@ -34,13 +34,16 @@ tags: [requirements, index, prd-linked]
 - API/정책 변경 시 문서 세트 전체에 동시 반영한다.
 - 상태명/에러코드/필드명은 문서 간 동일한 표기를 유지한다.
 
-## AI RAG 확장 (2026-06-03~)
-- PRD: `docs/requirements/feature-ai-rag-prd.md` (**approved** 2026-06-03)
+## AI RAG 확장 (2026-06-03~, deprecated)
+
+> **2026-06-16:** `apps/user-web` 및 관련 design 문서 제거. 인사이트 UI SSOT: `apps/mobile`, [`mobile-insights-spec.md`](../design/mobile-insights-spec.md).
+
+- PRD: `docs/requirements/feature-ai-rag-prd.md` (**deprecated** — 인사이트로 대체)
 - API delta v1.11: `docs/requirements/api-contract-v1.11-ai-rag-delta.md`
-- 벡터 SSOT: **PostgreSQL pgvector** (로컬·Railway 동일, Chroma 미사용)
+- 벡터 SSOT: **PostgreSQL pgvector** (로컬·Railway 동일, Chroma 미사용) — **2026-06-15 제거**
 - 로컬 가이드: `docs/agent/ai-local-demo.md`
 
 ## 다음 단계
-- AI RAG 단계 3: `/me/ai/*` API + **user-web** MVP (`feature-ai-rag-prd.md` §15, `docs/design/user-web-ai-spec.md`)
+- 인사이트: `/me/insights/*` API + **모바일** UI — [`mobile-insights-spec.md`](../design/mobile-insights-spec.md)
 - 디자인 선택(HUMAN) 완료 후 `stage3-entry-checklist`를 확정 값으로 전환한다.
 - Gate 2 충족 시 `parallel-delivery` 기준으로 FE/BE 병렬 구현에 착수한다.

@@ -1,6 +1,0 @@
-# Railpack이 루트 install 후 실행. 여기서 npm ci를 또 돌리면 admin-web node_modules/.vite 삭제 시 EBUSY 발생.
-[build]
-buildCommand = "npm run build -w @diet-management/user-web"
-
-[deploy]
-startCommand = "npm run preview -w @diet-management/user-web -- --host 0.0.0.0 --port $PORT"

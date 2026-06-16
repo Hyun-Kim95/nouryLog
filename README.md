@@ -24,32 +24,19 @@ npm install
 npm run dev:server
 npm run dev:admin
 npm run dev:mobile
-npm run dev:user-web
 ```
 
 모바일 에뮬레이터 테스트 시 `apps/mobile/.env`의 `EXPO_PUBLIC_API_URL`을 환경에 맞게 사용합니다.
 
-## 식단 인사이트 (user-web 미리보기 + 모바일)
+## 식단 인사이트 (모바일)
 
-| 기능 | user-web | 모바일 |
-|------|----------|--------|
-| 주간 식단 리포트 | `/insights/weekly` | 식단 인사이트 |
-| 월간 영양 패턴 | `/insights/monthly` | 통계 · 월 |
-| 요약 대시보드 | `/insights` | 홈 · 식단 인사이트 |
+| 기능 | 모바일 |
+|------|--------|
+| 주간 식단 리포트 | 식단 인사이트 |
+| 월간 영양 패턴 | 통계 · 월 |
+| 요약 대시보드 | 홈 · 식단 인사이트 |
 
-로컬: `dev:server` + `dev:user-web` (5175). 자동 로그인 `http://localhost:5175/demo?auto=1` — 상단 네비에 **주간·월간·식단 인사이트**만 표시.  
-`VITE_DEV_API_TARGET=http://localhost:3002` 등 서버 포트 맞출 것. 스모크: `npm run insights:smoke:summary` (서버 기동 후).
-
-### user-web 로그인 env (`apps/user-web/.env.local`)
-
-| 변수 | 용도 |
-|------|------|
-| `VITE_DEMO_EMAIL` / `VITE_DEMO_PASSWORD` | 데모 로그인 (`user@example.com` / `user123` — `npm run seed:demo-user`) |
-| `VITE_GOOGLE_CLIENT_ID` | Google SNS |
-| `VITE_KAKAO_JAVASCRIPT_KEY` | Kakao JS SDK |
-| `VITE_NAVER_CLIENT_ID` + `VITE_NAVER_REDIRECT_URI` | Naver 웹 OAuth (`/demo/oauth/naver`) |
-
-서버: `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` (네이버 code 교환).
+API 스모크: `dev:server` 기동 후 `npm run insights:smoke:summary` (데모 계정 `npm run seed:demo-user` — `user@example.com` / `user123`).
 
 ## SNS 로그인 설정 (모바일 — 네이티브 SDK 방식)
 

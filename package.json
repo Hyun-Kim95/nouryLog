@@ -9,9 +9,8 @@
   "scripts": {
     "dev:server": "npm run dev -w @diet-management/server",
     "dev:admin": "npm run dev -w @diet-management/admin-web",
-    "dev:user-web": "npm run dev -w @diet-management/user-web",
     "dev:mobile": "npm run start -w mobile",
-    "build": "npm run build -w @diet-management/server && npm run build -w @diet-management/admin-web && npm run build -w @diet-management/user-web && npm run build -w @diet-management/api-client",
+    "build": "npm run build -w @diet-management/server && npm run build -w @diet-management/admin-web && npm run build -w @diet-management/api-client",
     "generate:api": "npm run generate -w @diet-management/api-client",
     "db:generate": "npm run prisma:generate -w @diet-management/server",
     "db:migrate": "npm run prisma:migrate -w @diet-management/server",

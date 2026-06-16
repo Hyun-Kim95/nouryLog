@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Idempotent demo user for user-web / AI coach (local + production).
+ * Idempotent demo user for insights smoke / local testing (local + production).
  * Usage: DATABASE_URL=... npm run seed:demo-user
  * Set SEED_DEMO_RESET_PASSWORD=0 to skip password overwrite on existing user.
  */

@@ -7,7 +7,6 @@ import { signAccess, signRefresh, verifyToken } from '../lib/jwt.js';
 import { sendError, ErrorCodes } from '../lib/errors.js';
 import {
   createConflictToken,
-  exchangeNaverAuthorizationCode,
   fetchProviderProfileFromTokens,
   parseSocialProvider,
   verifyConflictToken,
@@ -299,39 +298,6 @@ async function respondSocialProfileLogin(
     sendError(res, 500, ErrorCodes.OAUTH_PROVIDER_ERROR, msg);
   }
 }
-
-/**
- * 네이버 웹 OAuth — authorization code를 서버에서 access token으로 교환 후 로그인 처리.
- */
-publicRouter.post('/auth/social/naver/code', async (req, res) => {
-  const code = String((req.body as { code?: string })?.code ?? '').trim();
-  const redirectUri = String((req.body as { redirectUri?: string })?.redirectUri ?? '').trim();
-  if (!code || !redirectUri) {
-    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'code와 redirectUri가 필요합니다.');
-    return;
-  }
-
-  const accessToken = await exchangeNaverAuthorizationCode(code, redirectUri);
-  if (!accessToken) {
-    sendError(res, 502, ErrorCodes.OAUTH_PROVIDER_ERROR, '네이버 토큰 교환에 실패했습니다.');
-    return;
-  }
-
-  let profile: ProviderProfile | null;
-  try {
-    profile = await fetchProviderProfileFromTokens('NAVER', { accessToken });
-  } catch (e) {
-    console.error('[auth/social/naver/code] profile error', { err: e });
-    sendError(res, 502, ErrorCodes.OAUTH_PROVIDER_ERROR, 'SNS 토큰 검증에 실패했습니다.');
-    return;
-  }
-  if (!profile) {
-    sendError(res, 401, ErrorCodes.OAUTH_PROVIDER_ERROR, 'SNS 사용자 정보를 확인할 수 없습니다.');
-    return;
-  }
-
-  await respondSocialProfileLogin(res, 'NAVER', profile);
-});
 
 /**
  * 네이티브 SDK(naver/kakao/google) 로그인 결과 토큰 검증 엔드포인트.

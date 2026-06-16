@@ -11,16 +11,21 @@
 | Environment | production (`047e6df9-6815-4a7f-888c-966dca7caeec`) |
 | api-server URL | https://api-server-production-52bc.up.railway.app |
 | admin-web URL | https://admin-web-production-6533.up.railway.app |
-| user-web URL | https://user-web-production-d88d.up.railway.app |
-| user-web 배포 | `docs/release/user-web-railway-deploy.md`, Config path `/apps/user-web/railway.toml` |
 
-### user-web·식단 인사이트 (2026-06-15)
+### 식단 인사이트 (2026-06-15)
 
 | 항목 | 상태 |
 |------|------|
 | `AI_ENABLED` / `LLM_*` (nouryLog-api) | **제거 완료** — 인사이트는 SQL·템플릿만 사용 |
-| Google OAuth | **사용자** — JS 원본에 `https://user-web-production-d88d.up.railway.app` 추가 |
-| 프로덕션 데모 계정 | `npm run seed:demo-user` + `VITE_DEMO_*` = `user@example.com` / `user123` |
+| 프로덕션 데모 계정 | `npm run seed:demo-user` — `user@example.com` / `user123` (스모크·로컬 테스트용) |
+
+### Railway user-web 서비스 중단 TODO (2026-06-16)
+
+레포에서 `apps/user-web` 제거 완료. 아래는 **수동** 후속:
+
+- [ ] Railway → `user-web` 서비스 **Delete** (또는 일시 중단)
+- [ ] api-server env에서 `VITE_*`, `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` 등 user-web 전용 변수 제거
+- [ ] Google/Kakao/Naver 콘솔 웹 OAuth 도메인 제거 확인 (사용자 완료)
 
 ### 식단 인사이트 DB 정리 (2026-06-15)
 
@@ -76,7 +81,7 @@ npx @railway/cli run --service Postgres -- cmd /c "set DATABASE_URL=%DATABASE_PU
 
 ### 이미 있음 (이름만)
 
-`DATABASE_URL`, `OCR_API_*`, `OCR_FREE_LIMIT_NORMAL`/`REDUCED`/`USER_THRESHOLD`, `NAVER_*`, `KAKAO_*`, `GOOGLE_CLIENT_*`, `OAUTH_*`, `NODE_ENV` 등.  
+`DATABASE_URL`, `OCR_API_*`, `OCR_FREE_LIMIT_NORMAL`/`REDUCED`/`USER_THRESHOLD`, `OAUTH_STATE_SECRET`, `GOOGLE_ALLOWED_AUDIENCES`, `NODE_ENV` 등.  
 구 `OCR_FREE_LIMIT` 는 제거. 배포 후 migrate: `20260519140000_ocr_monthly_quota`, `20260520120000_policy_free_launch_v2`(약관·개인정보 v2).
 
 `BILLING_SKIP_VERIFY` 는 production 에 **넣지 않음**.

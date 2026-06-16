@@ -17,7 +17,8 @@ aligns_with:
 # AI 식단 분석·영양 지식 RAG 확장 PRD (초안)
 
 > **Deprecated (2026-06-15):** 본 PRD의 RAG·LLM·`/me/ai/*` 범위는 **식단 인사이트**로 대체되었습니다.  
-> 현행 계약: [`api-contract-v1.14-insights-delta.md`](api-contract-v1.14-insights-delta.md) — SQL·규칙 기반 `/me/insights/*` only.
+> 현행 계약: [`api-contract-v1.14-insights-delta.md`](api-contract-v1.14-insights-delta.md) — SQL·규칙 기반 `/me/insights/*` only.  
+> **2026-06-16:** `apps/user-web` 제거. 소비자 UI SSOT는 `apps/mobile`.
 
 ## 1) 문서 목적
 

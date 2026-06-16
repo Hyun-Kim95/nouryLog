@@ -2,11 +2,11 @@ import { MealInputMode, MealSlot, PortionUnit } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../src/lib/prisma.js';
 
-/** user-web·통계·AI 데모 — SSOT (프로덕션 `npm run seed:demo-user` 동일) */
+/** 데모·인사이트 스모크 — SSOT (프로덕션 `npm run seed:demo-user` 동일) */
 export const DEMO_USER_EMAIL = 'user@example.com';
 export const DEMO_USER_PASSWORD = 'user123';
 
-/** user-web·통계·AI citation 데모용 — 화면에는 name만 노출 */
+/** 데모 식단 시드 — 화면에는 name만 노출 */
 export const DEMO_MEAL_NOTE = '__nourylog_demo_seed__';
 
 type DemoMealTemplate = {

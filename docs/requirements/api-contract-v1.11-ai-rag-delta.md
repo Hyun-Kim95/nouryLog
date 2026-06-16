@@ -10,6 +10,8 @@ tags: [api, contract, ai, rag, delta]
 
 # API Contract v1.11 — AI RAG 확장 (delta)
 
+> **2026-06-16:** `apps/user-web` 제거. 소비자 UI SSOT는 `apps/mobile`.
+
 > 기준: `feature-diet-management-api-contract-v1.md` v1.4 + v1.10 stats delta.  
 > PRD: `docs/requirements/feature-ai-rag-prd.md`
 

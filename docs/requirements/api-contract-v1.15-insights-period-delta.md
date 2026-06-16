@@ -10,6 +10,8 @@ tags: [api, contract, insights, delta]
 
 # API Contract v1.15 — 인사이트 주간 기간·지표 축소 (delta)
 
+> **2026-06-16:** `apps/user-web` 제거. 소비자 UI SSOT는 `apps/mobile`.
+
 > 기준: `api-contract-v1.14-insights-delta.md`  
 > **변경:** `week_single` 롤링 7일, 채소·외식 휴리스틱 지표 제거
 

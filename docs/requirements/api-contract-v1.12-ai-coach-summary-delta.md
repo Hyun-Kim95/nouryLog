@@ -10,6 +10,8 @@ tags: [api, contract, ai, coach, delta]
 
 # API Contract v1.12 — AI 코치 Summary (delta)
 
+> **2026-06-16:** `apps/user-web` 제거. 소비자 UI SSOT는 `apps/mobile`.
+
 > 기준: `api-contract-v1.11-ai-rag-delta.md`  
 > PRD: `docs/requirements/feature-ai-rag-prd.md`  
 > 소비자: `apps/user-web` AI Nutrition Coach 대시보드 (2단계)
