@@ -1,6 +1,6 @@
 export const FOOD_SEARCH_COPY = {
   title: '음식 검색',
-  entryCta: '음식 검색 · 언제·얼마나 먹었나',
+  entryCta: '음식 빈도 검색',
   searchPlaceholder: '음식명을 검색하세요',
   searchA11yLabel: '음식명 검색',
   clearSearch: '검색어 지우기',
@@ -23,6 +23,7 @@ export const FOOD_SEARCH_COPY = {
   slotDistributionItem: (label: string, count: number) => `${label} ${count}번`,
 
   historyTitle: '섭취 이력',
+  listEnd: '모든 기록을 다 봤어요',
 
   // 상태
   loadError: '검색에 실패했어요.',

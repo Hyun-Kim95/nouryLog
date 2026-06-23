@@ -21,6 +21,14 @@ function assertProductionBuildConfig(): void {
   const isProduction = profile === 'production' || process.env.NODE_ENV === 'production';
   if (!isProduction) return;
 
+  // 로컬 테스트용 release 빌드(EAS 프로덕션이 아님) 한정 opt-out.
+  // release JS 번들링은 NODE_ENV=production 을 강제하므로, EAS_BUILD_PROFILE !== 'production' 이고
+  // 명시적으로 EXPO_PUBLIC_ALLOW_INSECURE_API=true 일 때만 https/AdMob/Kakao 강제 검사를 건너뛴다.
+  // 실제 EAS 프로덕션 빌드(profile === 'production')에서는 이 플래그를 무시하고 항상 검사한다.
+  const allowInsecureLocalBuild =
+    profile !== 'production' && process.env.EXPO_PUBLIC_ALLOW_INSECURE_API === 'true';
+  if (allowInsecureLocalBuild) return;
+
   const apiUrl = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
   if (!apiUrl || !/^https:\/\//i.test(apiUrl)) {
     throw new Error(
@@ -98,7 +106,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     name: APP_DISPLAY_NAME,
     slug: 'mobile',
     scheme: 'dietmobile',
-    version: '1.0.0',
+    version: '1.0.1',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',

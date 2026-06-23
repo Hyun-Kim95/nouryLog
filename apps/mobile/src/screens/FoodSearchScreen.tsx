@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Banner, Card, CardTitle, ScreenLayout } from '../components/ui';
 import { Segmented } from '../components/Segmented';
 import type { RootStackParamList } from '../navigation';
@@ -57,6 +59,7 @@ function historySlotText(item: MealRow): string {
 export function FoodSearchScreen() {
   const t = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const insets = useSafeAreaInsets();
 
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -70,26 +73,24 @@ export function FoodSearchScreen() {
   const [summary, setSummary] = useState<MealSearchSummary | null>(null);
   const [items, setItems] = useState<MealRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
 
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
 
+  const pageRef = useRef(1);
+  const loadingMoreRef = useRef(false);
+
   const trimmed = debounced.trim();
   const hasQuery = trimmed.length > 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasMore = items.length < total;
 
   // 검색어 디바운스
   useEffect(() => {
     const id = setTimeout(() => setDebounced(query), 300);
     return () => clearTimeout(id);
   }, [query]);
-
-  // 페이지 리셋 (검색어/기간 변경 시)
-  useEffect(() => {
-    setPage(1);
-  }, [trimmed, preset]);
 
   // 최근 먹은 음식 (빈 검색어 발견성)
   const loadRecent = useCallback(async () => {
@@ -149,8 +150,8 @@ export function FoodSearchScreen() {
     return () => clearTimeout(id);
   }, [query]);
 
-  // 검색 결과 (요약 + 이력)
-  const loadResults = useCallback(async () => {
+  // 검색 결과 첫 페이지 (요약 + 이력) — 검색어/기간 변경 시 처음부터 로드
+  const loadInitial = useCallback(async () => {
     if (!hasQuery) {
       setSummary(null);
       setItems([]);
@@ -167,9 +168,10 @@ export function FoodSearchScreen() {
       }
       setDenied(false);
       const { from, to } = rangeFromPreset(preset);
+      pageRef.current = 1;
       const [summaryRes, listRes] = await Promise.all([
         fetchMealSearchSummary(token, { q: trimmed, from, to }),
-        listMeals(token, { q: trimmed, from, to, page, size: PAGE_SIZE }),
+        listMeals(token, { q: trimmed, from, to, page: 1, size: PAGE_SIZE }),
       ]);
       setSummary(summaryRes);
       setItems(listRes.items ?? []);
@@ -184,11 +186,51 @@ export function FoodSearchScreen() {
     } finally {
       setLoading(false);
     }
-  }, [hasQuery, trimmed, preset, page]);
+  }, [hasQuery, trimmed, preset]);
 
   useEffect(() => {
-    void loadResults();
-  }, [loadResults]);
+    void loadInitial();
+  }, [loadInitial]);
+
+  // 다음 페이지 누적 로드 (인피니티 스크롤)
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || loading || !hasQuery) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const token = await ensureAccessToken();
+      if (!token) {
+        setDenied(true);
+        return;
+      }
+      const { from, to } = rangeFromPreset(preset);
+      const next = pageRef.current + 1;
+      const listRes = await listMeals(token, { q: trimmed, from, to, page: next, size: PAGE_SIZE });
+      pageRef.current = next;
+      setItems((prev) => [...prev, ...(listRes.items ?? [])]);
+      setTotal(listRes.total ?? 0);
+    } catch (e) {
+      if (isAuthDenied(e)) {
+        setDenied(true);
+        return;
+      }
+      logAppError('[FoodSearch] loadMore', e);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [hasQuery, trimmed, preset, loading]);
+
+  const onScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      const distanceFromBottom = contentSize.height - (layoutMeasurement.height + contentOffset.y);
+      if (distanceFromBottom < 240 && hasMore && !loadingMoreRef.current && !loading) {
+        void loadMore();
+      }
+    },
+    [hasMore, loading, loadMore],
+  );
 
   const distributionText = useMemo(() => {
     if (!summary) return null;
@@ -216,7 +258,11 @@ export function FoodSearchScreen() {
   };
 
   return (
-    <ScreenLayout scroll>
+    <ScreenLayout
+      scroll
+      contentPaddingBottomExtra={insets.bottom + t.spacing.lg}
+      onScroll={onScroll}
+    >
       {/* 검색 입력 + 자동완성 */}
       <View style={{ position: 'relative', zIndex: 10 }}>
         <View
@@ -323,7 +369,7 @@ export function FoodSearchScreen() {
         {denied ? <Banner variant="info">로그인이 필요해요.</Banner> : null}
 
         {err ? (
-          <Banner variant="danger" actionLabel={FOOD_SEARCH_COPY.retry} onAction={() => void loadResults()}>
+          <Banner variant="danger" actionLabel={FOOD_SEARCH_COPY.retry} onAction={() => void loadInitial()}>
             {err}
           </Banner>
         ) : null}
@@ -455,52 +501,21 @@ export function FoodSearchScreen() {
               );
             })}
 
-            {totalPages > 1 ? (
-              <View
+            {loadingMore ? (
+              <View style={{ paddingVertical: t.spacing.md, alignItems: 'center' }}>
+                <ActivityIndicator color={t.colors.primary} />
+              </View>
+            ) : !hasMore && items.length > 0 ? (
+              <Text
                 style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: t.spacing.lg,
+                  color: t.colors.fgSubtle,
+                  fontSize: t.fontSize.caption,
+                  textAlign: 'center',
                   marginTop: t.spacing.sm,
                 }}
               >
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={page <= 1}
-                  onPress={() => setPage((p) => Math.max(1, p - 1))}
-                  hitSlop={8}
-                >
-                  <Text
-                    style={{
-                      color: page <= 1 ? t.colors.fgSubtle : t.colors.primary,
-                      fontSize: t.fontSize.bodyLg,
-                      fontWeight: '700',
-                    }}
-                  >
-                    ‹
-                  </Text>
-                </Pressable>
-                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body }}>
-                  {page} / {totalPages}
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={page >= totalPages}
-                  onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  hitSlop={8}
-                >
-                  <Text
-                    style={{
-                      color: page >= totalPages ? t.colors.fgSubtle : t.colors.primary,
-                      fontSize: t.fontSize.bodyLg,
-                      fontWeight: '700',
-                    }}
-                  >
-                    ›
-                  </Text>
-                </Pressable>
-              </View>
+                {FOOD_SEARCH_COPY.listEnd}
+              </Text>
             ) : null}
           </>
         ) : null}
