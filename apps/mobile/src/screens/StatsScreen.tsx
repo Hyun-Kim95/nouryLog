@@ -7,8 +7,11 @@ import { Segmented } from '../components/Segmented';
 import { StatsPeriodNavigator } from '../components/StatsPeriodNavigator';
 import { CalorieRangeChart } from '../components/CalorieRangeChart';
 import { Banner, Card, CardTitle, ScreenLayout, TextButton } from '../components/ui';
+import { Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { RootStackParamList } from '../navigation';
 import { STATS_COPY } from '../copy/stats';
+import { FOOD_SEARCH_COPY } from '../copy/foodSearch';
 import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { fetchStats, type StatsResponse } from '../api/stats';
 import { MonthlyPatternCard } from '../components/insights/MonthlyPatternCard';
@@ -227,6 +230,30 @@ export function StatsScreen() {
         />
       }
     >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={FOOD_SEARCH_COPY.entryCta}
+        onPress={() => navigation.navigate('FoodSearch')}
+        style={({ pressed }) => ({
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: t.spacing.sm,
+          borderWidth: 1,
+          borderColor: t.colors.border,
+          borderRadius: t.radius.md,
+          backgroundColor: pressed ? t.colors.surface2 : t.colors.surface,
+          paddingVertical: t.spacing.md,
+          paddingHorizontal: t.spacing.md,
+          marginBottom: t.spacing.md,
+        })}
+      >
+        <Ionicons name="search" size={18} color={t.colors.primary} />
+        <Text style={{ flex: 1, color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
+          {FOOD_SEARCH_COPY.entryCta}
+        </Text>
+        <Ionicons name="chevron-forward" size={18} color={t.colors.fgSubtle} />
+      </Pressable>
+
       <Segmented<StatsRange>
         options={[
           { value: 'day', label: STATS_COPY.rangeDay },

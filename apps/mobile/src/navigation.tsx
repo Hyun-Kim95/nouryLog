@@ -19,7 +19,9 @@ import { OnboardingScreen } from './screens/OnboardingScreen';
 import { ProfileEditScreen } from './screens/ProfileEditScreen';
 import { WeightHistoryScreen } from './screens/WeightHistoryScreen';
 import { PastMealBrowseScreen } from './screens/PastMealBrowseScreen';
+import { FoodSearchScreen } from './screens/FoodSearchScreen';
 import { LOG_COPY } from './copy/log';
+import { FOOD_SEARCH_COPY } from './copy/foodSearch';
 import { PolicyViewScreen } from './screens/PolicyViewScreen';
 import { NoticeListScreen } from './screens/support/NoticeListScreen';
 import { NoticeDetailScreen } from './screens/support/NoticeDetailScreen';
@@ -43,7 +45,8 @@ export type RootStackParamList = {
   Main: { screen?: keyof MainTabParamList; params?: MainTabParamList[keyof MainTabParamList] } | undefined;
   ProfileEdit: undefined;
   WeightHistory: undefined;
-  PastMealBrowse: undefined;
+  PastMealBrowse: { targetYmd?: string } | undefined;
+  FoodSearch: undefined;
   PolicyView: { kind: 'terms' | 'privacy' };
   NoticeList: undefined;
   NoticeDetail: { id: string };
@@ -142,6 +145,11 @@ export function RootNavigator({ initialRoute }: { initialRoute: InitialRoute }) 
         name="PastMealBrowse"
         component={PastMealBrowseScreen}
         options={{ ...themed, headerShown: true, title: LOG_COPY.pastBrowseTitle }}
+      />
+      <Stack.Screen
+        name="FoodSearch"
+        component={FoodSearchScreen}
+        options={{ ...themed, headerShown: true, title: FOOD_SEARCH_COPY.title }}
       />
       <Stack.Screen
         name="PolicyView"

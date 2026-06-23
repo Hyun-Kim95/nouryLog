@@ -36,6 +36,9 @@ export function MockHub() {
             <Link to="/app/stats">APP_STATS 통계·stale</Link>
           </li>
           <li>
+            <Link to="/app/food-search">APP_FOOD_SEARCH 음식 검색·이력·빈도 (신규)</Link>
+          </li>
+          <li>
             <Link to="/app/subscription">APP_SUB_SETTINGS 구독·복구</Link>
           </li>
         </ul>

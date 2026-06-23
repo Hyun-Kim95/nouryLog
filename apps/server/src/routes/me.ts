@@ -29,6 +29,12 @@ import {
 } from '../lib/statsPeriod.js';
 import { mealSlotPatchFromBody, parseMealSlot } from '../lib/mealSlot.js';
 import {
+  mealNameWhere,
+  normalizeMealQuery,
+  slotDistributionFromGroups,
+  totalFromDistribution,
+} from '../lib/mealSearch.js';
+import {
   parseSnackPlacement,
   snackPlacementPatchFromBody,
   validateMealSlotSnackCombo,
@@ -1163,12 +1169,14 @@ meRouter.get('/meals', async (req, res) => {
   }
   const excludeTplRaw = req.query.excludeFoodTemplate;
   const excludeFoodTemplate = excludeTplRaw === 'true' || excludeTplRaw === '1';
+  const nameQuery = normalizeMealQuery(req.query.q);
   const where: Prisma.MealWhereInput = {
     userId,
     active: true,
     ...(mealSlotFilter ? { mealSlot: mealSlotFilter } : {}),
     ...(Object.keys(consumedAt).length > 0 ? { consumedAt } : {}),
     ...(excludeFoodTemplate ? { foodTemplateId: null } : {}),
+    ...mealNameWhere(nameQuery),
   };
   const [total, items] = await Promise.all([
     prisma.meal.count({ where }),
@@ -1217,6 +1225,64 @@ meRouter.get('/meals', async (req, res) => {
       mealSlot: m.mealSlot,
       snackPlacement: m.snackPlacement,
     })),
+  });
+});
+
+meRouter.get('/meals/search-summary', async (req, res) => {
+  const userId = req.auth!.userId;
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 조회할 수 있습니다.');
+    return;
+  }
+  const q = normalizeMealQuery(req.query.q);
+  const consumedAt: Prisma.DateTimeFilter = {};
+  if (req.query.from) {
+    const from = new Date(String(req.query.from));
+    if (Number.isNaN(from.getTime())) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'from 날짜가 올바르지 않습니다.', { field: 'from' });
+      return;
+    }
+    consumedAt.gte = from;
+  }
+  if (req.query.to) {
+    const to = new Date(String(req.query.to));
+    if (Number.isNaN(to.getTime())) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'to 날짜가 올바르지 않습니다.', { field: 'to' });
+      return;
+    }
+    consumedAt.lte = to;
+  }
+
+  if (!q) {
+    res.json({ q: '', total: 0, lastConsumedAt: null, bySlot: slotDistributionFromGroups([]) });
+    return;
+  }
+
+  const where: Prisma.MealWhereInput = {
+    userId,
+    active: true,
+    ...(Object.keys(consumedAt).length > 0 ? { consumedAt } : {}),
+    ...mealNameWhere(q),
+  };
+
+  const [groups, last] = await Promise.all([
+    prisma.meal.groupBy({ by: ['mealSlot'], where, _count: { _all: true } }),
+    prisma.meal.findFirst({
+      where,
+      orderBy: { consumedAt: 'desc' },
+      select: { consumedAt: true },
+    }),
+  ]);
+
+  const bySlot = slotDistributionFromGroups(
+    groups.map((g) => ({ mealSlot: g.mealSlot, count: g._count._all })),
+  );
+
+  res.json({
+    q,
+    total: totalFromDistribution(bySlot),
+    lastConsumedAt: last?.consumedAt.toISOString() ?? null,
+    bySlot,
   });
 });
 

@@ -63,6 +63,7 @@ export async function listMeals(
     from?: string;
     to?: string;
     excludeFoodTemplate?: boolean;
+    q?: string;
   },
 ): Promise<{ items: MealRow[]; page: number; size: number; total: number }> {
   const q = new URLSearchParams();
@@ -71,7 +72,31 @@ export async function listMeals(
   if (params.from) q.set('from', params.from);
   if (params.to) q.set('to', params.to);
   if (params.excludeFoodTemplate) q.set('excludeFoodTemplate', 'true');
+  if (params.q && params.q.trim()) q.set('q', params.q.trim());
   return apiFetch<{ items: MealRow[]; page: number; size: number; total: number }>(`/meals?${q}`, { token });
+}
+
+export type MealSlotKey = MealSlot | 'UNSPECIFIED';
+
+export type MealSearchSummary = {
+  q: string;
+  total: number;
+  lastConsumedAt: string | null;
+  bySlot: Record<MealSlotKey, number>;
+};
+
+export async function fetchMealSearchSummary(
+  token: string,
+  params: { q: string; from?: string; to?: string; signal?: AbortSignal },
+): Promise<MealSearchSummary> {
+  const search = new URLSearchParams();
+  search.set('q', params.q.trim());
+  if (params.from) search.set('from', params.from);
+  if (params.to) search.set('to', params.to);
+  return apiFetch<MealSearchSummary>(`/meals/search-summary?${search}`, {
+    token,
+    signal: params.signal,
+  });
 }
 
 export async function createMeal(

@@ -5,6 +5,7 @@ import { AppOnboard } from './pages/app/AppOnboard';
 import { AppHome } from './pages/app/AppHome';
 import { AppLog } from './pages/app/AppLog';
 import { AppStats } from './pages/app/AppStats';
+import { AppFoodSearch } from './pages/app/AppFoodSearch';
 import { AppSubscription } from './pages/app/AppSubscription';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -20,6 +21,7 @@ export function App() {
         <Route path="home" element={<AppHome />} />
         <Route path="log" element={<AppLog />} />
         <Route path="stats" element={<AppStats />} />
+        <Route path="food-search" element={<AppFoodSearch />} />
         <Route path="subscription" element={<AppSubscription />} />
       </Route>
       <Route path="/admin" element={<AdminLayout />}>

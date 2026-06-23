@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { StatePicker } from '../../components/StatePicker';
 import type { UiState } from '../../types';
 
@@ -9,6 +10,9 @@ export function AppStats() {
   return (
     <div>
       <h2 style={{ marginTop: 0 }}>APP_STATS</h2>
+      <Link to="/app/food-search" className="btn" style={{ display: 'block', marginBottom: '0.75rem', textAlign: 'center', textDecoration: 'none' }}>
+        음식 검색 (언제·얼마나 먹었나)
+      </Link>
       <StatePicker value={ui} onChange={setUi} omit={['complete', 'denied']} />
       <label className="row" style={{ fontSize: '0.85rem', marginBottom: '0.75rem' }}>
         <span style={{ color: 'var(--muted)' }}>stale 데모</span>

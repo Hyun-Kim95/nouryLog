@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { deactivateMeal } from '../api/meals';
 import type { MealRow } from '../api/meals';
@@ -23,8 +23,10 @@ export function PastMealBrowseScreen() {
   const t = useTheme();
   const toast = useToast();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [selectedYmd, setSelectedYmd] = useState(() => todayAnchorKst());
-  const [visibleYm, setVisibleYm] = useState(() => ymFromYmd(todayAnchorKst()));
+  const route = useRoute<RouteProp<RootStackParamList, 'PastMealBrowse'>>();
+  const initialYmd = route.params?.targetYmd ?? todayAnchorKst();
+  const [selectedYmd, setSelectedYmd] = useState(() => initialYmd);
+  const [visibleYm, setVisibleYm] = useState(() => ymFromYmd(initialYmd));
   const [recordedDates, setRecordedDates] = useState<string[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
   const [editingMeal, setEditingMeal] = useState<MealRow | null>(null);

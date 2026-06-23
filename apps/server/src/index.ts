@@ -27,7 +27,7 @@ fs.mkdirSync(uploadDir, { recursive: true });
 app.use('/uploads', express.static(uploadDir));
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'diet-management-api', contract: 'v1.4.0' });
+  res.json({ ok: true, service: 'diet-management-api', contract: 'v1.5.0' });
 });
 
 app.use(publicRouter);
