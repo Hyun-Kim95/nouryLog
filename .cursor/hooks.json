@@ -87,9 +87,45 @@
                                                   "matcher":  "npm run dev|pnpm dev|yarn dev|next dev|vite|uvicorn|flask run|ng serve|expo start",
                                                   "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
                                                   "timeout":  15
+                                              },
+                                              {
+                                                  "matcher":  "npm run dev|pnpm dev|yarn dev|next dev|vite|uvicorn|flask run|ng serve|expo start",
+                                                  "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                                  "timeout":  15
+                                              },
+                                              {
+                                                  "matcher":  "npm run dev|pnpm dev|yarn dev|next dev|vite|uvicorn|flask run|ng serve|expo start",
+                                                  "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                                  "timeout":  15
+                                              },
+                                              {
+                                                  "matcher":  "npm run dev|pnpm dev|yarn dev|next dev|vite|uvicorn|flask run|ng serve|expo start",
+                                                  "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                                  "timeout":  15
+                                              },
+                                              {
+                                                  "matcher":  "npm run dev|pnpm dev|yarn dev|next dev|vite|uvicorn|flask run|ng serve|expo start",
+                                                  "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                                  "timeout":  15
                                               }
                                           ],
                   "afterAgentResponse":  [
+                                             {
+                                                 "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                                 "timeout":  15
+                                             },
+                                             {
+                                                 "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                                 "timeout":  15
+                                             },
+                                             {
+                                                 "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                                 "timeout":  15
+                                             },
+                                             {
+                                                 "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                                 "timeout":  15
+                                             },
                                              {
                                                  "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
                                                  "timeout":  15
@@ -128,6 +164,22 @@
                                              }
                                          ],
                   "stop":  [
+                               {
+                                   "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                   "timeout":  30
+                               },
+                               {
+                                   "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                   "timeout":  30
+                               },
+                               {
+                                   "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                   "timeout":  30
+                               },
+                               {
+                                   "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
+                                   "timeout":  30
+                               },
                                {
                                    "command":  "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/dev-server-harness.ps1",
                                    "timeout":  30
