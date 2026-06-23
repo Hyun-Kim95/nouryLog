@@ -69,7 +69,7 @@ try {
         exit 0
     }
 
-    $payload = $raw | ConvertFrom-Json -Depth 20
+    $payload = $raw | ConvertFrom-Json
     $allStrings = Get-AllStringValues -Node $payload
     $normalized = $allStrings | ForEach-Object { $_.ToLowerInvariant().Replace("/", "\") }
 

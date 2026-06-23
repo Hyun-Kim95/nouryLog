@@ -91,7 +91,7 @@ try {
     $cooldownMarker = Join-Path $stateDir "delivery-loop-guard.last-run"
     if (Test-Path -LiteralPath $cooldownMarker) {
         try {
-            $lastRunRaw = (Get-Content -LiteralPath $cooldownMarker -Raw).Trim()
+            $lastRunRaw = (Get-Content -LiteralPath $cooldownMarker -Raw -Encoding UTF8).Trim()
             if (-not [string]::IsNullOrWhiteSpace($lastRunRaw)) {
                 $lastRun = [datetime]::Parse($lastRunRaw)
                 $elapsed = (Get-Date) - $lastRun
@@ -105,7 +105,7 @@ try {
         }
     }
 
-    $payload = $raw | ConvertFrom-Json -Depth 20
+    $payload = $raw | ConvertFrom-Json
     $allStrings = (Get-AllStringValues -Node $payload) | ForEach-Object { $_.ToLowerInvariant() }
     if (-not $allStrings -or $allStrings.Count -eq 0) {
         exit 0

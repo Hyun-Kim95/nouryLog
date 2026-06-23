@@ -45,7 +45,7 @@ try {
     $candidatePath = Join-Path $projectRoot "docs\agent\rule-candidates.ndjson"
     Ensure-ParentDirectory -Path $candidatePath
 
-    $payload = $raw | ConvertFrom-Json -Depth 20
+    $payload = $raw | ConvertFrom-Json
     $allStrings = Get-AllStringValues -Node $payload
     if (-not $allStrings -or $allStrings.Count -eq 0) { exit 0 }
 
@@ -58,7 +58,7 @@ try {
         foreach ($line in (Get-Content -LiteralPath $candidatePath -Encoding UTF8)) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             try {
-                $item = $line | ConvertFrom-Json -Depth 10
+                $item = $line | ConvertFrom-Json
                 if ($null -ne $item.rule_text) {
                     $existingRuleLines[[string]$item.rule_text] = $true
                 }

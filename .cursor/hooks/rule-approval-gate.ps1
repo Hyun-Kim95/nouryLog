@@ -43,7 +43,7 @@ function Read-CandidateItems {
     if (-not (Test-Path -LiteralPath $Path)) { return $items }
     foreach ($line in (Get-Content -LiteralPath $Path -Encoding UTF8)) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        try { $items.Add(($line | ConvertFrom-Json -Depth 20)) } catch {}
+        try { $items.Add(($line | ConvertFrom-Json)) } catch {}
     }
     return $items
 }
@@ -216,7 +216,7 @@ try {
     $raw = [Console]::In.ReadToEnd()
     if ([string]::IsNullOrWhiteSpace($raw)) { exit 0 }
 
-    $payload = $raw | ConvertFrom-Json -Depth 20
+    $payload = $raw | ConvertFrom-Json
     $allStrings = (Get-AllStringValues -Node $payload)
     if (-not $allStrings -or $allStrings.Count -eq 0) { exit 0 }
     $text = ($allStrings -join "`n")

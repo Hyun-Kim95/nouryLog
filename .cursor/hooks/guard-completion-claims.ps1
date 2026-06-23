@@ -48,7 +48,7 @@ try {
         exit 0
     }
 
-    $payload = $raw | ConvertFrom-Json -Depth 20
+    $payload = $raw | ConvertFrom-Json
     $allStrings = (Get-AllStringValues -Node $payload) | ForEach-Object { $_.ToLowerInvariant() }
 
     if (-not $allStrings -or $allStrings.Count -eq 0) {
