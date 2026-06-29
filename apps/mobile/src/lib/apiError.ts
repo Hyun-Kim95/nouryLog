@@ -39,6 +39,7 @@ export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
   readonly traceId?: string;
+  readonly details?: Record<string, unknown> | null;
 
   constructor(status: number, body: ApiErrorBody) {
     const raw = body.message || `HTTP ${status}`;
@@ -47,6 +48,7 @@ export class ApiError extends Error {
     this.status = status;
     this.code = body.code ?? 'UNKNOWN';
     this.traceId = body.traceId;
+    this.details = body.details ?? undefined;
   }
 }
 

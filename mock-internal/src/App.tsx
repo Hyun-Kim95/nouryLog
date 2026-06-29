@@ -6,6 +6,9 @@ import { AppHome } from './pages/app/AppHome';
 import { AppLog } from './pages/app/AppLog';
 import { AppStats } from './pages/app/AppStats';
 import { AppFoodSearch } from './pages/app/AppFoodSearch';
+import { AppMealSetList } from './pages/app/AppMealSetList';
+import { AppMealSetEditor } from './pages/app/AppMealSetEditor';
+import { AppMealSetApply } from './pages/app/AppMealSetApply';
 import { AppSubscription } from './pages/app/AppSubscription';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -22,6 +25,9 @@ export function App() {
         <Route path="log" element={<AppLog />} />
         <Route path="stats" element={<AppStats />} />
         <Route path="food-search" element={<AppFoodSearch />} />
+        <Route path="meal-set" element={<AppMealSetList />} />
+        <Route path="meal-set/edit" element={<AppMealSetEditor />} />
+        <Route path="meal-set/apply" element={<AppMealSetApply />} />
         <Route path="subscription" element={<AppSubscription />} />
       </Route>
       <Route path="/admin" element={<AdminLayout />}>

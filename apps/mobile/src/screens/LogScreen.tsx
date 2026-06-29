@@ -56,6 +56,7 @@ import { checkoutPremiumWithPlay } from '../billing/checkoutPremium';
 import { isPlayBillingEnabled } from '../billing/feature';
 import { BILLING_COPY } from '../copy/billing';
 import { LOG_COPY } from '../copy/log';
+import { MEAL_SET_COPY } from '../copy/mealSet';
 import { useFocusReload } from '../hooks/useFocusReload';
 import { formatMacroLine } from '../lib/formatNutrition';
 import { formatTplAmount as formatPortionAmount } from '../lib/mealEntryForm';
@@ -1080,6 +1081,12 @@ export function LogScreen() {
         </View>
 
         {templateChips}
+
+        <PrimaryButton
+          title={MEAL_SET_COPY.logEntryCta}
+          onPress={() => navigation.navigate('MealSetList')}
+          variant="secondary"
+        />
 
         {recentMeals.length > 0 ? (
           <Card>

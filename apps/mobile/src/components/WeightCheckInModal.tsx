@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Text, View } from 'react-native';
 import { Field } from './Field';
 import { PrimaryButton } from './ui';
 import { postWeightEntry, type WeightCheckInStatus } from '../api/weightEntries';
@@ -74,50 +74,55 @@ export function WeightCheckInModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismissLater}>
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'flex-end',
-          backgroundColor: 'rgba(0,0,0,0.45)',
-        }}
+      <KeyboardAvoidingView
+        style={{ flex: 1, justifyContent: 'flex-end' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View
           style={{
-            backgroundColor: t.colors.surface,
-            borderTopLeftRadius: t.radius.xl,
-            borderTopRightRadius: t.radius.xl,
-            paddingTop: t.spacing.xl,
-            paddingHorizontal: t.spacing.xl,
-            paddingBottom: t.spacing.xl + bottomInset,
-            gap: t.spacing.md,
-            borderWidth: 1,
-            borderColor: t.colors.border,
+            flex: 1,
+            justifyContent: 'flex-end',
+            backgroundColor: 'rgba(0,0,0,0.45)',
           }}
         >
-          <Text style={{ color: t.colors.fg, fontSize: t.fontSize.title, fontWeight: '700' }}>
-            {WEIGHT_COPY.modalTitle}
-          </Text>
-          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{WEIGHT_COPY.modalBody}</Text>
-          {status?.lastWeightKg != null && status.daysSince != null ? (
-            <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
-              {WEIGHT_COPY.lastRecorded(status.lastWeightKg, status.daysSince)}
+          <View
+            style={{
+              backgroundColor: t.colors.surface,
+              borderTopLeftRadius: t.radius.xl,
+              borderTopRightRadius: t.radius.xl,
+              paddingTop: t.spacing.xl,
+              paddingHorizontal: t.spacing.xl,
+              paddingBottom: t.spacing.xl + bottomInset,
+              gap: t.spacing.md,
+              borderWidth: 1,
+              borderColor: t.colors.border,
+            }}
+          >
+            <Text style={{ color: t.colors.fg, fontSize: t.fontSize.title, fontWeight: '700' }}>
+              {WEIGHT_COPY.modalTitle}
             </Text>
-          ) : null}
-          <Field
-            label={WEIGHT_COPY.fieldLabel}
-            helper={WEIGHT_COPY.fieldHelper}
-            error={error}
-            suffix="kg"
-            keyboardType="decimal-pad"
-            value={weightStr}
-            onChangeText={setWeightStr}
-          />
-          <PrimaryButton title={WEIGHT_COPY.save} onPress={() => void handleSave()} loading={busy} />
-          {!busy ? (
-            <PrimaryButton title={WEIGHT_COPY.later} variant="secondary" onPress={onDismissLater} />
-          ) : null}
+            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{WEIGHT_COPY.modalBody}</Text>
+            {status?.lastWeightKg != null && status.daysSince != null ? (
+              <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
+                {WEIGHT_COPY.lastRecorded(status.lastWeightKg, status.daysSince)}
+              </Text>
+            ) : null}
+            <Field
+              label={WEIGHT_COPY.fieldLabel}
+              helper={WEIGHT_COPY.fieldHelper}
+              error={error}
+              suffix="kg"
+              keyboardType="decimal-pad"
+              value={weightStr}
+              onChangeText={setWeightStr}
+            />
+            <PrimaryButton title={WEIGHT_COPY.save} onPress={() => void handleSave()} loading={busy} />
+            {!busy ? (
+              <PrimaryButton title={WEIGHT_COPY.later} variant="secondary" onPress={onDismissLater} />
+            ) : null}
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

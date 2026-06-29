@@ -2,8 +2,8 @@
 type: contract
 project: dietManagement
 doc_lane: requirements
-version: v1.4
-updated_at: 2026-05-11
+version: v1.6
+updated_at: 2026-06-29
 tags: [api, contract, backend, frontend]
 ---
 
@@ -295,6 +295,8 @@ MVP 상품 정책:
 ## 7) 표준 에러 코드 카탈로그
 - 인증/권한: `AUTH_UNAUTHORIZED`, `AUTH_FORBIDDEN`, `AUTH_TOKEN_EXPIRED`
 - 검증/충돌: `VALIDATION_FAILED`, `RESOURCE_CONFLICT`
+- 조회/리소스: `NOT_FOUND` (404, 본인 소유 아님/없음 통일)
+- 끼니 세트: `MEAL_SET_ITEM_UNAVAILABLE` (409, apply 사전 검증 실패 — `details.items[].{itemId, reason}`)
 - SNS 인증: `OAUTH_PROVIDER_ERROR`, `OAUTH_CANCELLED`, `ACCOUNT_CONFLICT`, `SOCIAL_STATE_INVALID`
 - OCR: `OCR_RATE_LIMIT`, `OCR_PROVIDER_UNAVAILABLE`, `OCR_PARSE_FAILED`
 - 과금: `PAYMENT_REQUIRED`, `OCR_FREE_QUOTA_EXCEEDED`, `BILLING_NOT_AVAILABLE`
@@ -305,6 +307,23 @@ MVP 상품 정책:
 - 본 문서는 PRD 승인 버전에 종속된다.
 - API 스키마 변경 시 PRD + 상태 매핑 + QA 시나리오 동시 갱신이 필수다.
 - Gate 2 구현 중 계약 변경이 발생하면 `docs/design/diet-management-alignment-notes.md`와 구현 분할 계획 문서를 즉시 재동기화한다.
+
+### v1.6 (2026-06-29)
+모바일 끼니 세트(즐겨찾기 묶음) 트랙(`docs/requirements/feature-mobile-meal-set-prd.md`) 정합. `apps/server/src/routes/mealSet.ts`(신규), Prisma `MealSet`/`MealSetItem` 신규 모델 + 마이그레이션 `20260629120000_meal_set`. 기존 `Meal`/`FoodTemplate` 스키마 변경 없음.
+
+- 표준 에러 코드 2종 추가: `NOT_FOUND`(404), `MEAL_SET_ITEM_UNAVAILABLE`(409). `contracts/errorCodes.ts` SSOT + `apps/server/src/contracts/errorCodes.ts` 스냅샷 동기화.
+- 신규 엔드포인트(모두 인증 필요, 본인 자원만 접근 — 타인/없음=`404 NOT_FOUND`):
+  - `GET /me/meal-sets` → `{ items: MealSet[] }`(활성 기본, 앱 스크롤 기반).
+  - `POST /me/meal-sets` → 201 생성. body `{ name(1~40), defaultMealSlot, defaultSnackPlacement?, items: MealSetItemInput[] }`. 422: 빈 이름/항목 0개/항목 20개 초과/활성 세트 50개 초과(`VALIDATION_FAILED`). MVP 입력은 `kind:'template'`만 허용.
+  - `GET /me/meal-sets/{id}` → 단건 상세(항목 포함).
+  - `PUT /me/meal-sets/{id}` → 이름/기본 끼니/항목 전체 갱신(트랜잭션, 항목 교체).
+  - `PATCH /me/meal-sets/{id}/deactivate` → soft delete(멱등: 이미 비활성도 200).
+  - `POST /me/meal-sets/{id}/apply` → 200 `{ createdMealIds, skippedItemIds }`. body `{ clientRequestId, consumedAt?, mealSlot?, snackPlacement?, excludeItemIds? }`.
+    - 멱등: 배치 `clientRequestId`에서 항목별 키 `{clientRequestId}:{itemId}` 파생 → `Meal.clientRequestId`(`@@unique([userId, clientRequestId])`). 동일 배치 재전송 시 중복 없이 기존 `createdMealIds` 반환.
+    - 원자성: 등록 대상 항목 전체 단일 트랜잭션(전체 성공/전체 실패).
+    - 사전 검증: 비활성 템플릿/참조 소실/환산 불가 → `409 MEAL_SET_ITEM_UNAVAILABLE`(`details.items[].{itemId, reason}`; reason ∈ `TEMPLATE_MISSING`/`TEMPLATE_INACTIVE`/`NUTRITION_INCOMPLETE`).
+    - 슬롯/간식 조합: 실효 끼니가 SNACK이 아니면 `snackPlacement=null`. 미래 `consumedAt`은 `422 VALIDATION_FAILED`(D5). 전 항목 제외 시 `422`.
+- 검증: 통합 acceptance 테스트(`apps/server/src/routes/mealSet.acceptance.test.ts`) AC-01/02/03/04/05/06/07/08/11/12/13/15/17 **전부 GREEN**(AC-04 원자성은 트랜잭션 내 실패 주입으로 롤백 검증). AC-09/10/14/16은 앱(클라이언트) 책임. 핸들러는 `wrap()` 공통 래퍼로 미처리 예외 시 `500 INTERNAL_SERVER_ERROR` 반환(me.ts 컨벤션 정합).
 
 ### v1.3 (2026-05-09)
 모바일 프로필 확장(활동량·목표) 트랙(`docs/requirements/feature-mobile-profile-extra-prd.md`) 정합을 위한 사용자 앱 API 보강. `apps/server/src/routes/me.ts`, `apps/server/src/lib/recommendation.ts`, Prisma `Profile` 스키마 변경.

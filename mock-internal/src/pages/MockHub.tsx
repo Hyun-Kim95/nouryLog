@@ -36,7 +36,16 @@ export function MockHub() {
             <Link to="/app/stats">APP_STATS 통계·stale</Link>
           </li>
           <li>
-            <Link to="/app/food-search">APP_FOOD_SEARCH 음식 검색·이력·빈도 (신규)</Link>
+            <Link to="/app/food-search">APP_FOOD_SEARCH 음식 검색·이력·빈도</Link>
+          </li>
+          <li>
+            <Link to="/app/meal-set">APP_MEAL_SET_LIST 끼니 세트 목록 (신규)</Link>
+          </li>
+          <li>
+            <Link to="/app/meal-set/edit">APP_MEAL_SET_EDITOR 세트 편집 (신규)</Link>
+          </li>
+          <li>
+            <Link to="/app/meal-set/apply">APP_MEAL_SET_APPLY 한 번에 등록 (신규)</Link>
           </li>
           <li>
             <Link to="/app/subscription">APP_SUB_SETTINGS 구독·복구</Link>

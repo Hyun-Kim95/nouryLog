@@ -8,6 +8,7 @@ import { traceMiddleware } from './lib/trace.js';
 import { sendError, ErrorCodes } from './lib/errors.js';
 import { publicRouter } from './routes/public.js';
 import { meRouter } from './routes/me.js';
+import { mealSetRouter } from './routes/mealSet.js';
 import { meInsightsRouter } from './routes/meInsights.js';
 import { adminRouter } from './routes/admin.js';
 
@@ -27,10 +28,11 @@ fs.mkdirSync(uploadDir, { recursive: true });
 app.use('/uploads', express.static(uploadDir));
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'diet-management-api', contract: 'v1.5.0' });
+  res.json({ ok: true, service: 'diet-management-api', contract: 'v1.6.0' });
 });
 
 app.use(publicRouter);
+app.use(mealSetRouter);
 app.use(meRouter);
 app.use(meInsightsRouter);
 app.use(adminRouter);

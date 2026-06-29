@@ -41,6 +41,7 @@ model User {
   consents UserConsent[]
   ocrFeedbacks OcrFeedback[]
   aiPeriodReports AiPeriodReport[]
+  mealSets MealSet[]
 }
 
 enum SocialProvider {
@@ -236,8 +237,56 @@ model FoodTemplate {
   createdAt      DateTime  @default(now())
 
   meals Meal[]
+  mealSetItems MealSetItem[]
 
   @@index([category])
+}
+
+/// 끼니 세트(즐겨찾기 묶음). 자주 먹는 음식 조합을 끼니 단위로 저장해 한 번에 기록한다.
+model MealSet {
+  id                   String          @id @default(cuid())
+  userId               String
+  name                 String
+  defaultMealSlot      MealSlot
+  /// `defaultMealSlot === SNACK`일 때만 사용. 끼니 사이 위치.
+  defaultSnackPlacement SnackPlacement?
+  active               Boolean         @default(true)
+  deactivatedAt        DateTime?
+  createdAt            DateTime        @default(now())
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items MealSetItem[]
+
+  @@index([userId, active])
+}
+
+/// 끼니 세트의 항목. MVP는 `kind=template`만 사용(수동 항목 필드는 후순위 확장 여지).
+model MealSetItem {
+  id            String        @id @default(cuid())
+  mealSetId     String
+  kind          String        @default("template")
+  displayOrder  Int           @default(0)
+
+  /// kind=template
+  foodTemplateId String?
+  mealInputMode  MealInputMode?
+  /// PORTION_COUNT일 때 분량 개수, TOTAL_GRAMS일 때 총 그램.
+  portionQuantity Float?
+  totalGrams      Float?
+
+  /// kind=manual (후순위, MVP 미노출)
+  name         String?
+  calories     Float?
+  protein      Float?
+  carbohydrate Float?
+  fat          Float?
+  grams        Float?
+
+  mealSet      MealSet       @relation(fields: [mealSetId], references: [id], onDelete: Cascade)
+  foodTemplate FoodTemplate? @relation(fields: [foodTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([mealSetId])
+  @@index([foodTemplateId])
 }
 
 model Inquiry {
