@@ -303,7 +303,7 @@ export function MealSetApplySheet({ visible, set, tplById, onClose, onApplied }:
                   >
                     <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm }}>
                       <Text numberOfLines={1} style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
-                        {tpl?.name ?? '삭제된 음식'}
+                        {item.kind === 'manual' ? (item.name ?? '직접 입력 음식') : (tpl?.name ?? '삭제된 음식')}
                       </Text>
                       {unavailable ? (
                         <View

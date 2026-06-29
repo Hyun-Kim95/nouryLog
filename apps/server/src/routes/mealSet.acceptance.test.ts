@@ -67,6 +67,10 @@ function templateItem(foodTemplateId: string) {
   return { kind: 'template' as const, foodTemplateId, mealInputMode: 'PORTION_COUNT' as const, portionQuantity: 1 };
 }
 
+function manualItem(name: string) {
+  return { kind: 'manual' as const, name, calories: 150, protein: 10, carbohydrate: 20, fat: 5, grams: 120 };
+}
+
 before(async () => {
   const stamp = Date.now();
   const user = await prisma.user.create({
@@ -164,6 +168,31 @@ describe('meal-set: 세트 CRUD (POST/GET/PUT/PATCH /me/meal-sets)', () => {
       body: { clientRequestId: crypto.randomUUID() },
     });
     assert.equal(applyOther.status, 404);
+  });
+
+  it('수기 항목 생성: kind=manual 저장 시 name/영양 스냅샷 보존, foodTemplateId=null', async () => {
+    const created = await req('POST', '/me/meal-sets', {
+      token,
+      body: { name: '수기 세트', defaultMealSlot: 'LUNCH', items: [manualItem('집밥 한공기'), templateItem(tpl1)] },
+    });
+    assert.equal(created.status, 201);
+    const manual = created.json.items.find((it: Json) => it.kind === 'manual');
+    assert.ok(manual);
+    assert.equal(manual.name, '집밥 한공기');
+    assert.equal(manual.calories, 150);
+    assert.equal(manual.protein, 10);
+    assert.equal(manual.grams, 120);
+    assert.equal(manual.foodTemplateId, null);
+    assert.equal(manual.mealInputMode, null);
+  });
+
+  it('수기 항목 검증: name 누락 시 422 VALIDATION_FAILED', async () => {
+    const res = await req('POST', '/me/meal-sets', {
+      token,
+      body: { name: '수기 검증', defaultMealSlot: 'LUNCH', items: [{ kind: 'manual', calories: 100, protein: 1, carbohydrate: 1, fat: 1 }] },
+    });
+    assert.equal(res.status, 422);
+    assert.equal(res.json.code, 'VALIDATION_FAILED');
   });
 
   it('AC-08 비활성화: deactivate 후 목록 제외, 과거 Meal 기록은 보존', async () => {
@@ -321,6 +350,37 @@ describe('meal-set: 한 번에 등록 (POST /me/meal-sets/{id}/apply)', () => {
     });
     assert.equal(res.status, 422);
     assert.equal(res.json.code, 'VALIDATION_FAILED');
+  });
+
+  it('수기 항목 등록: manual 스냅샷으로 수기 Meal 생성(foodTemplateId=null), 사전검증 무관', async () => {
+    const id = await makeSet({
+      name: '수기 적용 세트',
+      defaultMealSlot: 'DINNER',
+      items: [manualItem('떡볶이'), templateItem(tplInactive)],
+    });
+    // 비활성 템플릿만 409로 막히고 manual은 unavailable 목록에 포함되지 않음
+    const blocked = await req('POST', `/me/meal-sets/${id}/apply`, {
+      token,
+      body: { clientRequestId: crypto.randomUUID() },
+    });
+    assert.equal(blocked.status, 409);
+    assert.equal((blocked.json.details.items as Json[]).length, 1);
+
+    // 비활성 템플릿 제외 후 manual 항목만 등록
+    const detail = await req('GET', `/me/meal-sets/${id}`, { token });
+    const inactiveItemId = detail.json.items.find((it: Json) => it.foodTemplateId === tplInactive).id;
+    const ok = await req('POST', `/me/meal-sets/${id}/apply`, {
+      token,
+      body: { clientRequestId: crypto.randomUUID(), excludeItemIds: [inactiveItemId] },
+    });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.createdMealIds.length, 1);
+    const meal = await prisma.meal.findUnique({ where: { id: ok.json.createdMealIds[0] } });
+    assert.ok(meal);
+    assert.equal(meal!.foodTemplateId, null);
+    assert.equal(meal!.name, '떡볶이');
+    assert.equal(meal!.calories, 150);
+    assert.equal(meal!.mealSlot, 'DINNER');
   });
 
   it('AC-04 원자성: 트랜잭션 중 일부 항목 저장 실패 시 전체 롤백(부분 저장 없음)', async () => {

@@ -28,10 +28,11 @@ export const MEAL_SET_COPY = {
   defaultSlotLabel: '기본 끼니',
   snackWhenLabel: '간식은 언제?',
   itemsTitle: '음식 항목',
-  itemsHint: '등록된 음식 템플릿을 추가해 세트를 구성해요.',
+  itemsHint: '과거 기록에서 고르거나 음식을 검색해 세트를 구성해요.',
   itemsEmpty: '항목을 1개 이상 추가해 주세요.',
   addItem: '음식 추가',
   removeItem: '삭제',
+  manualBadge: '직접 입력',
   itemUnavailable: '사용 불가',
   itemUnavailableHint: '이 음식은 더 이상 등록할 수 없어요. 교체하거나 삭제해 주세요.',
   save: '저장',
@@ -41,12 +42,19 @@ export const MEAL_SET_COPY = {
 
   // 음식 추가 모달
   addItemTitle: '음식 추가',
+  sourceRecent: '최근 먹은 기록',
+  sourceSearch: '음식 검색',
+  recentLoading: '최근 기록을 불러오는 중…',
+  recentEmpty: '최근 식사 기록이 없어요. 음식 검색으로 추가해 보세요.',
+  recentError: '최근 기록을 불러오지 못했어요.',
+  recentHint: '그때 먹은 분량 그대로 담겨요.',
   searchPlaceholder: '음식 템플릿 검색',
   searchEmpty: '일치하는 음식 템플릿이 없어요.',
   templatesEmpty: '먼저 기록 화면에서 음식 템플릿을 만들어 주세요.',
   portionLabel: '분량(개수)',
   close: '닫기',
   add: '추가',
+  added: (name: string) => `${name}을(를) 담았어요.`,
 
   // 한 번에 등록 시트
   applyTitle: '한 번에 등록',

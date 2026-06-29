@@ -2,7 +2,7 @@
 type: contract
 project: dietManagement
 doc_lane: requirements
-version: v1.6
+version: v1.7
 updated_at: 2026-06-29
 tags: [api, contract, backend, frontend]
 ---
@@ -307,6 +307,20 @@ MVP 상품 정책:
 - 본 문서는 PRD 승인 버전에 종속된다.
 - API 스키마 변경 시 PRD + 상태 매핑 + QA 시나리오 동시 갱신이 필수다.
 - Gate 2 구현 중 계약 변경이 발생하면 `docs/design/diet-management-alignment-notes.md`와 구현 분할 계획 문서를 즉시 재동기화한다.
+
+### v1.7 (2026-06-29)
+끼니 세트 항목에 **수기(manual) 스냅샷 항목** 지원 추가(`apps/server/src/routes/mealSet.ts`). **스키마/마이그레이션 변경 없음** — `MealSetItem`의 manual 컬럼(`name/calories/protein/carbohydrate/fat/grams`)은 v1.6 모델에 이미 존재하던 것을 활성화.
+
+- `MealSetItemInput` 가 discriminated union으로 확장:
+  - `{ kind:'template', foodTemplateId, mealInputMode, portionQuantity|totalGrams }` (기존)
+  - `{ kind:'manual', name(1~60), calories(0~10000), protein/carbohydrate/fat(0~2000), grams?(1~5000, 기본 100) }` (신규). 422 시 `details.field = items[i].name|calories|grams`.
+- `GET/POST/PUT /me/meal-sets` 응답 항목에 manual 필드(`name/calories/protein/carbohydrate/fat/grams`) 포함(template 항목은 null).
+- `POST .../apply`:
+  - manual 항목 → 저장된 영양 스냅샷 그대로 **수기 Meal 생성**(`foodTemplateId=null`, `mealInputMode=null`). 사용 가능 사전 검증 대상 아님(항상 등록 가능).
+  - template 항목 → 기존 경로(스케일 환산 + 사전 검증). `409 MEAL_SET_ITEM_UNAVAILABLE`은 template 항목에만 해당.
+  - 멱등·원자성 정책 동일(혼합 세트도 단일 트랜잭션).
+- 사용 동기: 앱 "과거 기록에서 선택"으로 세트 구성 시, 템플릿 없는 수기 식사도 스냅샷으로 담을 수 있게 함.
+- 검증: acceptance 추가 3건(수기 생성 스냅샷 보존 / name 누락 422 / 수기 항목 apply 시 수기 Meal 생성·사전검증 무관) GREEN. 서버 전체 139 pass.
 
 ### v1.6 (2026-06-29)
 모바일 끼니 세트(즐겨찾기 묶음) 트랙(`docs/requirements/feature-mobile-meal-set-prd.md`) 정합. `apps/server/src/routes/mealSet.ts`(신규), Prisma `MealSet`/`MealSetItem` 신규 모델 + 마이그레이션 `20260629120000_meal_set`. 기존 `Meal`/`FoodTemplate` 스키마 변경 없음.

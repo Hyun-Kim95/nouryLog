@@ -26,6 +26,13 @@ const PORTION_QTY_MIN = 0.25;
 const PORTION_QTY_MAX = 50;
 const TOTAL_GRAMS_MIN = 1;
 const TOTAL_GRAMS_MAX = 5000;
+// kind=manual(수기 항목) 스냅샷 한계
+const MANUAL_NAME_MAX = 60;
+const MANUAL_CALORIES_MAX = 10000;
+const MANUAL_MACRO_MAX = 2000;
+const MANUAL_GRAMS_MIN = 1;
+const MANUAL_GRAMS_MAX = 5000;
+const MANUAL_GRAMS_DEFAULT = 100;
 
 // 일반 사용자 + 활성 계정만 접근 (me 라우터와 동일 정책)
 mealSetRouter.use(async (req, res, next) => {
@@ -68,7 +75,8 @@ function isTemplateNutritionComplete(t: {
   );
 }
 
-type ParsedItemInput = {
+type ParsedTemplateItem = {
+  kind: 'template';
   foodTemplateId: string;
   mealInputMode: MealInputMode;
   portionQuantity: number | null;
@@ -76,11 +84,30 @@ type ParsedItemInput = {
   displayOrder: number;
 };
 
+type ParsedManualItem = {
+  kind: 'manual';
+  name: string;
+  calories: number;
+  protein: number;
+  carbohydrate: number;
+  fat: number;
+  grams: number;
+  displayOrder: number;
+};
+
+type ParsedItemInput = ParsedTemplateItem | ParsedManualItem;
+
 type ItemsParse =
   | { ok: true; items: ParsedItemInput[] }
   | { ok: false; message: string; field?: string };
 
-// MVP: kind=template 항목만 허용
+function parseNonNegative(raw: unknown, max: number): number | null {
+  const n = typeof raw === 'number' ? raw : Number(raw ?? 0);
+  if (!Number.isFinite(n) || n < 0 || n > max) return null;
+  return n;
+}
+
+// kind=template(음식 템플릿) 또는 kind=manual(수기 스냅샷) 항목 허용
 function parseItemsInput(raw: unknown): ItemsParse {
   if (!Array.isArray(raw)) {
     return { ok: false, message: '항목 목록이 필요합니다.', field: 'items' };
@@ -95,35 +122,88 @@ function parseItemsInput(raw: unknown): ItemsParse {
   for (let i = 0; i < raw.length; i++) {
     const it = raw[i] as Record<string, unknown>;
     const kind = it.kind === undefined ? 'template' : String(it.kind);
-    if (kind !== 'template') {
-      return { ok: false, message: '현재는 등록된 음식 템플릿만 추가할 수 있습니다.', field: `items[${i}].kind` };
-    }
-    const tplId = typeof it.foodTemplateId === 'string' ? it.foodTemplateId.trim() : '';
-    if (!tplId) {
-      return { ok: false, message: '음식 템플릿을 선택해 주세요.', field: `items[${i}].foodTemplateId` };
-    }
-    const mode = parseMealInputMode(it.mealInputMode);
-    if (!mode) {
-      return { ok: false, message: 'mealInputMode가 필요합니다.', field: `items[${i}].mealInputMode` };
-    }
-    let portionQuantity: number | null = null;
-    let totalGrams: number | null = null;
-    if (mode === MealInputMode.PORTION_COUNT) {
-      const q = typeof it.portionQuantity === 'number' ? it.portionQuantity : Number(it.portionQuantity);
-      if (!Number.isFinite(q) || q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
-        return { ok: false, message: `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, field: `items[${i}].portionQuantity` };
+    if (kind === 'template') {
+      const tplId = typeof it.foodTemplateId === 'string' ? it.foodTemplateId.trim() : '';
+      if (!tplId) {
+        return { ok: false, message: '음식 템플릿을 선택해 주세요.', field: `items[${i}].foodTemplateId` };
       }
-      portionQuantity = q;
+      const mode = parseMealInputMode(it.mealInputMode);
+      if (!mode) {
+        return { ok: false, message: 'mealInputMode가 필요합니다.', field: `items[${i}].mealInputMode` };
+      }
+      let portionQuantity: number | null = null;
+      let totalGrams: number | null = null;
+      if (mode === MealInputMode.PORTION_COUNT) {
+        const q = typeof it.portionQuantity === 'number' ? it.portionQuantity : Number(it.portionQuantity);
+        if (!Number.isFinite(q) || q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
+          return { ok: false, message: `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, field: `items[${i}].portionQuantity` };
+        }
+        portionQuantity = q;
+      } else {
+        const g = typeof it.totalGrams === 'number' ? it.totalGrams : Number(it.totalGrams);
+        if (!Number.isFinite(g) || g < TOTAL_GRAMS_MIN || g > TOTAL_GRAMS_MAX) {
+          return { ok: false, message: `totalGrams는 ${TOTAL_GRAMS_MIN}~${TOTAL_GRAMS_MAX} 사이여야 합니다.`, field: `items[${i}].totalGrams` };
+        }
+        totalGrams = g;
+      }
+      items.push({ kind: 'template', foodTemplateId: tplId, mealInputMode: mode, portionQuantity, totalGrams, displayOrder: i });
+    } else if (kind === 'manual') {
+      const name = typeof it.name === 'string' ? it.name.trim() : '';
+      if (!name) {
+        return { ok: false, message: '음식명을 입력해 주세요.', field: `items[${i}].name` };
+      }
+      if (name.length > MANUAL_NAME_MAX) {
+        return { ok: false, message: `음식명은 최대 ${MANUAL_NAME_MAX}자까지 가능합니다.`, field: `items[${i}].name` };
+      }
+      const calories = parseNonNegative(it.calories, MANUAL_CALORIES_MAX);
+      const protein = parseNonNegative(it.protein, MANUAL_MACRO_MAX);
+      const carbohydrate = parseNonNegative(it.carbohydrate, MANUAL_MACRO_MAX);
+      const fat = parseNonNegative(it.fat, MANUAL_MACRO_MAX);
+      if (calories == null || protein == null || carbohydrate == null || fat == null) {
+        return { ok: false, message: '영양 값이 올바르지 않습니다.', field: `items[${i}].calories` };
+      }
+      let grams = MANUAL_GRAMS_DEFAULT;
+      if (it.grams != null && it.grams !== '') {
+        const g = typeof it.grams === 'number' ? it.grams : Number(it.grams);
+        if (!Number.isFinite(g) || g < MANUAL_GRAMS_MIN || g > MANUAL_GRAMS_MAX) {
+          return { ok: false, message: `grams는 ${MANUAL_GRAMS_MIN}~${MANUAL_GRAMS_MAX} 사이여야 합니다.`, field: `items[${i}].grams` };
+        }
+        grams = g;
+      }
+      items.push({ kind: 'manual', name, calories, protein, carbohydrate, fat, grams, displayOrder: i });
     } else {
-      const g = typeof it.totalGrams === 'number' ? it.totalGrams : Number(it.totalGrams);
-      if (!Number.isFinite(g) || g < TOTAL_GRAMS_MIN || g > TOTAL_GRAMS_MAX) {
-        return { ok: false, message: `totalGrams는 ${TOTAL_GRAMS_MIN}~${TOTAL_GRAMS_MAX} 사이여야 합니다.`, field: `items[${i}].totalGrams` };
-      }
-      totalGrams = g;
+      return { ok: false, message: '지원하지 않는 항목 유형입니다.', field: `items[${i}].kind` };
     }
-    items.push({ foodTemplateId: tplId, mealInputMode: mode, portionQuantity, totalGrams, displayOrder: i });
   }
   return { ok: true, items };
+}
+
+// 파싱된 항목 → Prisma create 데이터 (template/manual 분기)
+function toItemCreateData(it: ParsedItemInput) {
+  if (it.kind === 'manual') {
+    return {
+      kind: 'manual',
+      foodTemplateId: null,
+      mealInputMode: null,
+      portionQuantity: null,
+      totalGrams: null,
+      name: it.name,
+      calories: it.calories,
+      protein: it.protein,
+      carbohydrate: it.carbohydrate,
+      fat: it.fat,
+      grams: it.grams,
+      displayOrder: it.displayOrder,
+    };
+  }
+  return {
+    kind: 'template',
+    foodTemplateId: it.foodTemplateId,
+    mealInputMode: it.mealInputMode,
+    portionQuantity: it.portionQuantity,
+    totalGrams: it.totalGrams,
+    displayOrder: it.displayOrder,
+  };
 }
 
 type MealSetWithItems = Prisma.MealSetGetPayload<{ include: { items: true } }>;
@@ -144,6 +224,12 @@ function serializeMealSet(set: MealSetWithItems) {
         mealInputMode: it.mealInputMode,
         portionQuantity: it.portionQuantity,
         totalGrams: it.totalGrams,
+        name: it.name,
+        calories: it.calories,
+        protein: it.protein,
+        carbohydrate: it.carbohydrate,
+        fat: it.fat,
+        grams: it.grams,
         displayOrder: it.displayOrder,
       })),
   };
@@ -222,14 +308,7 @@ mealSetRouter.post('/me/meal-sets', wrap(async (req, res) => {
       defaultMealSlot: meta.mealSlot,
       defaultSnackPlacement: meta.snackPlacement,
       items: {
-        create: itemsParse.items.map((it) => ({
-          kind: 'template',
-          foodTemplateId: it.foodTemplateId,
-          mealInputMode: it.mealInputMode,
-          portionQuantity: it.portionQuantity,
-          totalGrams: it.totalGrams,
-          displayOrder: it.displayOrder,
-        })),
+        create: itemsParse.items.map(toItemCreateData),
       },
     },
     include: { items: true },
@@ -289,14 +368,7 @@ mealSetRouter.put('/me/meal-sets/:id', wrap(async (req, res) => {
         defaultMealSlot: meta.mealSlot,
         defaultSnackPlacement: meta.snackPlacement,
         items: {
-          create: itemsParse.items.map((it) => ({
-            kind: 'template',
-            foodTemplateId: it.foodTemplateId,
-            mealInputMode: it.mealInputMode,
-            portionQuantity: it.portionQuantity,
-            totalGrams: it.totalGrams,
-            displayOrder: it.displayOrder,
-          })),
+          create: itemsParse.items.map(toItemCreateData),
         },
       },
       include: { items: true },
@@ -386,15 +458,16 @@ mealSetRouter.post('/me/meal-sets/:id/apply', wrap(async (req, res) => {
     return;
   }
 
-  // 사전 검증: 템플릿 사용 가능 여부 (AC-05/AC-15)
-  const templateIds = applicable
+  // 사전 검증: 템플릿 사용 가능 여부 (AC-05/AC-15). manual 항목은 스냅샷이라 항상 등록 가능.
+  const templateItems = applicable.filter((it) => it.kind === 'template');
+  const templateIds = templateItems
     .map((it) => it.foodTemplateId)
     .filter((v): v is string => typeof v === 'string');
   const templates = await prisma.foodTemplate.findMany({ where: { id: { in: templateIds } } });
   const tplById = new Map(templates.map((t) => [t.id, t]));
 
   const unavailable = findUnavailableTemplateItems(
-    applicable.map((it) => {
+    templateItems.map((it) => {
       const tpl = it.foodTemplateId ? tplById.get(it.foodTemplateId) : undefined;
       return {
         itemId: it.id,
@@ -430,6 +503,30 @@ mealSetRouter.post('/me/meal-sets/:id/apply', wrap(async (req, res) => {
       const existingId = existingIdByKey.get(key);
       if (existingId) {
         ids.push(existingId);
+        continue;
+      }
+      // manual 항목: 저장된 영양 스냅샷 그대로 수기 식사 생성
+      if (it.kind === 'manual') {
+        const meal = await tx.meal.create({
+          data: {
+            userId,
+            name: it.name ?? '음식',
+            consumedAt,
+            grams: it.grams ?? MANUAL_GRAMS_DEFAULT,
+            calories: it.calories ?? 0,
+            carbohydrate: it.carbohydrate ?? 0,
+            protein: it.protein ?? 0,
+            fat: it.fat ?? 0,
+            foodTemplateId: null,
+            mealInputMode: null,
+            portionQuantity: null,
+            mealSlot: effectiveSlot,
+            snackPlacement,
+            clientRequestId: key,
+          },
+          select: { id: true },
+        });
+        ids.push(meal.id);
         continue;
       }
       const tpl = tplById.get(it.foodTemplateId!)!;

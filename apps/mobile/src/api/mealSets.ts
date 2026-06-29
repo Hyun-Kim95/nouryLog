@@ -10,6 +10,13 @@ export type MealSetItem = {
   mealInputMode: MealSetItemInputMode | null;
   portionQuantity: number | null;
   totalGrams: number | null;
+  // kind=manual 스냅샷 (template 항목은 null)
+  name: string | null;
+  calories: number | null;
+  protein: number | null;
+  carbohydrate: number | null;
+  fat: number | null;
+  grams: number | null;
   displayOrder: number;
 };
 
@@ -22,13 +29,25 @@ export type MealSet = {
   items: MealSetItem[];
 };
 
-export type MealSetItemInput = {
+export type MealSetTemplateItemInput = {
   kind: 'template';
   foodTemplateId: string;
   mealInputMode: MealSetItemInputMode;
   portionQuantity?: number;
   totalGrams?: number;
 };
+
+export type MealSetManualItemInput = {
+  kind: 'manual';
+  name: string;
+  calories: number;
+  protein: number;
+  carbohydrate: number;
+  fat: number;
+  grams?: number;
+};
+
+export type MealSetItemInput = MealSetTemplateItemInput | MealSetManualItemInput;
 
 export type MealSetUpsertBody = {
   name: string;

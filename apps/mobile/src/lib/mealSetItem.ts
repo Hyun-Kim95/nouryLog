@@ -20,10 +20,17 @@ function formatAmount(n: number): string {
 export type MealSetItemPortionLike = Pick<
   MealSetItem,
   'mealInputMode' | 'portionQuantity' | 'totalGrams'
->;
+> & {
+  kind?: string;
+  calories?: number | null;
+  grams?: number | null;
+};
 
-/** 항목 분량 라벨 (예: "2개", "150g"). 템플릿 없으면 모드 기반 근사. */
+/** 항목 분량 라벨 (예: "2개", "150g"). manual은 grams, 템플릿 없으면 모드 기반 근사. */
 export function mealSetItemPortionLabel(item: MealSetItemPortionLike, tpl?: FoodTemplateItem): string {
+  if (item.kind === 'manual') {
+    return item.grams != null ? `${formatAmount(item.grams)}g` : '직접 입력';
+  }
   if (item.mealInputMode === 'TOTAL_GRAMS') {
     return item.totalGrams != null ? `${formatAmount(item.totalGrams)}g` : '';
   }
@@ -42,8 +49,11 @@ function templateNutritionComplete(tpl: FoodTemplateItem): boolean {
   );
 }
 
-/** 항목 칼로리(정수) — 템플릿 기준 환산. 환산 불가 시 null. */
+/** 항목 칼로리(정수) — manual은 스냅샷, template은 환산. 불가 시 null. */
 export function mealSetItemKcal(item: MealSetItemPortionLike, tpl?: FoodTemplateItem): number | null {
+  if (item.kind === 'manual') {
+    return item.calories != null ? Math.round(item.calories) : null;
+  }
   if (!tpl || !templateNutritionComplete(tpl)) return null;
   let totalGrams: number;
   if (item.mealInputMode === 'TOTAL_GRAMS') {
@@ -61,6 +71,7 @@ export function mealSetItemKcal(item: MealSetItemPortionLike, tpl?: FoodTemplate
  * 활성 템플릿 목록에 없으면 사용 불가(서버는 MISSING/INACTIVE를 구분하나 화면에선 동일 처리).
  */
 export function isMealSetItemUnavailable(item: MealSetItem, tpl?: FoodTemplateItem): boolean {
+  if (item.kind === 'manual') return false;
   if (!item.foodTemplateId) return true;
   if (!tpl) return true;
   return !templateNutritionComplete(tpl);

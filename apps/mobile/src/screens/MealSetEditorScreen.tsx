@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -12,7 +13,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { apiFetch, isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
 import { getAccessToken } from '../authStorage';
-import type { FoodTemplateItem } from '../api/meals';
+import { listMeals, type FoodTemplateItem, type MealRow } from '../api/meals';
 import {
   createMealSet,
   getMealSet,
@@ -51,18 +52,65 @@ const PORTION_MAX = 50;
 type Nav = NativeStackNavigationProp<RootStackParamList, 'MealSetEditor'>;
 type Route = RouteProp<RootStackParamList, 'MealSetEditor'>;
 
-type DraftItem = {
+type DraftTemplateItem = {
   key: string;
+  kind: 'template';
   foodTemplateId: string;
   mealInputMode: MealSetItemInputMode;
   portionQuantity: number | null;
   totalGrams: number | null;
 };
 
+type DraftManualItem = {
+  key: string;
+  kind: 'manual';
+  name: string;
+  calories: number;
+  protein: number;
+  carbohydrate: number;
+  fat: number;
+  grams: number | null;
+};
+
+type DraftItem = DraftTemplateItem | DraftManualItem;
+
 let draftSeq = 0;
 function nextKey(): string {
   draftSeq += 1;
   return `draft-${Date.now()}-${draftSeq}`;
+}
+
+/** 과거 식사 기록(MealRow) → 세트 드래프트 항목. 템플릿 기반이면 template, 아니면 manual 스냅샷. */
+function mealRowToDraft(meal: MealRow): DraftItem {
+  const mode = meal.mealInputMode;
+  if (meal.foodTemplateId && (mode === 'PORTION_COUNT' || mode === 'TOTAL_GRAMS')) {
+    return {
+      key: nextKey(),
+      kind: 'template',
+      foodTemplateId: meal.foodTemplateId,
+      mealInputMode: mode,
+      portionQuantity: mode === 'PORTION_COUNT' ? (meal.portionQuantity ?? 1) : null,
+      totalGrams: mode === 'TOTAL_GRAMS' ? (meal.grams ?? null) : null,
+    };
+  }
+  return {
+    key: nextKey(),
+    kind: 'manual',
+    name: meal.name,
+    calories: meal.calories ?? 0,
+    protein: meal.protein ?? 0,
+    carbohydrate: meal.carbohydrate ?? 0,
+    fat: meal.fat ?? 0,
+    grams: meal.grams ?? null,
+  };
+}
+
+/** mealSetItem 헬퍼에 넘길 분량/칼로리 표시용 어댑터. */
+function draftPortionLike(it: DraftItem) {
+  if (it.kind === 'manual') {
+    return { kind: 'manual' as const, mealInputMode: null, portionQuantity: null, totalGrams: null, calories: it.calories, grams: it.grams };
+  }
+  return { kind: 'template' as const, mealInputMode: it.mealInputMode, portionQuantity: it.portionQuantity, totalGrams: it.totalGrams };
 }
 
 export function MealSetEditorScreen() {
@@ -104,13 +152,27 @@ export function MealSetEditorScreen() {
         setSlot(set.defaultMealSlot);
         setSnackPlacement(set.defaultSnackPlacement ?? defaultSnackPlacementForNow());
         setItems(
-          set.items.map((it) => ({
-            key: nextKey(),
-            foodTemplateId: it.foodTemplateId ?? '',
-            mealInputMode: it.mealInputMode ?? 'PORTION_COUNT',
-            portionQuantity: it.portionQuantity,
-            totalGrams: it.totalGrams,
-          })),
+          set.items.map((it): DraftItem =>
+            it.kind === 'manual'
+              ? {
+                  key: nextKey(),
+                  kind: 'manual',
+                  name: it.name ?? '직접 입력 음식',
+                  calories: it.calories ?? 0,
+                  protein: it.protein ?? 0,
+                  carbohydrate: it.carbohydrate ?? 0,
+                  fat: it.fat ?? 0,
+                  grams: it.grams,
+                }
+              : {
+                  key: nextKey(),
+                  kind: 'template',
+                  foodTemplateId: it.foodTemplateId ?? '',
+                  mealInputMode: it.mealInputMode ?? 'PORTION_COUNT',
+                  portionQuantity: it.portionQuantity,
+                  totalGrams: it.totalGrams,
+                },
+          ),
         );
       }
       setState('ready');
@@ -126,24 +188,29 @@ export function MealSetEditorScreen() {
   const nameError = showErrors && !name.trim() ? MEAL_SET_COPY.nameRequired : undefined;
   const itemsError = showErrors && items.length === 0 ? MEAL_SET_COPY.itemsEmpty : undefined;
 
-  const addItem = (tpl: FoodTemplateItem, portion: number) => {
+  const addDraft = (draft: DraftItem, label: string) => {
     setItems((prev) => {
       if (prev.length >= ITEMS_MAX) {
         toast.show({ kind: 'error', message: MEAL_SET_COPY.itemsMax(ITEMS_MAX) });
         return prev;
       }
-      return [
-        ...prev,
-        {
-          key: nextKey(),
-          foodTemplateId: tpl.id,
-          mealInputMode: 'PORTION_COUNT',
-          portionQuantity: portion,
-          totalGrams: null,
-        },
-      ];
+      toast.show({ kind: 'success', message: MEAL_SET_COPY.added(label) });
+      return [...prev, draft];
     });
   };
+
+  const addTemplate = (tpl: FoodTemplateItem, portion: number) => {
+    addDraft(
+      { key: nextKey(), kind: 'template', foodTemplateId: tpl.id, mealInputMode: 'PORTION_COUNT', portionQuantity: portion, totalGrams: null },
+      tpl.name,
+    );
+  };
+
+  const addPastMeal = (meal: MealRow) => {
+    addDraft(mealRowToDraft(meal), meal.name);
+  };
+
+  const atMax = items.length >= ITEMS_MAX;
 
   const removeItem = (key: string) => {
     setItems((prev) => prev.filter((it) => it.key !== key));
@@ -160,14 +227,26 @@ export function MealSetEditorScreen() {
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('로그인 필요');
-      const itemInputs: MealSetItemInput[] = items.map((it) => ({
-        kind: 'template',
-        foodTemplateId: it.foodTemplateId,
-        mealInputMode: it.mealInputMode,
-        ...(it.mealInputMode === 'PORTION_COUNT'
-          ? { portionQuantity: it.portionQuantity ?? 1 }
-          : { totalGrams: it.totalGrams ?? 0 }),
-      }));
+      const itemInputs: MealSetItemInput[] = items.map((it) =>
+        it.kind === 'manual'
+          ? {
+              kind: 'manual',
+              name: it.name,
+              calories: it.calories,
+              protein: it.protein,
+              carbohydrate: it.carbohydrate,
+              fat: it.fat,
+              ...(it.grams != null ? { grams: it.grams } : {}),
+            }
+          : {
+              kind: 'template',
+              foodTemplateId: it.foodTemplateId,
+              mealInputMode: it.mealInputMode,
+              ...(it.mealInputMode === 'PORTION_COUNT'
+                ? { portionQuantity: it.portionQuantity ?? 1 }
+                : { totalGrams: it.totalGrams ?? 0 }),
+            },
+      );
       const body: MealSetUpsertBody = {
         name: name.trim(),
         defaultMealSlot: slot,
@@ -260,9 +339,12 @@ export function MealSetEditorScreen() {
             </Text>
           ) : (
             items.map((it) => {
-              const tpl = it.foodTemplateId ? tplById.get(it.foodTemplateId) : undefined;
-              const unavailable = !tpl;
-              const kcal = mealSetItemKcal(it, tpl);
+              const isManual = it.kind === 'manual';
+              const tpl = !isManual && it.foodTemplateId ? tplById.get(it.foodTemplateId) : undefined;
+              const like = draftPortionLike(it);
+              const unavailable = !isManual && !tpl;
+              const kcal = mealSetItemKcal(like, tpl);
+              const displayName = isManual ? it.name : (tpl?.name ?? '삭제된 음식');
               return (
                 <View
                   key={it.key}
@@ -278,8 +360,13 @@ export function MealSetEditorScreen() {
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm }}>
                       <Text numberOfLines={1} style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
-                        {tpl?.name ?? '삭제된 음식'}
+                        {displayName}
                       </Text>
+                      {isManual ? (
+                        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, fontWeight: '600' }}>
+                          {MEAL_SET_COPY.manualBadge}
+                        </Text>
+                      ) : null}
                       {unavailable ? (
                         <Text style={{ color: t.colors.warn, fontSize: t.fontSize.caption, fontWeight: '600' }}>
                           {MEAL_SET_COPY.itemUnavailable}
@@ -287,7 +374,7 @@ export function MealSetEditorScreen() {
                       ) : null}
                     </View>
                     <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                      {mealSetItemPortionLabel(it, tpl)}
+                      {mealSetItemPortionLabel(like, tpl)}
                       {kcal != null ? ` · ${kcal} kcal` : ''}
                     </Text>
                   </View>
@@ -309,7 +396,7 @@ export function MealSetEditorScreen() {
               title={MEAL_SET_COPY.addItem}
               variant="secondary"
               onPress={() => setAddOpen(true)}
-              disabled={items.length >= ITEMS_MAX}
+              disabled={atMax}
             />
           </View>
         </Card>
@@ -320,53 +407,35 @@ export function MealSetEditorScreen() {
       <AddItemModal
         visible={addOpen}
         templates={templates}
+        atMax={atMax}
         onClose={() => setAddOpen(false)}
-        onAdd={(tpl, portion) => addItem(tpl, portion)}
+        onAddTemplate={addTemplate}
+        onAddPast={addPastMeal}
       />
     </>
   );
 }
 
+type AddSource = 'recent' | 'search';
+
 function AddItemModal({
   visible,
   templates,
+  atMax,
   onClose,
-  onAdd,
+  onAddTemplate,
+  onAddPast,
 }: {
   visible: boolean;
   templates: FoodTemplateItem[];
+  atMax: boolean;
   onClose: () => void;
-  onAdd: (tpl: FoodTemplateItem, portion: number) => void;
+  onAddTemplate: (tpl: FoodTemplateItem, portion: number) => void;
+  onAddPast: (meal: MealRow) => void;
 }) {
   const t = useTheme();
   const toast = useToast();
-  const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<FoodTemplateItem | null>(null);
-  const [portion, setPortion] = useState('1');
-
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return templates.slice(0, 50);
-    return templates.filter((tpl) => tpl.name.toLowerCase().includes(needle)).slice(0, 50);
-  }, [query, templates]);
-
-  const reset = () => {
-    setQuery('');
-    setSelected(null);
-    setPortion('1');
-  };
-
-  const confirm = () => {
-    if (!selected) return;
-    const value = Number(String(portion).replace(',', '.'));
-    if (!Number.isFinite(value) || value < PORTION_MIN || value > PORTION_MAX) {
-      toast.show({ kind: 'error', message: `분량은 ${PORTION_MIN}~${PORTION_MAX} 사이로 입력해 주세요.` });
-      return;
-    }
-    onAdd(selected, Math.round(value * 100) / 100);
-    reset();
-    onClose();
-  };
+  const [source, setSource] = useState<AddSource>('recent');
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -394,79 +463,280 @@ function AddItemModal({
             </Pressable>
           </View>
 
-          {templates.length === 0 ? (
-            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body, paddingVertical: t.spacing.md }}>
-              {MEAL_SET_COPY.templatesEmpty}
-            </Text>
-          ) : (
-            <>
-              <TextInput
-                value={query}
-                onChangeText={(text) => {
-                  setQuery(text);
-                  setSelected(null);
-                }}
-                placeholder={MEAL_SET_COPY.searchPlaceholder}
-                placeholderTextColor={t.colors.fgSubtle}
-                style={{
-                  borderWidth: 1,
-                  borderColor: t.colors.border,
-                  borderRadius: t.radius.md,
-                  padding: t.spacing.md,
-                  color: t.colors.fg,
-                  backgroundColor: t.colors.surface,
-                  fontSize: t.fontSize.body,
-                  marginBottom: t.spacing.sm,
-                }}
-              />
-              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 260 }}>
-                {filtered.length === 0 ? (
-                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body, padding: t.spacing.md }}>
-                    {MEAL_SET_COPY.searchEmpty}
+          {/* 소스 탭 */}
+          <View
+            style={{
+              flexDirection: 'row',
+              backgroundColor: t.colors.surface2,
+              borderRadius: t.radius.md,
+              padding: 3,
+              marginBottom: t.spacing.md,
+            }}
+          >
+            {([
+              { key: 'recent' as const, label: MEAL_SET_COPY.sourceRecent },
+              { key: 'search' as const, label: MEAL_SET_COPY.sourceSearch },
+            ]).map((tab) => {
+              const active = source === tab.key;
+              return (
+                <Pressable
+                  key={tab.key}
+                  onPress={() => setSource(tab.key)}
+                  accessibilityRole="button"
+                  style={{
+                    flex: 1,
+                    paddingVertical: t.spacing.sm,
+                    borderRadius: t.radius.sm,
+                    alignItems: 'center',
+                    backgroundColor: active ? t.colors.bg : 'transparent',
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: active ? t.colors.fg : t.colors.fgMuted,
+                      fontSize: t.fontSize.body,
+                      fontWeight: active ? '700' : '500',
+                    }}
+                  >
+                    {tab.label}
                   </Text>
-                ) : (
-                  filtered.map((tpl) => {
-                    const isSel = selected?.id === tpl.id;
-                    return (
-                      <Pressable
-                        key={tpl.id}
-                        onPress={() => setSelected(tpl)}
-                        style={{
-                          padding: t.spacing.md,
-                          borderRadius: t.radius.md,
-                          borderWidth: 1,
-                          borderColor: isSel ? t.colors.primary : t.colors.border,
-                          backgroundColor: isSel ? t.colors.surface2 : t.colors.surface,
-                          marginBottom: t.spacing.sm,
-                        }}
-                      >
-                        <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>{tpl.name}</Text>
-                        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                          {Math.round(tpl.calories)} kcal / {tpl.referenceAmount}
-                          {templateUnitHint(tpl)}
-                        </Text>
-                      </Pressable>
-                    );
-                  })
-                )}
-              </ScrollView>
+                </Pressable>
+              );
+            })}
+          </View>
 
-              {selected ? (
-                <View style={{ gap: t.spacing.sm, marginTop: t.spacing.sm }}>
-                  <LabeledField
-                    label={`${MEAL_SET_COPY.portionLabel} (${templateUnitHint(selected)})`}
-                    value={portion}
-                    onChangeText={setPortion}
-                    keyboardType="decimal-pad"
-                    placeholder="1"
-                  />
-                  <PrimaryButton title={MEAL_SET_COPY.add} onPress={confirm} />
-                </View>
-              ) : null}
-            </>
+          {atMax ? (
+            <Text style={{ color: t.colors.warn, fontSize: t.fontSize.caption, marginBottom: t.spacing.sm }}>
+              {MEAL_SET_COPY.itemsMax(ITEMS_MAX)}
+            </Text>
+          ) : null}
+
+          {source === 'recent' ? (
+            <RecentSource
+              disabled={atMax}
+              onPick={(meal) => onAddPast(meal)}
+            />
+          ) : (
+            <SearchSource
+              templates={templates}
+              disabled={atMax}
+              onAdd={(tpl, portion) => {
+                const value = Number(String(portion).replace(',', '.'));
+                if (!Number.isFinite(value) || value < PORTION_MIN || value > PORTION_MAX) {
+                  toast.show({ kind: 'error', message: `분량은 ${PORTION_MIN}~${PORTION_MAX} 사이로 입력해 주세요.` });
+                  return;
+                }
+                onAddTemplate(tpl, Math.round(value * 100) / 100);
+              }}
+            />
           )}
         </View>
       </View>
     </Modal>
+  );
+}
+
+const RECENT_FETCH_SIZE = 60;
+
+/** 최근 먹은 기록 소스: 최근 식사를 (템플릿/이름) 기준 중복 제거해 한 번 탭으로 담기. */
+function RecentSource({ disabled, onPick }: { disabled: boolean; onPick: (meal: MealRow) => void }) {
+  const t = useTheme();
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [meals, setMeals] = useState<MealRow[]>([]);
+
+  const load = useCallback(async () => {
+    setState('loading');
+    const token = await ensureAccessToken();
+    if (!token) return;
+    try {
+      const res = await listMeals(token, { page: 1, size: RECENT_FETCH_SIZE });
+      // 최근순 정렬 후 (템플릿ID 또는 정규화된 이름) 기준 중복 제거
+      const seen = new Set<string>();
+      const unique: MealRow[] = [];
+      for (const m of res.items ?? []) {
+        const key = m.foodTemplateId ?? `name:${m.name.trim().toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(m);
+      }
+      setMeals(unique);
+      setState('ready');
+    } catch (e) {
+      if (isAuthDenied(e)) return;
+      logAppError('[MealSetEditor] recent', e);
+      setState('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (state === 'loading') {
+    return (
+      <View style={{ paddingVertical: t.spacing.xl, alignItems: 'center', gap: t.spacing.sm }}>
+        <ActivityIndicator color={t.colors.primary} />
+        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>{MEAL_SET_COPY.recentLoading}</Text>
+      </View>
+    );
+  }
+  if (state === 'error') {
+    return (
+      <View style={{ paddingVertical: t.spacing.lg, gap: t.spacing.sm }}>
+        <Text style={{ color: t.colors.danger, fontSize: t.fontSize.body }}>{MEAL_SET_COPY.recentError}</Text>
+        <PrimaryButton title={MEAL_SET_COPY.retry} variant="secondary" onPress={() => void load()} />
+      </View>
+    );
+  }
+  if (meals.length === 0) {
+    return (
+      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body, paddingVertical: t.spacing.md }}>
+        {MEAL_SET_COPY.recentEmpty}
+      </Text>
+    );
+  }
+
+  return (
+    <>
+      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, marginBottom: t.spacing.sm }}>
+        {MEAL_SET_COPY.recentHint}
+      </Text>
+      <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 360 }}>
+        {meals.map((m) => (
+          <Pressable
+            key={m.mealId}
+            onPress={() => onPick(m)}
+            disabled={disabled}
+            accessibilityRole="button"
+            style={{
+              padding: t.spacing.md,
+              borderRadius: t.radius.md,
+              borderWidth: 1,
+              borderColor: t.colors.border,
+              backgroundColor: t.colors.surface,
+              marginBottom: t.spacing.sm,
+              opacity: disabled ? 0.5 : 1,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm }}>
+              <Text numberOfLines={1} style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600', flex: 1 }}>
+                {m.name}
+              </Text>
+              {!m.foodTemplateId ? (
+                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, fontWeight: '600' }}>
+                  {MEAL_SET_COPY.manualBadge}
+                </Text>
+              ) : null}
+            </View>
+            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+              {m.grams != null ? `${Math.round(m.grams)}g · ` : ''}
+              {Math.round(m.calories)} kcal
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </>
+  );
+}
+
+/** 음식 검색 소스: 템플릿 검색 → 분량 지정 → 추가. */
+function SearchSource({
+  templates,
+  disabled,
+  onAdd,
+}: {
+  templates: FoodTemplateItem[];
+  disabled: boolean;
+  onAdd: (tpl: FoodTemplateItem, portion: string) => void;
+}) {
+  const t = useTheme();
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<FoodTemplateItem | null>(null);
+  const [portion, setPortion] = useState('1');
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return templates.slice(0, 50);
+    return templates.filter((tpl) => tpl.name.toLowerCase().includes(needle)).slice(0, 50);
+  }, [query, templates]);
+
+  if (templates.length === 0) {
+    return (
+      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body, paddingVertical: t.spacing.md }}>
+        {MEAL_SET_COPY.templatesEmpty}
+      </Text>
+    );
+  }
+
+  return (
+    <>
+      <TextInput
+        value={query}
+        onChangeText={(text) => {
+          setQuery(text);
+          setSelected(null);
+        }}
+        placeholder={MEAL_SET_COPY.searchPlaceholder}
+        placeholderTextColor={t.colors.fgSubtle}
+        style={{
+          borderWidth: 1,
+          borderColor: t.colors.border,
+          borderRadius: t.radius.md,
+          padding: t.spacing.md,
+          color: t.colors.fg,
+          backgroundColor: t.colors.surface,
+          fontSize: t.fontSize.body,
+          marginBottom: t.spacing.sm,
+        }}
+      />
+      <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 260 }}>
+        {filtered.length === 0 ? (
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body, padding: t.spacing.md }}>
+            {MEAL_SET_COPY.searchEmpty}
+          </Text>
+        ) : (
+          filtered.map((tpl) => {
+            const isSel = selected?.id === tpl.id;
+            return (
+              <Pressable
+                key={tpl.id}
+                onPress={() => setSelected(tpl)}
+                style={{
+                  padding: t.spacing.md,
+                  borderRadius: t.radius.md,
+                  borderWidth: 1,
+                  borderColor: isSel ? t.colors.primary : t.colors.border,
+                  backgroundColor: isSel ? t.colors.surface2 : t.colors.surface,
+                  marginBottom: t.spacing.sm,
+                }}
+              >
+                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>{tpl.name}</Text>
+                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                  {Math.round(tpl.calories)} kcal / {tpl.referenceAmount}
+                  {templateUnitHint(tpl)}
+                </Text>
+              </Pressable>
+            );
+          })
+        )}
+      </ScrollView>
+
+      {selected ? (
+        <View style={{ gap: t.spacing.sm, marginTop: t.spacing.sm }}>
+          <LabeledField
+            label={`${MEAL_SET_COPY.portionLabel} (${templateUnitHint(selected)})`}
+            value={portion}
+            onChangeText={setPortion}
+            keyboardType="decimal-pad"
+            placeholder="1"
+          />
+          <PrimaryButton
+            title={MEAL_SET_COPY.add}
+            disabled={disabled}
+            onPress={() => onAdd(selected, portion)}
+          />
+        </View>
+      ) : null}
+    </>
   );
 }
