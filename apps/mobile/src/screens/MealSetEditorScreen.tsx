@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -23,23 +25,16 @@ import {
   type MealSetUpsertBody,
 } from '../api/mealSets';
 import { LabeledField } from '../components/LabeledField';
-import { RadioGroup } from '../components/RadioGroup';
-import { Segmented } from '../components/Segmented';
 import { Banner, Card, PrimaryButton, ScreenLayout } from '../components/ui';
 import { MEAL_SET_COPY } from '../copy/mealSet';
 import { useFocusReload } from '../hooks/useFocusReload';
 import {
+  macroLabel,
   mealSetItemKcal,
+  mealSetItemMacros,
   mealSetItemPortionLabel,
   templateUnitHint,
 } from '../lib/mealSetItem';
-import {
-  MEAL_SLOT_OPTIONS,
-  SNACK_PLACEMENT_OPTIONS,
-  defaultSnackPlacementForNow,
-  type MealSlot,
-  type SnackPlacement,
-} from '../lib/mealSlot';
 import { logAppError, toUserMessage } from '../lib/userFacingError';
 import type { RootStackParamList } from '../navigation';
 import { useTheme } from '../theme';
@@ -108,7 +103,17 @@ function mealRowToDraft(meal: MealRow): DraftItem {
 /** mealSetItem 헬퍼에 넘길 분량/칼로리 표시용 어댑터. */
 function draftPortionLike(it: DraftItem) {
   if (it.kind === 'manual') {
-    return { kind: 'manual' as const, mealInputMode: null, portionQuantity: null, totalGrams: null, calories: it.calories, grams: it.grams };
+    return {
+      kind: 'manual' as const,
+      mealInputMode: null,
+      portionQuantity: null,
+      totalGrams: null,
+      calories: it.calories,
+      protein: it.protein,
+      carbohydrate: it.carbohydrate,
+      fat: it.fat,
+      grams: it.grams,
+    };
   }
   return { kind: 'template' as const, mealInputMode: it.mealInputMode, portionQuantity: it.portionQuantity, totalGrams: it.totalGrams };
 }
@@ -122,8 +127,6 @@ export function MealSetEditorScreen() {
 
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [name, setName] = useState('');
-  const [slot, setSlot] = useState<MealSlot>('BREAKFAST');
-  const [snackPlacement, setSnackPlacement] = useState<SnackPlacement>(defaultSnackPlacementForNow());
   const [items, setItems] = useState<DraftItem[]>([]);
   const [templates, setTemplates] = useState<FoodTemplateItem[]>([]);
   const [saving, setSaving] = useState(false);
@@ -149,8 +152,6 @@ export function MealSetEditorScreen() {
       if (editId) {
         const set = await getMealSet(token, editId);
         setName(set.name);
-        setSlot(set.defaultMealSlot);
-        setSnackPlacement(set.defaultSnackPlacement ?? defaultSnackPlacementForNow());
         setItems(
           set.items.map((it): DraftItem =>
             it.kind === 'manual'
@@ -188,27 +189,24 @@ export function MealSetEditorScreen() {
   const nameError = showErrors && !name.trim() ? MEAL_SET_COPY.nameRequired : undefined;
   const itemsError = showErrors && items.length === 0 ? MEAL_SET_COPY.itemsEmpty : undefined;
 
-  const addDraft = (draft: DraftItem, label: string) => {
+  // 추가 성공 여부 반환(모달에서 인라인 "담음" 표시에 사용). 상한 초과 시 false.
+  const addDraft = (draft: DraftItem): boolean => {
+    let ok = false;
     setItems((prev) => {
       if (prev.length >= ITEMS_MAX) {
         toast.show({ kind: 'error', message: MEAL_SET_COPY.itemsMax(ITEMS_MAX) });
         return prev;
       }
-      toast.show({ kind: 'success', message: MEAL_SET_COPY.added(label) });
+      ok = true;
       return [...prev, draft];
     });
+    return ok;
   };
 
-  const addTemplate = (tpl: FoodTemplateItem, portion: number) => {
-    addDraft(
-      { key: nextKey(), kind: 'template', foodTemplateId: tpl.id, mealInputMode: 'PORTION_COUNT', portionQuantity: portion, totalGrams: null },
-      tpl.name,
-    );
-  };
+  const addTemplate = (tpl: FoodTemplateItem, portion: number): boolean =>
+    addDraft({ key: nextKey(), kind: 'template', foodTemplateId: tpl.id, mealInputMode: 'PORTION_COUNT', portionQuantity: portion, totalGrams: null });
 
-  const addPastMeal = (meal: MealRow) => {
-    addDraft(mealRowToDraft(meal), meal.name);
-  };
+  const addPastMeal = (meal: MealRow): boolean => addDraft(mealRowToDraft(meal));
 
   const atMax = items.length >= ITEMS_MAX;
 
@@ -249,8 +247,9 @@ export function MealSetEditorScreen() {
       );
       const body: MealSetUpsertBody = {
         name: name.trim(),
-        defaultMealSlot: slot,
-        defaultSnackPlacement: slot === 'SNACK' ? snackPlacement : null,
+        // 끼니는 세트에 고정하지 않고 등록 시 선택한다. 서버 계약 호환을 위해 안전한 placeholder만 전송.
+        defaultMealSlot: 'BREAKFAST',
+        defaultSnackPlacement: null,
         items: itemInputs,
       };
       if (editId) {
@@ -304,34 +303,13 @@ export function MealSetEditorScreen() {
         </Card>
 
         <Card>
-          <Segmented<MealSlot>
-            label={MEAL_SET_COPY.defaultSlotLabel}
-            options={MEAL_SLOT_OPTIONS}
-            value={slot}
-            onChange={(next) => {
-              setSlot(next);
-              if (next === 'SNACK' && !snackPlacement) setSnackPlacement(defaultSnackPlacementForNow());
-            }}
-          />
-          {slot === 'SNACK' ? (
-            <View style={{ marginTop: t.spacing.md }}>
-              <RadioGroup
-                label={MEAL_SET_COPY.snackWhenLabel}
-                options={SNACK_PLACEMENT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                value={snackPlacement}
-                onChange={(v) => {
-                  if (v) setSnackPlacement(v);
-                }}
-              />
-            </View>
-          ) : null}
-        </Card>
-
-        <Card>
           <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>
             {MEAL_SET_COPY.itemsTitle}
           </Text>
           <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>{MEAL_SET_COPY.itemsHint}</Text>
+          <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption, marginTop: 2 }}>
+            {MEAL_SET_COPY.slotAtApplyHint}
+          </Text>
 
           {items.length === 0 ? (
             <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body, paddingVertical: t.spacing.sm }}>
@@ -344,6 +322,7 @@ export function MealSetEditorScreen() {
               const like = draftPortionLike(it);
               const unavailable = !isManual && !tpl;
               const kcal = mealSetItemKcal(like, tpl);
+              const macros = mealSetItemMacros(like, tpl);
               const displayName = isManual ? it.name : (tpl?.name ?? '삭제된 음식');
               return (
                 <View
@@ -377,6 +356,11 @@ export function MealSetEditorScreen() {
                       {mealSetItemPortionLabel(like, tpl)}
                       {kcal != null ? ` · ${kcal} kcal` : ''}
                     </Text>
+                    {macros ? (
+                      <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
+                        {macroLabel(macros)}
+                      </Text>
+                    ) : null}
                   </View>
                   <Pressable onPress={() => removeItem(it.key)} accessibilityRole="button" hitSlop={6}>
                     <Text style={{ color: t.colors.danger, fontSize: t.fontSize.caption, fontWeight: '600' }}>
@@ -430,16 +414,40 @@ function AddItemModal({
   templates: FoodTemplateItem[];
   atMax: boolean;
   onClose: () => void;
-  onAddTemplate: (tpl: FoodTemplateItem, portion: number) => void;
-  onAddPast: (meal: MealRow) => void;
+  onAddTemplate: (tpl: FoodTemplateItem, portion: number) => boolean;
+  onAddPast: (meal: MealRow) => boolean;
 }) {
   const t = useTheme();
   const toast = useToast();
   const [source, setSource] = useState<AddSource>('recent');
+  const [added, setAdded] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (visible) setAdded({});
+  }, [visible]);
+
+  const totalAdded = useMemo(() => Object.values(added).reduce((a, b) => a + b, 0), [added]);
+
+  const bump = (id: string) => setAdded((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+
+  const handlePast = (meal: MealRow) => {
+    if (onAddPast(meal)) bump(meal.mealId);
+  };
+  const handleTemplate = (tpl: FoodTemplateItem, portion: string) => {
+    const value = Number(String(portion).replace(',', '.'));
+    if (!Number.isFinite(value) || value < PORTION_MIN || value > PORTION_MAX) {
+      toast.show({ kind: 'error', message: `분량은 ${PORTION_MIN}~${PORTION_MAX} 사이로 입력해 주세요.` });
+      return;
+    }
+    if (onAddTemplate(tpl, Math.round(value * 100) / 100)) bump(tpl.id);
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1, justifyContent: 'flex-end' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <Pressable style={{ position: 'absolute', inset: 0 }} onPress={onClose} />
         <View
           style={{
@@ -459,7 +467,9 @@ function AddItemModal({
               {MEAL_SET_COPY.addItemTitle}
             </Text>
             <Pressable onPress={onClose} accessibilityRole="button" hitSlop={8}>
-              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.body }}>{MEAL_SET_COPY.close}</Text>
+              <Text style={{ color: totalAdded > 0 ? t.colors.primary : t.colors.fgMuted, fontSize: t.fontSize.body, fontWeight: totalAdded > 0 ? '700' : '400' }}>
+                {MEAL_SET_COPY.addDone(totalAdded)}
+              </Text>
             </Pressable>
           </View>
 
@@ -512,26 +522,12 @@ function AddItemModal({
           ) : null}
 
           {source === 'recent' ? (
-            <RecentSource
-              disabled={atMax}
-              onPick={(meal) => onAddPast(meal)}
-            />
+            <RecentSource disabled={atMax} added={added} onPick={handlePast} />
           ) : (
-            <SearchSource
-              templates={templates}
-              disabled={atMax}
-              onAdd={(tpl, portion) => {
-                const value = Number(String(portion).replace(',', '.'));
-                if (!Number.isFinite(value) || value < PORTION_MIN || value > PORTION_MAX) {
-                  toast.show({ kind: 'error', message: `분량은 ${PORTION_MIN}~${PORTION_MAX} 사이로 입력해 주세요.` });
-                  return;
-                }
-                onAddTemplate(tpl, Math.round(value * 100) / 100);
-              }}
-            />
+            <SearchSource templates={templates} disabled={atMax} added={added} onAdd={handleTemplate} />
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -539,7 +535,15 @@ function AddItemModal({
 const RECENT_FETCH_SIZE = 60;
 
 /** 최근 먹은 기록 소스: 최근 식사를 (템플릿/이름) 기준 중복 제거해 한 번 탭으로 담기. */
-function RecentSource({ disabled, onPick }: { disabled: boolean; onPick: (meal: MealRow) => void }) {
+function RecentSource({
+  disabled,
+  added,
+  onPick,
+}: {
+  disabled: boolean;
+  added: Record<string, number>;
+  onPick: (meal: MealRow) => void;
+}) {
   const t = useTheme();
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [meals, setMeals] = useState<MealRow[]>([]);
@@ -602,38 +606,46 @@ function RecentSource({ disabled, onPick }: { disabled: boolean; onPick: (meal: 
         {MEAL_SET_COPY.recentHint}
       </Text>
       <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 360 }}>
-        {meals.map((m) => (
-          <Pressable
-            key={m.mealId}
-            onPress={() => onPick(m)}
-            disabled={disabled}
-            accessibilityRole="button"
-            style={{
-              padding: t.spacing.md,
-              borderRadius: t.radius.md,
-              borderWidth: 1,
-              borderColor: t.colors.border,
-              backgroundColor: t.colors.surface,
-              marginBottom: t.spacing.sm,
-              opacity: disabled ? 0.5 : 1,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm }}>
-              <Text numberOfLines={1} style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600', flex: 1 }}>
-                {m.name}
-              </Text>
-              {!m.foodTemplateId ? (
-                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, fontWeight: '600' }}>
-                  {MEAL_SET_COPY.manualBadge}
+        {meals.map((m) => {
+          const count = added[m.mealId] ?? 0;
+          return (
+            <Pressable
+              key={m.mealId}
+              onPress={() => onPick(m)}
+              disabled={disabled}
+              accessibilityRole="button"
+              style={{
+                padding: t.spacing.md,
+                borderRadius: t.radius.md,
+                borderWidth: 1,
+                borderColor: count > 0 ? t.colors.primary : t.colors.border,
+                backgroundColor: count > 0 ? t.colors.surface2 : t.colors.surface,
+                marginBottom: t.spacing.sm,
+                opacity: disabled ? 0.5 : 1,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm }}>
+                <Text numberOfLines={1} style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600', flex: 1 }}>
+                  {m.name}
                 </Text>
-              ) : null}
-            </View>
-            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-              {m.grams != null ? `${Math.round(m.grams)}g · ` : ''}
-              {Math.round(m.calories)} kcal
-            </Text>
-          </Pressable>
-        ))}
+                {!m.foodTemplateId ? (
+                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, fontWeight: '600' }}>
+                    {MEAL_SET_COPY.manualBadge}
+                  </Text>
+                ) : null}
+                {count > 0 ? (
+                  <Text style={{ color: t.colors.primary, fontSize: t.fontSize.caption, fontWeight: '700' }}>
+                    {MEAL_SET_COPY.addedCount(count)}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                {m.grams != null ? `${Math.round(m.grams)}g · ` : ''}
+                {Math.round(m.calories)} kcal
+              </Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
     </>
   );
@@ -643,10 +655,12 @@ function RecentSource({ disabled, onPick }: { disabled: boolean; onPick: (meal: 
 function SearchSource({
   templates,
   disabled,
+  added,
   onAdd,
 }: {
   templates: FoodTemplateItem[];
   disabled: boolean;
+  added: Record<string, number>;
   onAdd: (tpl: FoodTemplateItem, portion: string) => void;
 }) {
   const t = useTheme();
@@ -697,6 +711,7 @@ function SearchSource({
         ) : (
           filtered.map((tpl) => {
             const isSel = selected?.id === tpl.id;
+            const count = added[tpl.id] ?? 0;
             return (
               <Pressable
                 key={tpl.id}
@@ -710,7 +725,14 @@ function SearchSource({
                   marginBottom: t.spacing.sm,
                 }}
               >
-                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>{tpl.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm }}>
+                  <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600', flex: 1 }}>{tpl.name}</Text>
+                  {count > 0 ? (
+                    <Text style={{ color: t.colors.primary, fontSize: t.fontSize.caption, fontWeight: '700' }}>
+                      {MEAL_SET_COPY.addedCount(count)}
+                    </Text>
+                  ) : null}
+                </View>
                 <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                   {Math.round(tpl.calories)} kcal / {tpl.referenceAmount}
                   {templateUnitHint(tpl)}

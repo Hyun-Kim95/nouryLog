@@ -23,8 +23,13 @@ export type MealSetItemPortionLike = Pick<
 > & {
   kind?: string;
   calories?: number | null;
+  protein?: number | null;
+  carbohydrate?: number | null;
+  fat?: number | null;
   grams?: number | null;
 };
+
+export type Macros = { protein: number; carbohydrate: number; fat: number };
 
 /** 항목 분량 라벨 (예: "2개", "150g"). manual은 grams, 템플릿 없으면 모드 기반 근사. */
 export function mealSetItemPortionLabel(item: MealSetItemPortionLike, tpl?: FoodTemplateItem): string {
@@ -66,6 +71,37 @@ export function mealSetItemKcal(item: MealSetItemPortionLike, tpl?: FoodTemplate
   return Math.round((tpl.calories * totalGrams) / tpl.servingGrams);
 }
 
+/** 항목 탄단지(정수 g) — manual은 스냅샷, template은 환산. 불가 시 null. */
+export function mealSetItemMacros(item: MealSetItemPortionLike, tpl?: FoodTemplateItem): Macros | null {
+  if (item.kind === 'manual') {
+    return {
+      protein: Math.round(item.protein ?? 0),
+      carbohydrate: Math.round(item.carbohydrate ?? 0),
+      fat: Math.round(item.fat ?? 0),
+    };
+  }
+  if (!tpl || !templateNutritionComplete(tpl)) return null;
+  let totalGrams: number;
+  if (item.mealInputMode === 'TOTAL_GRAMS') {
+    if (item.totalGrams == null || item.totalGrams <= 0) return null;
+    totalGrams = item.totalGrams;
+  } else {
+    if (item.portionQuantity == null || item.portionQuantity <= 0) return null;
+    totalGrams = item.portionQuantity * tpl.servingGrams;
+  }
+  const scale = totalGrams / tpl.servingGrams;
+  return {
+    protein: Math.round(tpl.protein * scale),
+    carbohydrate: Math.round(tpl.carbohydrate * scale),
+    fat: Math.round(tpl.fat * scale),
+  };
+}
+
+/** 탄단지 한 줄 라벨 (예: "탄 20 · 단 10 · 지 5 g"). */
+export function macroLabel(m: Macros): string {
+  return `탄 ${m.carbohydrate} · 단 ${m.protein} · 지 ${m.fat} g`;
+}
+
 /**
  * 클라이언트 측 항목 사용 가능 여부.
  * 활성 템플릿 목록에 없으면 사용 불가(서버는 MISSING/INACTIVE를 구분하나 화면에선 동일 처리).
@@ -80,15 +116,17 @@ export function isMealSetItemUnavailable(item: MealSetItem, tpl?: FoodTemplateIt
 export type MealSetSummary = {
   itemCount: number;
   totalKcal: number;
+  totalMacros: Macros;
   hasUnavailable: boolean;
 };
 
-/** 세트 요약(항목 수, 합계 kcal, 사용 불가 포함 여부). */
+/** 세트 요약(항목 수, 합계 kcal·탄단지, 사용 불가 포함 여부). */
 export function summarizeMealSet(
   set: MealSet,
   tplById: Map<string, FoodTemplateItem>,
 ): MealSetSummary {
   let totalKcal = 0;
+  const totalMacros: Macros = { protein: 0, carbohydrate: 0, fat: 0 };
   let hasUnavailable = false;
   for (const item of set.items) {
     const tpl = item.foodTemplateId ? tplById.get(item.foodTemplateId) : undefined;
@@ -98,6 +136,12 @@ export function summarizeMealSet(
     }
     const kcal = mealSetItemKcal(item, tpl);
     if (kcal != null) totalKcal += kcal;
+    const macros = mealSetItemMacros(item, tpl);
+    if (macros) {
+      totalMacros.protein += macros.protein;
+      totalMacros.carbohydrate += macros.carbohydrate;
+      totalMacros.fat += macros.fat;
+    }
   }
-  return { itemCount: set.items.length, totalKcal, hasUnavailable };
+  return { itemCount: set.items.length, totalKcal, totalMacros, hasUnavailable };
 }

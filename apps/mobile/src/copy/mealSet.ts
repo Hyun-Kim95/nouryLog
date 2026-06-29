@@ -29,6 +29,7 @@ export const MEAL_SET_COPY = {
   snackWhenLabel: '간식은 언제?',
   itemsTitle: '음식 항목',
   itemsHint: '과거 기록에서 고르거나 음식을 검색해 세트를 구성해요.',
+  slotAtApplyHint: '끼니는 등록할 때 골라요.',
   itemsEmpty: '항목을 1개 이상 추가해 주세요.',
   addItem: '음식 추가',
   removeItem: '삭제',
@@ -55,6 +56,9 @@ export const MEAL_SET_COPY = {
   close: '닫기',
   add: '추가',
   added: (name: string) => `${name}을(를) 담았어요.`,
+  addedBadge: '담음',
+  addedCount: (n: number) => `담음 ✓ ${n}`,
+  addDone: (n: number) => (n > 0 ? `${n}개 담음 · 완료` : '완료'),
 
   // 한 번에 등록 시트
   applyTitle: '한 번에 등록',

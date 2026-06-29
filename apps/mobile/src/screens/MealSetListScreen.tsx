@@ -15,8 +15,7 @@ import { Banner, Card, PrimaryButton, ScreenLayout } from '../components/ui';
 import { MealSetApplySheet } from '../components/MealSetApplySheet';
 import { MEAL_SET_COPY } from '../copy/mealSet';
 import { useFocusReload } from '../hooks/useFocusReload';
-import { summarizeMealSet } from '../lib/mealSetItem';
-import { mealSlotLabel, snackPlacementLabel } from '../lib/mealSlot';
+import { macroLabel, summarizeMealSet } from '../lib/mealSetItem';
 import { logAppError, toUserMessage } from '../lib/userFacingError';
 import type { RootStackParamList } from '../navigation';
 import { useTheme } from '../theme';
@@ -119,14 +118,14 @@ export function MealSetListScreen() {
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>{set.name}</Text>
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, marginTop: 2 }}>
-                    {mealSlotLabel(set.defaultMealSlot)}
-                    {set.defaultMealSlot === 'SNACK' && set.defaultSnackPlacement
-                      ? ` · ${snackPlacementLabel(set.defaultSnackPlacement)}`
-                      : ''}
-                    {' · '}
                     {MEAL_SET_COPY.itemCount(summary.itemCount)}
                     {summary.totalKcal > 0 ? ` · ${summary.totalKcal} kcal` : ''}
                   </Text>
+                  {summary.totalKcal > 0 ? (
+                    <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
+                      {macroLabel(summary.totalMacros)}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
 

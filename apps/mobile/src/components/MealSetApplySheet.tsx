@@ -15,12 +15,16 @@ import { addDaysYmd, todayAnchorKst } from '../lib/statsPeriod';
 import { formatKstDayTitle, kstNoonIsoFromYmd } from '../lib/dateRange';
 import {
   isMealSetItemUnavailable,
+  macroLabel,
   mealSetItemKcal,
+  mealSetItemMacros,
   mealSetItemPortionLabel,
+  type Macros,
 } from '../lib/mealSetItem';
 import {
   MEAL_SLOT_OPTIONS,
   SNACK_PLACEMENT_OPTIONS,
+  defaultMealSlotForNow,
   defaultSnackPlacementForNow,
   type MealSlot,
   type SnackPlacement,
@@ -61,8 +65,9 @@ export function MealSetApplySheet({ visible, set, tplById, onClose, onApplied }:
   useEffect(() => {
     if (!visible || !set) return;
     setYmd(todayAnchorKst());
-    setSlot(set.defaultMealSlot);
-    setSnackPlacement(set.defaultSnackPlacement ?? defaultSnackPlacementForNow());
+    // 끼니는 세트에 고정하지 않으므로 등록 시점(현재 시간) 기준 기본값을 제안한다.
+    setSlot(defaultMealSlotForNow());
+    setSnackPlacement(defaultSnackPlacementForNow());
     setExcludeUnavailable(false);
     setServerUnavailableIds([]);
     requestIdRef.current = null;
@@ -97,6 +102,21 @@ export function MealSetApplySheet({ visible, set, tplById, onClose, onApplied }:
       if (kcal != null) sum += kcal;
     }
     return sum;
+  }, [set, includedItems, tplById]);
+
+  const includedMacros = useMemo<Macros>(() => {
+    const total: Macros = { protein: 0, carbohydrate: 0, fat: 0 };
+    if (!set) return total;
+    for (const it of includedItems) {
+      const tpl = it.foodTemplateId ? tplById.get(it.foodTemplateId) : undefined;
+      const m = mealSetItemMacros(it, tpl);
+      if (m) {
+        total.protein += m.protein;
+        total.carbohydrate += m.carbohydrate;
+        total.fat += m.fat;
+      }
+    }
+    return total;
   }, [set, includedItems, tplById]);
 
   const canApply =
@@ -277,14 +297,22 @@ export function MealSetApplySheet({ visible, set, tplById, onClose, onApplied }:
               ) : null}
 
               {/* 미리보기 */}
-              <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '700' }}>
-                {MEAL_SET_COPY.previewTitle(includedItems.length, includedKcal)}
-              </Text>
+              <View style={{ gap: 2 }}>
+                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '700' }}>
+                  {MEAL_SET_COPY.previewTitle(includedItems.length, includedKcal)}
+                </Text>
+                {includedItems.length > 0 ? (
+                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                    {macroLabel(includedMacros)}
+                  </Text>
+                ) : null}
+              </View>
               {set.items.map((item) => {
                 const tpl = item.foodTemplateId ? tplById.get(item.foodTemplateId) : undefined;
                 const unavailable = unavailableIds.has(item.id);
                 const excluded = excludeUnavailable && unavailable;
                 const kcal = mealSetItemKcal(item, tpl);
+                const macros = mealSetItemMacros(item, tpl);
                 return (
                   <View
                     key={item.id}
@@ -320,10 +348,17 @@ export function MealSetApplySheet({ visible, set, tplById, onClose, onApplied }:
                         </View>
                       ) : null}
                     </View>
-                    <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                      {mealSetItemPortionLabel(item, tpl)}
-                      {kcal != null ? ` · ${kcal} kcal` : ''}
-                    </Text>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                        {mealSetItemPortionLabel(item, tpl)}
+                        {kcal != null ? ` · ${kcal} kcal` : ''}
+                      </Text>
+                      {macros ? (
+                        <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
+                          {macroLabel(macros)}
+                        </Text>
+                      ) : null}
+                    </View>
                   </View>
                 );
               })}
