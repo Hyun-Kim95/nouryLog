@@ -206,6 +206,7 @@ export function LogScreen() {
   const [items, setItems] = useState<MealRow[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(0);
+  const entrySectionY = useRef(0);
   const nameFieldRef = useRef<View>(null);
   const caloriesFieldRef = useRef<View>(null);
   const proteinFieldRef = useRef<View>(null);
@@ -273,6 +274,21 @@ export function LogScreen() {
       requestAnimationFrame(attemptScroll);
     });
   }, []);
+
+  const scrollToEntrySection = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({
+          y: Math.max(0, entrySectionY.current - 12),
+          animated: true,
+        });
+      });
+    });
+  }, []);
+
+  const scheduleScrollToEntry = useCallback(() => {
+    scrollToEntrySection();
+  }, [scrollToEntrySection]);
 
   /** 사용자 입력 시 제안 재활성(제안 탭 후 네이티브 포커스 유지 시 onFocus 미재호출 보완). */
   const handleNameChange = useCallback((text: string) => {
@@ -1160,7 +1176,12 @@ export function LogScreen() {
           </Card>
         ) : null}
 
-        <View style={{ gap: t.spacing.md }}>
+        <View
+          style={{ gap: t.spacing.md }}
+          onLayout={(e) => {
+            entrySectionY.current = e.nativeEvent.layout.y;
+          }}
+        >
           <Card>
             <CardTitle>{LOG_COPY.sectionSlot}</CardTitle>
             {editingMealId ? (
