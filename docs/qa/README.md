@@ -18,6 +18,7 @@ tags: [docs, vault-sync]
 - 배포 전 점검표
 - 회귀 테스트 메모
 - 모바일/웹 확인 항목
+- [PostHog 월간 점검·대시보드·발전 방향 분석](posthog-monthly-review.md)
 
 권장 파일명 예시:
 - feature-checklist.md
