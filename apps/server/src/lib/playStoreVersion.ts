@@ -104,11 +104,12 @@ async function fetchProductionVersionFromPlayUncached(): Promise<PlayProductionV
     logPlayVersion('production version fetch failed', e);
     return null;
   } finally {
-    if (!editId) return;
-    try {
-      await client.edits.delete({ packageName, editId });
-    } catch (deleteErr) {
-      logPlayVersion('edits.delete failed', deleteErr);
+    if (editId) {
+      try {
+        await client.edits.delete({ packageName, editId });
+      } catch (deleteErr) {
+        logPlayVersion('edits.delete failed', deleteErr);
+      }
     }
   }
 }
