@@ -566,13 +566,20 @@ publicRouter.get('/public/app/version', async (req, res) => {
     return;
   }
 
-  const config = await resolveAndroidAppVersionConfig();
-  if (!config.ok) {
-    sendError(res, 503, ErrorCodes.DEPENDENCY_UNAVAILABLE, '앱 버전 정보를 사용할 수 없습니다.', {
-      reason: config.reason,
-    });
-    return;
-  }
+  try {
+    const config = await resolveAndroidAppVersionConfig();
+    if (!config.ok) {
+      sendError(res, 503, ErrorCodes.DEPENDENCY_UNAVAILABLE, '앱 버전 정보를 사용할 수 없습니다.', {
+        reason: config.reason,
+      });
+      return;
+    }
 
-  res.json(config.payload);
+    res.json(config.payload);
+  } catch (e) {
+    console.warn('[public/app/version] resolve failed', e instanceof Error ? e.message : e);
+    sendError(res, 503, ErrorCodes.DEPENDENCY_UNAVAILABLE, '앱 버전 정보를 사용할 수 없습니다.', {
+      reason: 'dependency_error',
+    });
+  }
 });

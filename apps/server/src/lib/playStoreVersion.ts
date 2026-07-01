@@ -79,14 +79,16 @@ async function fetchProductionVersionFromPlayUncached(): Promise<PlayProductionV
   if (!client) return null;
 
   const packageName = getPlayPackageName();
-  const edit = await client.edits.insert({ packageName });
-  const editId = edit.data.id;
-  if (!editId) {
-    logPlayVersion('edits.insert returned no editId');
-    return null;
-  }
+  let editId: string | null | undefined;
 
   try {
+    const edit = await client.edits.insert({ packageName });
+    editId = edit.data.id;
+    if (!editId) {
+      logPlayVersion('edits.insert returned no editId');
+      return null;
+    }
+
     const { data } = await client.edits.tracks.get({
       packageName,
       editId,
@@ -95,9 +97,14 @@ async function fetchProductionVersionFromPlayUncached(): Promise<PlayProductionV
     const releases = (data.releases ?? []) as PlayTrackRelease[];
     return maxVersionCodeFromReleases(releases);
   } catch (e) {
-    logPlayVersion('edits.tracks.get failed', e);
+    console.warn(
+      '[playStoreVersion] production version fetch failed; falling back to env latest',
+      e instanceof Error ? e.message : e,
+    );
+    logPlayVersion('production version fetch failed', e);
     return null;
   } finally {
+    if (!editId) return;
     try {
       await client.edits.delete({ packageName, editId });
     } catch (deleteErr) {
