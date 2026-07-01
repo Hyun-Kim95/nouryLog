@@ -118,9 +118,11 @@ export type MealSetSummary = {
   totalKcal: number;
   totalMacros: Macros;
   hasUnavailable: boolean;
+  /** 세트에 포함된 음식명 목록(표시 순서 유지). 사용 불가 항목은 '삭제된 음식'. */
+  names: string[];
 };
 
-/** 세트 요약(항목 수, 합계 kcal·탄단지, 사용 불가 포함 여부). */
+/** 세트 요약(항목 수, 합계 kcal·탄단지, 사용 불가 포함 여부, 음식명 목록). */
 export function summarizeMealSet(
   set: MealSet,
   tplById: Map<string, FoodTemplateItem>,
@@ -128,8 +130,17 @@ export function summarizeMealSet(
   let totalKcal = 0;
   const totalMacros: Macros = { protein: 0, carbohydrate: 0, fat: 0 };
   let hasUnavailable = false;
+  const names: string[] = [];
   for (const item of set.items) {
     const tpl = item.foodTemplateId ? tplById.get(item.foodTemplateId) : undefined;
+    const baseName =
+      item.kind === 'manual' ? (item.name ?? '직접 입력 음식') : (tpl?.name ?? '삭제된 음식');
+    // 개수(인분)는 템플릿 항목의 portionQuantity로만 표시 가능(수기는 영양에 배수가 반영되어 별도 카운트 없음).
+    const qty =
+      item.kind !== 'manual' && item.mealInputMode === 'PORTION_COUNT' && item.portionQuantity != null
+        ? Math.max(1, Math.round(item.portionQuantity))
+        : 1;
+    names.push(qty >= 2 ? `${baseName} ×${qty}` : baseName);
     if (isMealSetItemUnavailable(item, tpl)) {
       hasUnavailable = true;
       continue;
@@ -143,5 +154,5 @@ export function summarizeMealSet(
       totalMacros.fat += macros.fat;
     }
   }
-  return { itemCount: set.items.length, totalKcal, totalMacros, hasUnavailable };
+  return { itemCount: set.items.length, totalKcal, totalMacros, hasUnavailable, names };
 }

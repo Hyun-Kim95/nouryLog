@@ -1,13 +1,18 @@
 import * as Crypto from 'expo-crypto';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
+  Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   Text,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import {
   useNavigation,
@@ -200,7 +205,13 @@ export function LogScreen() {
   const targetYmd = route.params?.targetYmd;
   const [items, setItems] = useState<MealRow[]>([]);
   const scrollRef = useRef<ScrollView>(null);
-  const entrySectionY = useRef(0);
+  const scrollYRef = useRef(0);
+  const nameFieldRef = useRef<View>(null);
+  const caloriesFieldRef = useRef<View>(null);
+  const proteinFieldRef = useRef<View>(null);
+  const carbohydrateFieldRef = useRef<View>(null);
+  const fatFieldRef = useRef<View>(null);
+  const tplAmountFieldRef = useRef<View>(null);
   const [recentMeals, setRecentMeals] = useState<MealRow[]>([]);
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
@@ -232,24 +243,36 @@ export function LogScreen() {
   const [portionInputValue, setPortionInputValue] = useState('');
   const [nameFocused, setNameFocused] = useState(false);
 
-  const scrollToEntrySection = useCallback(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({
-          y: Math.max(0, entrySectionY.current - 12),
+  const onLogScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollYRef.current = event.nativeEvent.contentOffset.y;
+  }, []);
+
+  const scrollFieldIntoView = useCallback((fieldRef: RefObject<View | null>) => {
+    const attemptScroll = () => {
+      const field = fieldRef.current;
+      const scroll = scrollRef.current;
+      if (!field || !scroll) return;
+
+      const windowH = Dimensions.get('window').height;
+      const keyboardH = Keyboard.metrics()?.height ?? (Platform.OS === 'ios' ? 336 : 300);
+      const keyboardTop = windowH - keyboardH;
+      const padding = 24;
+
+      field.measureInWindow((_x, y, _w, h) => {
+        const fieldBottom = y + h;
+        if (fieldBottom <= keyboardTop - padding) return;
+        const delta = fieldBottom - keyboardTop + padding;
+        scroll.scrollTo({
+          y: scrollYRef.current + delta,
           animated: true,
         });
       });
+    };
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(attemptScroll);
     });
   }, []);
-
-  const scheduleScrollToEntry = useCallback(() => {
-    scrollToEntrySection();
-  }, [scrollToEntrySection]);
-
-  const focusEntryField = useCallback(() => {
-    scheduleScrollToEntry();
-  }, [scheduleScrollToEntry]);
 
   /** 사용자 입력 시 제안 재활성(제안 탭 후 네이티브 포커스 유지 시 onFocus 미재호출 보완). */
   const handleNameChange = useCallback((text: string) => {
@@ -865,19 +888,21 @@ export function LogScreen() {
   const macroFields = (
     <View style={{ gap: t.spacing.sm }}>
       <View style={{ gap: t.spacing.xs, zIndex: 10 }}>
-        <LabeledField
-          label="음식명"
-          value={name}
-          onChangeText={handleNameChange}
-          placeholder="예: 닭가슴살 샐러드"
-          onFocus={() => {
-            setNameFocused(true);
-            focusEntryField();
-          }}
-          onBlur={() => {
-            setTimeout(() => setNameFocused(false), 200);
-          }}
-        />
+        <View ref={nameFieldRef} collapsable={false}>
+          <LabeledField
+            label="음식명"
+            value={name}
+            onChangeText={handleNameChange}
+            placeholder="예: 닭가슴살 샐러드"
+            onFocus={() => {
+              setNameFocused(true);
+              scrollFieldIntoView(nameFieldRef);
+            }}
+            onBlur={() => {
+              setTimeout(() => setNameFocused(false), 200);
+            }}
+          />
+        </View>
         {nameSuggestEnabled ? (
           <View
             style={{
@@ -956,38 +981,46 @@ export function LogScreen() {
       <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
         {LOG_COPY.manualPerServingHint}
       </Text>
-      <LabeledField
-        label="칼로리 (kcal)"
-        value={calories}
-        onChangeText={setCalories}
-        keyboardType="numeric"
-        placeholder="0"
-        onFocus={focusEntryField}
-      />
-      <LabeledField
-        label="단백질 (g)"
-        value={protein}
-        onChangeText={setProtein}
-        keyboardType="numeric"
-        placeholder="0"
-        onFocus={focusEntryField}
-      />
-      <LabeledField
-        label="탄수화물 (g)"
-        value={carbohydrate}
-        onChangeText={setCarbohydrate}
-        keyboardType="numeric"
-        placeholder="0"
-        onFocus={focusEntryField}
-      />
-      <LabeledField
-        label="지방 (g)"
-        value={fat}
-        onChangeText={setFat}
-        keyboardType="numeric"
-        placeholder="0"
-        onFocus={focusEntryField}
-      />
+      <View ref={caloriesFieldRef} collapsable={false}>
+        <LabeledField
+          label="칼로리 (kcal)"
+          value={calories}
+          onChangeText={setCalories}
+          keyboardType="numeric"
+          placeholder="0"
+          onFocus={() => scrollFieldIntoView(caloriesFieldRef)}
+        />
+      </View>
+      <View ref={proteinFieldRef} collapsable={false}>
+        <LabeledField
+          label="단백질 (g)"
+          value={protein}
+          onChangeText={setProtein}
+          keyboardType="numeric"
+          placeholder="0"
+          onFocus={() => scrollFieldIntoView(proteinFieldRef)}
+        />
+      </View>
+      <View ref={carbohydrateFieldRef} collapsable={false}>
+        <LabeledField
+          label="탄수화물 (g)"
+          value={carbohydrate}
+          onChangeText={setCarbohydrate}
+          keyboardType="numeric"
+          placeholder="0"
+          onFocus={() => scrollFieldIntoView(carbohydrateFieldRef)}
+        />
+      </View>
+      <View ref={fatFieldRef} collapsable={false}>
+        <LabeledField
+          label="지방 (g)"
+          value={fat}
+          onChangeText={setFat}
+          keyboardType="numeric"
+          placeholder="0"
+          onFocus={() => scrollFieldIntoView(fatFieldRef)}
+        />
+      </View>
     </View>
   );
 
@@ -1034,8 +1067,9 @@ export function LogScreen() {
         title={LOG_COPY.title}
         subtitle={LOG_COPY.subtitle}
         scrollRef={scrollRef}
+        onScroll={onLogScroll}
         keyboardAvoiding
-        contentPaddingBottomExtra={120}
+        contentPaddingBottomExtra={180}
       >
         {ent ? <Chip label={LOG_COPY.photoAnalysisChip(ent.ocrQuotaUsed, ent.ocrQuotaLimit)} /> : null}
 
@@ -1126,12 +1160,7 @@ export function LogScreen() {
           </Card>
         ) : null}
 
-        <View
-          style={{ gap: t.spacing.md }}
-          onLayout={(e) => {
-            entrySectionY.current = e.nativeEvent.layout.y;
-          }}
-        >
+        <View style={{ gap: t.spacing.md }}>
           <Card>
             <CardTitle>{LOG_COPY.sectionSlot}</CardTitle>
             {editingMealId ? (
@@ -1202,14 +1231,16 @@ export function LogScreen() {
                     value={mealInputMode}
                     onChange={handleMealInputModeChange}
                   />
-                  <LabeledField
-                    label="총 중량 (g)"
-                    value={tplAmount}
-                    onChangeText={setTplAmount}
-                    keyboardType="decimal-pad"
-                    placeholder="총 몇 g?"
-                    onFocus={focusEntryField}
-                  />
+                  <View ref={tplAmountFieldRef} collapsable={false}>
+                    <LabeledField
+                      label="총 중량 (g)"
+                      value={tplAmount}
+                      onChangeText={setTplAmount}
+                      keyboardType="decimal-pad"
+                      placeholder="총 몇 g?"
+                      onFocus={() => scrollFieldIntoView(tplAmountFieldRef)}
+                    />
+                  </View>
                   {previewKcal != null ? (
                     <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                       예상 칼로리 약 {previewKcal} kcal

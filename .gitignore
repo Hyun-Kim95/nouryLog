@@ -21,3 +21,6 @@ image/
 
 # Android keystores
 *.keystore
+
+# LLM wiki raw dumps (may contain sensitive originals; only distilled notes are committed)
+docs/wiki/_raw/

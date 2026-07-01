@@ -27,7 +27,7 @@ services:
       retries: 5
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.23.2
     gpus: all
     ports:
       - "11434:11434"
@@ -41,6 +41,15 @@ services:
       start_period: 20s
     environment:
       - OLLAMA_CONTEXT_LENGTH=8192
+  tei-reranker:
+    # RTX 5050(Blackwell sm_120) 전용 TEI 이미지. reranker 모델 자동 인식 → /rerank 제공
+    image: ghcr.io/huggingface/text-embeddings-inference:120-1.9
+    gpus: all                       # 기존 ollama와 동일 방식으로 GPU 사용
+    ports:
+      - "8085:80"                   # 호스트 8085 → 컨테이너 80
+    command: ["--model-id", "BAAI/bge-reranker-v2-m3"]
+    volumes:
+      - D:/dev/ai/tei:/data         # 모델 캐시 (ollama가 D:/dev/ai/ollama 쓰는 것과 동일 방식)
 
 volumes:
   ai_pg_data:

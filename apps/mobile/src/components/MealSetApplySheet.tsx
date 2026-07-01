@@ -13,6 +13,7 @@ import { getAccessToken } from '../authStorage';
 import { MEAL_SET_COPY } from '../copy/mealSet';
 import { addDaysYmd, todayAnchorKst } from '../lib/statsPeriod';
 import { formatKstDayTitle, kstNoonIsoFromYmd } from '../lib/dateRange';
+import { useBottomSafeInset } from '../hooks/useBottomSafeInset';
 import {
   isMealSetItemUnavailable,
   macroLabel,
@@ -54,6 +55,7 @@ type Props = {
 export function MealSetApplySheet({ visible, set, tplById, onClose, onApplied }: Props) {
   const t = useTheme();
   const toast = useToast();
+  const bottomInset = useBottomSafeInset();
   const [ymd, setYmd] = useState(() => todayAnchorKst());
   const [slot, setSlot] = useState<MealSlot>('BREAKFAST');
   const [snackPlacement, setSnackPlacement] = useState<SnackPlacement>(defaultSnackPlacementForNow());
@@ -188,7 +190,7 @@ export function MealSetApplySheet({ visible, set, tplById, onClose, onApplied }:
             borderColor: t.colors.border,
             paddingHorizontal: t.spacing.lg,
             paddingTop: t.spacing.lg,
-            paddingBottom: t.spacing.xl,
+            paddingBottom: t.spacing.xl + bottomInset,
             maxHeight: '88%',
           }}
         >

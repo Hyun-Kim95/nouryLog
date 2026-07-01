@@ -79,6 +79,24 @@ export function formatKstDayTitle(ymd: string): string {
   return w ? `${m}월 ${d}일 (${w})` : `${m}월 ${d}일`;
 }
 
+/** ISO instant → KST `YYYY-MM-DD HH:mm:ss` (통계 집계 시각 표시용). */
+export function formatKstDateTimeSeconds(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso.replace('T', ' ').replace(/\.\d{3}Z$/, '').replace(/Z$/, '');
+  }
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
 /** 로컬 타임존 기준 당일 [from, to] ISO 범위 (홈 집계·GET /meals 필터용). */
 export function localDayBounds(date = new Date()): { from: string; to: string } {
   const start = new Date(date);

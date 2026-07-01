@@ -76,7 +76,7 @@ export function WeightCheckInModal({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismissLater}>
       <KeyboardAvoidingView
         style={{ flex: 1, justifyContent: 'flex-end' }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View
           style={{

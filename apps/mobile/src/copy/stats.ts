@@ -1,9 +1,11 @@
+import { formatKstDateTimeSeconds } from '../lib/dateRange';
+
 export const STATS_COPY = {
   title: '통계',
   weightHistoryCta: '체중 추이',
   staleBanner: (hours: number) =>
     `최신 반영 지연 · 마지막 집계가 ${hours}시간 전이에요. 잠시 후 다시 확인해 주세요.`,
-  aggregatedAt: (at: string, tz: string) => `${tz} · 집계 ${at}`,
+  aggregatedAt: (at: string, tz: string) => `${tz} · 집계 ${formatKstDateTimeSeconds(at)}`,
   summaryTitle: '영양 합계',
   summaryTitleAverage: (days: number) => `일평균 (기록 ${days}일)`,
   fulfillmentTitle: '목표 대비',

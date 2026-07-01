@@ -24,6 +24,15 @@ import { useToast } from '../toast/useToast';
 type Nav = NativeStackNavigationProp<RootStackParamList, 'MealSetList'>;
 type LoadState = 'loading' | 'ready' | 'error';
 
+const NAMES_PREVIEW_MAX = 4;
+
+/** 음식명 미리보기: 앞 4개를 ", "로 잇고 나머지는 "외 N개". */
+function formatNames(names: string[]): string {
+  if (names.length <= NAMES_PREVIEW_MAX) return names.join(', ');
+  const head = names.slice(0, NAMES_PREVIEW_MAX).join(', ');
+  return `${head} ${MEAL_SET_COPY.moreItems(names.length - NAMES_PREVIEW_MAX)}`;
+}
+
 export function MealSetListScreen() {
   const t = useTheme();
   const toast = useToast();
@@ -124,6 +133,11 @@ export function MealSetListScreen() {
                   {summary.totalKcal > 0 ? (
                     <Text style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
                       {macroLabel(summary.totalMacros)}
+                    </Text>
+                  ) : null}
+                  {summary.names.length > 0 ? (
+                    <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, marginTop: 4 }}>
+                      {formatNames(summary.names)}
                     </Text>
                   ) : null}
                 </View>
