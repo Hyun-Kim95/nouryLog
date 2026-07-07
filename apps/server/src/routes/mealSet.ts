@@ -37,7 +37,7 @@ const MANUAL_GRAMS_DEFAULT = 100;
 // 일반 사용자 + 활성 계정만 접근 (me 라우터와 동일 정책)
 mealSetRouter.use(async (req, res, next) => {
   if (req.auth!.role !== 'USER') {
-    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 사용할 수 있습니다.');
+    next();
     return;
   }
   const user = await prisma.user.findUnique({
