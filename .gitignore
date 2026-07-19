@@ -24,3 +24,6 @@ image/
 
 # LLM wiki raw dumps (may contain sensitive originals; only distilled notes are committed)
 docs/wiki/_raw/
+
+# MFDS nutrition dump (large; curated manifest may be committed under nutrition-food/manifest/)
+apps/server/data/nutrition-food/raw/

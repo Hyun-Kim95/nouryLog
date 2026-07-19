@@ -34,6 +34,14 @@ tags: [requirements, index, prd-linked]
 - API/정책 변경 시 문서 세트 전체에 동시 반영한다.
 - 상태명/에러코드/필드명은 문서 간 동일한 표기를 유지한다.
 
+## 공개 영양 식품 DB (2026-07-19)
+
+- PRD: `docs/requirements/feature-nutrition-food-db-prd.md` (v0.4 **HUMAN 승인 2026-07-19**, UI 없음, Gate 1 통과)
+- API delta v1.17: `docs/requirements/api-contract-v1.17-nutrition-food-db-delta.md`
+- 출처·import: `docs/agent/nutrition-food-db-source.md`
+- 상태 매핑 §6: `docs/requirements/feature-diet-management-state-mapping.md`
+- 모체 `6.6` 과금·Meal 기록 단위와 **비충돌 정책**은 PRD §0.1 참조 (`nutrition_kb` RAG와도 별개)
+
 ## AI RAG 확장 (2026-06-03~, deprecated)
 
 > **2026-06-16:** `apps/user-web` 및 관련 design 문서 제거. 인사이트 UI SSOT: `apps/mobile`, [`mobile-insights-spec.md`](../design/mobile-insights-spec.md).

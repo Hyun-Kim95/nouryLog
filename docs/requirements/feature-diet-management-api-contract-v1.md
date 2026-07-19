@@ -308,6 +308,15 @@ MVP 상품 정책:
 - API 스키마 변경 시 PRD + 상태 매핑 + QA 시나리오 동시 갱신이 필수다.
 - Gate 2 구현 중 계약 변경이 발생하면 `docs/design/diet-management-alignment-notes.md`와 구현 분할 계획 문서를 즉시 재동기화한다.
 
+### v1.17 (2026-07-19)
+공개 영양 식품 DB(`NutritionFood`) 적재·검색. 상세: [`api-contract-v1.17-nutrition-food-db-delta.md`](./api-contract-v1.17-nutrition-food-db-delta.md), PRD [`feature-nutrition-food-db-prd.md`](./feature-nutrition-food-db-prd.md) v0.4.
+
+- Prisma `NutritionFood` 신규. `FoodTemplate`/`Meal`/`MealSet`/OCR/Billing 변경 없음.
+- 경로: `GET /me/nutrition-foods` (USER), `GET /admin/nutrition-foods` (ADMIN). **`/nutrition-foods` 단축 없음.**
+- import는 CLI only(`--sourceVersion` 필수). 식약처 큐레이션 500~2,000건. 청크 100행 커밋.
+- 과금·OCR 무관. `q`·clamp·inactive·필드 길이·AC-01~13: PRD/delta 참조.
+- 상태 매핑: `feature-diet-management-state-mapping.md` §6.
+
 ### v1.7 (2026-06-29)
 끼니 세트 항목에 **수기(manual) 스냅샷 항목** 지원 추가(`apps/server/src/routes/mealSet.ts`). **스키마/마이그레이션 변경 없음** — `MealSetItem`의 manual 컬럼(`name/calories/protein/carbohydrate/fat/grams`)은 v1.6 모델에 이미 존재하던 것을 활성화.
 

@@ -2,13 +2,14 @@
 type: spec
 project: dietManagement
 doc_lane: requirements
-updated_at: 2026-05-05
-tags: [state, error-handling, ui, fixed]
+updated_at: 2026-07-19
+tags: [state, error-handling, ui, fixed, nutrition-food]
 ---
 
 # 식단 관리 상태/에러 처리 매핑 v1 (고정)
 
 > Stitch 선택안 기준 Gate 2 입력으로 고정한다. 상태 모델은 `기본/로딩/빈/오류/완료/권한 제한`을 표준으로 사용한다.
+> NutritionFood(§6)는 2026-07-19 증분.
 
 ## 1) 공통 상태
 - 기본
@@ -84,3 +85,21 @@ tags: [state, error-handling, ui, fixed]
 - 오류 메시지는 행동 가능한 문구(재시도/수정) 포함
 - 모바일/웹 모두 동일 에러코드에 대해 동일 의미 유지
 - API 계약 문서(`feature-diet-management-api-contract-v1.md`)의 에러 코드 카탈로그와 불일치가 생기면 상태 문서를 우선 갱신 후 구현 반영
+
+## 6) NutritionFood 검색 API (UI 없음·후속 화면용)
+
+> PRD: `feature-nutrition-food-db-prd.md` v0.4 · 계약 v1.17. 1차는 **API만**; 모바일 기록 UI는 후속.
+
+| API 상태 | HTTP/조건 | 후속 UI 권장 |
+|---|---|---|
+| 기본 | 200 + items ≥ 1 | 목록 표시 |
+| 로딩 | 요청 중 | 스피너/스켈레톤 |
+| 빈 데이터 | 200 + `total=0` (무매칭·카탈로그 공허) | "검색 결과 없음" + 수동 입력 CTA(후속) |
+| 빈 검색어 목록 | 200 + active 페이지 | 전체/인기 목록(후속 정책) |
+| 오류(검증) | 422 `VALIDATION_FAILED` `field=q` | 검색어 줄이기 안내 |
+| 권한 제한 | 401 / 403 | 재로그인 또는 권한 없음 |
+| 서버 오류 | 500 | 재시도 |
+
+엣지:
+- `page`/`size` 이상값 → 서버 clamp(사용자에게 422 안 냄)
+- inactive 항목은 일반 사용자 목록에 안 보임(OCR 쿼터와 무관)
