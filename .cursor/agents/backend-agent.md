@@ -1,4 +1,4 @@
-﻿---
+---
 name: backend-agent
 description: API, DB, 서비스 로직, 인증/인가, 파일 처리, 서버 측 검증을 담당한다. (전역 user-backend-agent와 동일 역할)
 model: inherit
@@ -28,6 +28,8 @@ API, 데이터 처리, 서비스 로직, 인증/인가, 예외 처리, 파일 �
 - 프론트엔드 소비를 고려한 응답 구조 관리
 - 모바일 앱 **버전 API**(`updateLevel` 등)는 `docs/mobile/app-update/policy-and-contract.md` 계약을 따른다.
 - 서버 사이드 analytics 이벤트가 필요하면 `docs/product-analytics/policy-and-contract.md` **이벤트 계약 v1**·식별자(비PII) 정책을 따른다.
+- BaaS(Supabase 등) 스키마·RLS·Storage 정책 변경 시 `docs/security/baas-checklist.md` spot check를 권장한다.
+- LLM API 프록시·AI 에이전트 백엔드는 `docs/security/llm-and-agents.md`를 따른다.
 
 ## 작업 원칙
 - 기존 아키텍처와 네이밍 규칙을 우선 존중한다.

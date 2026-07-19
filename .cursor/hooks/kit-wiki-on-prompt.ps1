@@ -1,4 +1,4 @@
-# beforeSubmitPrompt: /kit-wiki (ingest + incremental lint) | /kit-wiki lint (full) | /kit-wiki-ask (read-only query)
+﻿# beforeSubmitPrompt: /kit-wiki (ingest + incremental lint) | /kit-wiki lint (full) | /kit-wiki-ask (read-only query)
 # Bootstraps docs/wiki/ folders and injects the mode as additional_context. LLM does the actual ingest/lint/ask.
 # Windows PowerShell 5.1 + UTF-8 stdout for Cursor. fail-open.
 $ErrorActionPreference = "Stop"

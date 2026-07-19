@@ -1,4 +1,4 @@
-# beforeSubmitPrompt: /kit-work-log | /work-log | 작업 일지 — daily work log SSOT hint
+﻿# beforeSubmitPrompt: /kit-work-log | /work-log | 작업 일지 — daily work log SSOT hint
 $ErrorActionPreference = "Stop"
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path

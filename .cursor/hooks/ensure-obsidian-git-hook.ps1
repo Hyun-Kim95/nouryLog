@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 # Cursor afterFileEdit: Git 저장소에 Obsidian용 post-commit이 없거나 예전 형식이면 install-hook.ps1를 한 번 맞춘다.
 # stdin은 소비만 하고(파이프 대기 방지), 편집 경로와 무관하게 동작한다.
 Set-StrictMode -Version Latest
@@ -59,7 +59,10 @@ function Resolve-ObsidianHookInstallModulePath {
 }
 
 try {
-    $null = [Console]::In.ReadToEnd()
+    # Drain stdin (payload unused); avoid [Console]::In which decodes with CP949.
+    $stdinReader = New-Object System.IO.StreamReader(
+        [Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding $false), $true)
+    try { $null = $stdinReader.ReadToEnd() } finally { $stdinReader.Dispose() }
 
     $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
     $gitDir = Join-Path $projectRoot ".git"
