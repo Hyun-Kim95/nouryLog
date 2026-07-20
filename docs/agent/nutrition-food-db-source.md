@@ -59,8 +59,8 @@ PRD: [`docs/requirements/feature-nutrition-food-db-prd.md`](../requirements/feat
 ```text
 1. K-FIND/공공데이터에서 덤프 다운로드 → raw/ (gitignore)
 2. 큐레이션 매니페스트로 대상 코드 필터(또는 수동 선별 CSV)
-3. npm run nutrition:import -- --file=... --sourceVersion=YYYY-MM
-   (`--sourceVersion` 필수. 누락 시 exit ≠ 0)
+3. `npx tsx scripts/import-nutrition-food.ts --file=data/nutrition-food/manifest/sample-curated.json --sourceVersion=YYYY-MM`
+   (npm script `nutrition:import` 사용 시 Windows npm이 `--file`을 가로챌 수 있음 → **tsx 직접 호출 권장**)
 4. 리포트: upsert / skip(reason code) / duplicateInFile / committedChunks 확인
 5. GET /me/nutrition-foods?q=... 및 GET /admin/nutrition-foods 스모크
 ```

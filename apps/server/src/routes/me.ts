@@ -1,4 +1,5 @@
 import { Router, type Response } from 'express';
+import { normalizeNutritionFoodName } from '../lib/nutritionFoodNormalize.js';
 import { MealInputMode, Prisma } from '@prisma/client';
 import { isBottomBannerAdsEnabled } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
@@ -989,6 +990,67 @@ meRouter.get('/me/food-templates', async (req, res) => {
     size,
     total,
     items: rows.map((f) => mapFoodTemplatePublic(f)),
+  });
+});
+
+function paginateNutritionFoods(q: { page?: unknown; size?: unknown }) {
+  const pageRaw = Number(q.page ?? 1);
+  const sizeRaw = Number(q.size ?? 15);
+  const page = Number.isFinite(pageRaw) ? Math.max(1, Math.floor(pageRaw)) : 1;
+  const size = Number.isFinite(sizeRaw) ? Math.min(100, Math.max(1, Math.floor(sizeRaw))) : 15;
+  return { page, size, skip: (page - 1) * size };
+}
+
+meRouter.get('/me/nutrition-foods', async (req, res) => {
+  if (req.auth!.role !== 'USER') {
+    sendError(res, 403, ErrorCodes.AUTH_FORBIDDEN, '일반 사용자만 조회할 수 있습니다.');
+    return;
+  }
+  const qRaw = String(req.query.q ?? '').trim();
+  if (qRaw.length > 60) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '검색어가 너무 깁니다.', { field: 'q' });
+    return;
+  }
+  const { page, size, skip } = paginateNutritionFoods(req.query);
+  const qNorm = qRaw ? normalizeNutritionFoodName(qRaw) : '';
+  const where: Prisma.NutritionFoodWhereInput = {
+    active: true,
+    ...(qRaw
+      ? {
+          OR: [
+            { name: { contains: qRaw, mode: 'insensitive' } },
+            { nameNormalized: { contains: qNorm, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+  const [total, rows] = await Promise.all([
+    prisma.nutritionFood.count({ where }),
+    prisma.nutritionFood.findMany({
+      where,
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      skip,
+      take: size,
+    }),
+  ]);
+  res.json({
+    page,
+    size,
+    total,
+    items: rows.map((r) => ({
+      id: r.id,
+      source: r.source,
+      externalId: r.externalId,
+      name: r.name,
+      category: r.category,
+      per100g: {
+        calories: r.per100gCalories,
+        protein: r.per100gProtein,
+        fat: r.per100gFat,
+        carbohydrate: r.per100gCarbohydrate,
+      },
+      defaultServingGrams: r.defaultServingGrams,
+    })),
   });
 });
 

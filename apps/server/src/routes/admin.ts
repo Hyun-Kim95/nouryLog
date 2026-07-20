@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { PortionUnit, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { normalizeNutritionFoodName } from '../lib/nutritionFoodNormalize.js';
 import { resolvedReferenceAmount } from '../lib/foodTemplateReference.js';
 import { normalizePortionLabel, resolvePortionUnit, validatePortionLabelForUnit } from '../lib/portionUnit.js';
 import { requireAdmin } from '../middleware/requireAuth.js';
@@ -531,6 +532,67 @@ adminRouter.get('/admin/foods', async (req, res) => {
     size,
     total,
     items: rows.map(serializeFood),
+  });
+});
+
+adminRouter.get('/admin/nutrition-foods', async (req, res) => {
+  const pageRaw = Number(req.query.page ?? 1);
+  const sizeRaw = Number(req.query.size ?? 15);
+  const page = Number.isFinite(pageRaw) ? Math.max(1, Math.floor(pageRaw)) : 1;
+  const size = Number.isFinite(sizeRaw) ? Math.min(100, Math.max(1, Math.floor(sizeRaw))) : 15;
+  const skip = (page - 1) * size;
+  const qRaw = String(req.query.q ?? '').trim();
+  if (qRaw.length > 60) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '검색어가 너무 깁니다.', { field: 'q' });
+    return;
+  }
+  const includeInactive =
+    String(req.query.includeInactive ?? '').toLowerCase() === 'true' || req.query.includeInactive === '1';
+
+  const where: Prisma.NutritionFoodWhereInput = {
+    ...(includeInactive ? {} : { active: true }),
+    ...(qRaw
+      ? {
+          OR: [
+            { name: { contains: qRaw, mode: 'insensitive' } },
+            { nameNormalized: { contains: normalizeNutritionFoodName(qRaw), mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
+  const [total, rows] = await Promise.all([
+    prisma.nutritionFood.count({ where }),
+    prisma.nutritionFood.findMany({
+      where,
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      skip,
+      take: size,
+    }),
+  ]);
+
+  res.json({
+    page,
+    size,
+    total,
+    items: rows.map((r) => ({
+      id: r.id,
+      source: r.source,
+      externalId: r.externalId,
+      name: r.name,
+      category: r.category,
+      per100g: {
+        calories: r.per100gCalories,
+        protein: r.per100gProtein,
+        fat: r.per100gFat,
+        carbohydrate: r.per100gCarbohydrate,
+      },
+      defaultServingGrams: r.defaultServingGrams,
+      active: r.active,
+      sourceVersion: r.sourceVersion,
+      importedAt: r.importedAt.toISOString(),
+      deactivatedAt: r.deactivatedAt ? r.deactivatedAt.toISOString() : null,
+    })),
   });
 });
 
