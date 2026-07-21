@@ -39,6 +39,7 @@ import {
   type MealRow,
   type TemplateInputMode,
 } from '../api/meals';
+import type { NutritionFoodItem } from '../api/nutritionFoods';
 import { postOcrFeedback } from '../api/ocrFeedback';
 import { ensureAccessToken } from '../authSession';
 import { getAccessToken } from '../authStorage';
@@ -63,6 +64,10 @@ import { BILLING_COPY } from '../copy/billing';
 import { LOG_COPY } from '../copy/log';
 import { MEAL_SET_COPY } from '../copy/mealSet';
 import { useFocusReload } from '../hooks/useFocusReload';
+import {
+  nutritionFoodSearchStatusMessage,
+  useNutritionFoodSearch,
+} from '../hooks/useNutritionFoodSearch';
 import { formatMacroLine } from '../lib/formatNutrition';
 import { formatTplAmount as formatPortionAmount } from '../lib/mealEntryForm';
 import { adjustMealPortionOnServer, portionUnitLabel } from '../lib/adjustMealPortion';
@@ -73,6 +78,17 @@ import {
   scaleManualNutritionForSave,
 } from '../lib/manualPortion';
 import { parseManualNutrition } from '../lib/manualNutrition';
+import {
+  buildNutritionFoodMealBody,
+  formatScaledMacroForForm,
+  NUTRITION_FOOD_GRAMS_MAX,
+  NUTRITION_FOOD_GRAMS_MIN,
+  NUTRITION_FOOD_NAME_MAX,
+  parseNutritionFoodGramsInput,
+  resolveNutritionFoodDefaultGrams,
+  scaleNutritionFromPer100g,
+  type Per100gMacros,
+} from '../lib/nutritionFoodScale';
 import { logAppError, toUserMessage } from '../lib/userFacingError';
 import { formatKstDayTitle, kstNoonIsoFromYmd, localDayBounds } from '../lib/dateRange';
 import {
@@ -243,6 +259,19 @@ export function LogScreen() {
   const [portionInputMeal, setPortionInputMeal] = useState<MealRow | null>(null);
   const [portionInputValue, setPortionInputValue] = useState('');
   const [nameFocused, setNameFocused] = useState(false);
+  const [nutritionDraft, setNutritionDraft] = useState<{
+    foodId: string;
+    per100g: Per100gMacros;
+  } | null>(null);
+  const [nutritionGrams, setNutritionGrams] = useState('100');
+  const [nutritionMacrosLocked, setNutritionMacrosLocked] = useState(false);
+  const gramsFieldRef = useRef<View>(null);
+
+  const clearNutritionDraft = useCallback(() => {
+    setNutritionDraft(null);
+    setNutritionGrams('100');
+    setNutritionMacrosLocked(false);
+  }, []);
 
   const onLogScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     scrollYRef.current = event.nativeEvent.contentOffset.y;
@@ -308,7 +337,8 @@ export function LogScreen() {
     setManualPortion('1');
     setLastOcrMeta(null);
     setLastOcrSnapshot(null);
-  }, []);
+    clearNutritionDraft();
+  }, [clearNutritionDraft]);
 
   const resetForm = useCallback(() => {
     setEditingMealId(null);
@@ -326,8 +356,9 @@ export function LogScreen() {
     setTplAmount('1');
     setLastOcrMeta(null);
     setLastOcrSnapshot(null);
+    clearNutritionDraft();
     pendingCreateRequestIdRef.current = null;
-  }, []);
+  }, [clearNutritionDraft]);
 
   const loadEntitlements = useCallback(async () => {
     const token = await getAccessToken();
@@ -475,6 +506,63 @@ export function LogScreen() {
             from_ocr: false,
           });
         }
+      } else if (nutritionDraft) {
+        if (!name.trim()) throw new Error(LOG_COPY.nameRequired);
+        if (name.trim().length > NUTRITION_FOOD_NAME_MAX) throw new Error(LOG_COPY.nutritionDbNameTooLong);
+        let grams: number;
+        try {
+          grams = parseNutritionFoodGramsInput(nutritionGrams);
+        } catch {
+          throw new Error(LOG_COPY.nutritionDbGramsInvalid);
+        }
+        if (grams < NUTRITION_FOOD_GRAMS_MIN || grams > NUTRITION_FOOD_GRAMS_MAX) {
+          throw new Error(LOG_COPY.nutritionDbGramsInvalid);
+        }
+        const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
+        if (
+          ![nutrition.calories, nutrition.protein, nutrition.fat, nutrition.carbohydrate].every(
+            (n) => Number.isFinite(n),
+          )
+        ) {
+          throw new Error(LOG_COPY.nutritionDbScaleInvalid);
+        }
+        let body: Record<string, unknown>;
+        try {
+          body = buildNutritionFoodMealBody({
+            mealBodyBase: mealBodyBase(),
+            name,
+            grams,
+            ...nutrition,
+            editing: Boolean(editingMealId),
+            existingPortionQuantity: editingMealId
+              ? (() => {
+                  try {
+                    return effectivePortionQty(parsePortionInput(manualPortion));
+                  } catch {
+                    return 1;
+                  }
+                })()
+              : 1,
+          });
+        } catch (e) {
+          if (e instanceof Error && e.message === 'NAME_TOO_LONG') {
+            throw new Error(LOG_COPY.nutritionDbNameTooLong);
+          }
+          if (e instanceof Error && e.message === 'INVALID_GRAMS') {
+            throw new Error(LOG_COPY.nutritionDbGramsInvalid);
+          }
+          throw e;
+        }
+        if (editingMealId) {
+          await updateMeal(token, editingMealId, body);
+        } else {
+          await createMealOnce(body);
+          track(AnalyticsEvents.mealRecorded, {
+            input_mode: 'manual',
+            meal_slot: mealSlot.toLowerCase(),
+            from_ocr: false,
+          });
+        }
       } else {
         const perServing = parseManualNutrition({ calories, protein, carbohydrate, fat });
         if (!name.trim()) throw new Error(LOG_COPY.nameRequired);
@@ -609,6 +697,7 @@ export function LogScreen() {
     });
     setSelectedTpl(null);
     setEditingMealId(null);
+    clearNutritionDraft();
     setCalories(String(Math.round(res.calories)));
     setProtein(String(Math.round(res.protein)));
     setCarbohydrate(String(Math.round(res.carbohydrate)));
@@ -714,6 +803,7 @@ export function LogScreen() {
   const applyManualFromMeal = (m: MealRow) => {
     setSelectedTpl(null);
     setLastOcrMeta(null);
+    clearNutritionDraft();
     setName(m.name);
     setManualPortion(
       m.portionQuantity != null ? formatPortionAmount(m.portionQuantity) || '1' : '1',
@@ -775,6 +865,7 @@ export function LogScreen() {
     if (m.foodTemplateId) {
       const tpl = templates.find((x) => x.id === m.foodTemplateId);
       if (tpl) {
+        clearNutritionDraft();
         setSelectedTpl(tpl);
         setMealInputMode('PORTION_COUNT');
         setTplAmount('1');
@@ -801,6 +892,7 @@ export function LogScreen() {
     if (item.snackPlacement) setSnackPlacement(item.snackPlacement);
     else if (item.mealSlot === 'SNACK') setSnackPlacement(defaultSnackPlacementForNow());
     setLastOcrMeta(null);
+    clearNutritionDraft();
 
     let templateApplied = false;
     if (item.foodTemplateId) {
@@ -833,6 +925,7 @@ export function LogScreen() {
   };
 
   const selectTemplate = (item: FoodTemplateItem) => {
+    clearNutritionDraft();
     setSelectedTpl(item);
     setMealInputMode('PORTION_COUNT');
     setTplAmount(defaultTplAmount(item, 'PORTION_COUNT'));
@@ -843,6 +936,51 @@ export function LogScreen() {
     setCarbohydrate('');
     setFat('');
     scheduleScrollToEntry();
+  };
+
+  const selectNutritionFood = (item: NutritionFoodItem) => {
+    setSelectedTpl(null);
+    setLastOcrMeta(null);
+    setLastOcrSnapshot(null);
+    setNutritionMacrosLocked(false);
+    const grams = resolveNutritionFoodDefaultGrams(item.defaultServingGrams);
+    setNutritionDraft({ foodId: item.id, per100g: { ...item.per100g } });
+    setNutritionGrams(formatScaledMacroForForm(grams));
+    setName(item.name);
+    try {
+      const scaled = scaleNutritionFromPer100g(item.per100g, grams);
+      setCalories(formatScaledMacroForForm(scaled.calories));
+      setProtein(formatScaledMacroForForm(scaled.protein));
+      setCarbohydrate(formatScaledMacroForForm(scaled.carbohydrate));
+      setFat(formatScaledMacroForForm(scaled.fat));
+    } catch {
+      toast.show({ kind: 'error', message: LOG_COPY.nutritionDbScaleInvalid });
+      clearNutritionDraft();
+      return;
+    }
+    setNameFocused(false);
+    scheduleScrollToEntry();
+  };
+
+  const onNutritionGramsChange = (text: string) => {
+    setNutritionGrams(text);
+    if (!nutritionDraft || nutritionMacrosLocked) return;
+    try {
+      const grams = parseNutritionFoodGramsInput(text);
+      if (grams < NUTRITION_FOOD_GRAMS_MIN || grams > NUTRITION_FOOD_GRAMS_MAX) return;
+      const scaled = scaleNutritionFromPer100g(nutritionDraft.per100g, grams);
+      setCalories(formatScaledMacroForForm(scaled.calories));
+      setProtein(formatScaledMacroForForm(scaled.protein));
+      setCarbohydrate(formatScaledMacroForForm(scaled.carbohydrate));
+      setFat(formatScaledMacroForForm(scaled.fat));
+    } catch {
+      /* typing incomplete */
+    }
+  };
+
+  const lockNutritionMacrosOnEdit = (setter: (v: string) => void) => (text: string) => {
+    setter(text);
+    if (nutritionDraft) setNutritionMacrosLocked(true);
   };
 
   const handleMealInputModeChange = (mode: TemplateInputMode) => {
@@ -874,6 +1012,11 @@ export function LogScreen() {
   const nameSuggestEnabled = nameFocused && !selectedTpl && name.trim().length >= 1;
   const { items: nameSuggestions, status: nameSuggestStatus, errorKind: nameSuggestErrorKind } =
     useMealEntrySuggestions(name, nameSuggestEnabled);
+  const {
+    items: nutritionFoodItems,
+    status: nutritionFoodStatus,
+    retry: retryNutritionFoodSearch,
+  } = useNutritionFoodSearch(name, nameSuggestEnabled);
   const fallbackNameSuggestions = useMemo(() => {
     const needle = name.trim().toLowerCase();
     if (!needle) return [] as Array<{ kind: 'template'; template: FoodTemplateItem } | { kind: 'past_meal'; meal: MealRow }>;
@@ -993,15 +1136,100 @@ export function LogScreen() {
             )}
           </View>
         ) : null}
+        {nameSuggestEnabled ? (
+          <View
+            style={{
+              marginTop: t.spacing.sm,
+              borderWidth: 1,
+              borderColor: t.colors.border,
+              borderRadius: t.radius.md,
+              backgroundColor: t.colors.surface,
+              overflow: 'hidden',
+            }}
+          >
+            <View style={{ paddingHorizontal: t.spacing.md, paddingTop: t.spacing.md, gap: 2 }}>
+              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, fontWeight: '600' }}>
+                {LOG_COPY.nutritionDbSectionTitle}
+              </Text>
+              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                {LOG_COPY.nutritionDbSectionHint}
+              </Text>
+            </View>
+            {nutritionFoodStatus === 'loading' ? (
+              <View style={{ padding: t.spacing.md, flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm }}>
+                <ActivityIndicator color={t.colors.primary} size="small" />
+                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                  {LOG_COPY.nameSuggestLoading}
+                </Text>
+              </View>
+            ) : nutritionFoodStatus === 'error' || nutritionFoodStatus === 'q_too_long' ? (
+              <View style={{ padding: t.spacing.md, gap: t.spacing.xs }}>
+                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                  {nutritionFoodSearchStatusMessage(nutritionFoodStatus)}
+                </Text>
+                {nutritionFoodStatus === 'error' ? (
+                  <TextButton title={LOG_COPY.nutritionDbRetry} onPress={() => retryNutritionFoodSearch()} />
+                ) : null}
+              </View>
+            ) : nutritionFoodItems.length === 0 ? (
+              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption, padding: t.spacing.md }}>
+                {LOG_COPY.nutritionDbEmpty}
+              </Text>
+            ) : (
+              nutritionFoodItems.map((item, idx) => (
+                <Pressable
+                  key={item.id}
+                  onPress={() => selectNutritionFood(item)}
+                  style={{
+                    padding: t.spacing.md,
+                    borderTopWidth: idx === 0 ? 0 : 1,
+                    borderTopColor: t.colors.border,
+                  }}
+                >
+                  <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
+                    {item.name}
+                  </Text>
+                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                    {item.category ? `${item.category} · ` : ''}
+                    {Math.round(item.per100g.calories)} kcal/100g
+                  </Text>
+                </Pressable>
+              ))
+            )}
+          </View>
+        ) : null}
       </View>
-      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-        {LOG_COPY.manualPerServingHint}
-      </Text>
+      {nutritionDraft ? (
+        <>
+          <View ref={gramsFieldRef} collapsable={false}>
+            <LabeledField
+              label={LOG_COPY.nutritionDbGramsLabel}
+              value={nutritionGrams}
+              onChangeText={onNutritionGramsChange}
+              keyboardType="numeric"
+              placeholder="100"
+              onFocus={() => scrollFieldIntoView(gramsFieldRef)}
+            />
+          </View>
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+            {LOG_COPY.nutritionDbSource}
+          </Text>
+          {nutritionMacrosLocked ? (
+            <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+              {LOG_COPY.nutritionDbLockedHint}
+            </Text>
+          ) : null}
+        </>
+      ) : (
+        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+          {LOG_COPY.manualPerServingHint}
+        </Text>
+      )}
       <View ref={caloriesFieldRef} collapsable={false}>
         <LabeledField
           label="칼로리 (kcal)"
           value={calories}
-          onChangeText={setCalories}
+          onChangeText={lockNutritionMacrosOnEdit(setCalories)}
           keyboardType="numeric"
           placeholder="0"
           onFocus={() => scrollFieldIntoView(caloriesFieldRef)}
@@ -1011,7 +1239,7 @@ export function LogScreen() {
         <LabeledField
           label="단백질 (g)"
           value={protein}
-          onChangeText={setProtein}
+          onChangeText={lockNutritionMacrosOnEdit(setProtein)}
           keyboardType="numeric"
           placeholder="0"
           onFocus={() => scrollFieldIntoView(proteinFieldRef)}
@@ -1021,7 +1249,7 @@ export function LogScreen() {
         <LabeledField
           label="탄수화물 (g)"
           value={carbohydrate}
-          onChangeText={setCarbohydrate}
+          onChangeText={lockNutritionMacrosOnEdit(setCarbohydrate)}
           keyboardType="numeric"
           placeholder="0"
           onFocus={() => scrollFieldIntoView(carbohydrateFieldRef)}
@@ -1031,7 +1259,7 @@ export function LogScreen() {
         <LabeledField
           label="지방 (g)"
           value={fat}
-          onChangeText={setFat}
+          onChangeText={lockNutritionMacrosOnEdit(setFat)}
           keyboardType="numeric"
           placeholder="0"
           onFocus={() => scrollFieldIntoView(fatFieldRef)}
@@ -1309,6 +1537,9 @@ export function LogScreen() {
                     </Text>
                     <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                       {LOG_COPY.todayPortionHint}
+                    </Text>
+                    <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                      {LOG_COPY.nutritionDbListPortionHint}
                     </Text>
                   </View>
                 ) : null}

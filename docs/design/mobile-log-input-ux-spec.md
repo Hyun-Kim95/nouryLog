@@ -2,11 +2,15 @@
 type: design-spec
 project: dietManagement
 status: approved
-updated_at: 2026-05-17
+updated_at: 2026-07-21
 parent_prd: docs/requirements/mobile-log-ux-improvements-prd.md
+related:
+  - docs/design/mobile-log-nutrition-autofill-ux-spec.md
 ---
 
 # 모바일 기록 입력 UX 스펙 v0.1 (67 면제 단일안)
+
+> 영양성분 DB 자동 채움 증분: [`mobile-log-nutrition-autofill-ux-spec.md`](./mobile-log-nutrition-autofill-ux-spec.md) (디자인 승인 대기).
 
 ## 0) 면제
 

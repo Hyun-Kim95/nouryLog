@@ -286,7 +286,7 @@ Integration Owner = backend-agent.
 
 ## 13) 후속 (본 PRD 밖)
 
-- 모바일: 음식명 검색 → g 입력 → `NutritionFood` 환산 초안 → 확정 후 Meal(수기 스냅샷 또는 템플릿 승격)
+- 모바일: 음식명 검색 → g 입력 → `NutritionFood` 환산 초안 → 확정 후 Meal — 진행 문서: [`feature-mobile-nutrition-autofill-prd.md`](./feature-mobile-nutrition-autofill-prd.md) (**1차: 수기 스냅샷만**, 템플릿 승격은 그 문서 후속)
 - (선택) 관리자 “템플릿으로 가져오기” + 감사 로그
 - Vision은 그 위 입력 보조로만
 - (선택) 앱 설정/법적 고지 출처 문구·`privacy` 개정은 UI 공개 시점에 검토
