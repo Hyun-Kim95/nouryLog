@@ -1,0 +1,115 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import type { FoodTemplateItem, MealRow } from '../api/meals';
+import {
+  listMealQuantityDisplay,
+  nextMealPortionQuantity,
+  portionQuantityToGrams,
+  buildFoodTemplateMap,
+} from './listMealQuantityDisplay';
+import { matchingGramPresets } from './gramPresets';
+
+const eggTpl: FoodTemplateItem = {
+  id: 'tpl-egg',
+  name: '계란',
+  memo: null,
+  category: '간식',
+  referenceAmount: 1,
+  portionUnit: 'PIECE',
+  portionLabel: '개',
+  servingGrams: 50,
+  calories: 78,
+  protein: 6.3,
+  fat: 5.3,
+  carbohydrate: 0.6,
+};
+
+function meal(partial: Partial<MealRow> & Pick<MealRow, 'mealId' | 'name'>): MealRow {
+  return {
+    calories: 156,
+    protein: 12.6,
+    carbohydrate: 1.2,
+    fat: 10.6,
+    consumedAt: '2026-07-22T12:00:00.000Z',
+    ...partial,
+  };
+}
+
+describe('AC-09 listMealQuantityDisplay', () => {
+  const tplById = buildFoodTemplateMap([eggTpl]);
+
+  it('shows 2개 for PORTION_COUNT egg with grams=100', () => {
+    const disp = listMealQuantityDisplay(
+      meal({
+        mealId: 'm1',
+        name: '계란',
+        grams: 100,
+        foodTemplateId: 'tpl-egg',
+        mealInputMode: 'PORTION_COUNT',
+        portionQuantity: 2,
+      }),
+      tplById,
+    );
+    assert.ok(disp);
+    assert.equal(disp.stepMode, 'portion');
+    assert.equal(disp.quantity, 2);
+    assert.equal(disp.unitLabel, '개');
+  });
+
+  it('shows grams when not PORTION_COUNT', () => {
+    const disp = listMealQuantityDisplay(
+      meal({
+        mealId: 'm2',
+        name: '샐러드',
+        grams: 150,
+        foodTemplateId: null,
+      }),
+      tplById,
+    );
+    assert.ok(disp);
+    assert.equal(disp.stepMode, 'grams');
+    assert.equal(disp.quantity, 150);
+    assert.equal(disp.unitLabel, 'g');
+  });
+
+  it('returns null instead of fake 100 when grams missing', () => {
+    const disp = listMealQuantityDisplay(
+      meal({
+        mealId: 'm3',
+        name: '미상',
+        grams: null,
+      }),
+      tplById,
+    );
+    assert.equal(disp, null);
+  });
+});
+
+describe('AC-10 portion step to grams', () => {
+  it('steps portion ±1', () => {
+    assert.equal(nextMealPortionQuantity(2, 1), 3);
+    assert.equal(nextMealPortionQuantity(2, -1), 1);
+    assert.equal(nextMealPortionQuantity(0.25, -1), null);
+  });
+
+  it('maps 3 × 50g → 150g', () => {
+    assert.equal(portionQuantityToGrams(3, 50), 150);
+  });
+});
+
+describe('AC-11 gramPresets', () => {
+  it('matches soju and egg', () => {
+    assert.equal(matchingGramPresets('소주').some((p) => p.grams === 360), true);
+    assert.equal(matchingGramPresets('계란·토스트').some((p) => p.grams === 50), true);
+  });
+
+  it('does not match 김·밥 as 김 1장', () => {
+    assert.equal(matchingGramPresets('김·밥').some((p) => p.id === 'gim'), false);
+    assert.equal(matchingGramPresets('김').some((p) => p.id === 'gim'), true);
+  });
+
+  it('matches ramen family', () => {
+    assert.equal(matchingGramPresets('진라면').some((p) => p.id === 'ramen'), true);
+    assert.equal(matchingGramPresets('짜파게티').some((p) => p.id === 'ramen'), true);
+  });
+});

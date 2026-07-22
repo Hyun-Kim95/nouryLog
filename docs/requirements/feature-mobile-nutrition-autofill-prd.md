@@ -20,8 +20,8 @@ tags: [requirements, prd, nutrition, mobile, autofill]
 # 모바일 영양 자동 채움 (NutritionFood → Meal) PRD v0.3 (approved)
 
 > **HUMAN 승인:** 2026-07-21 — PRD v0.3 + D-1~D-9 + §5.7 엣지·에러.  
-> Gate 1(범위·정책·AC·API 소비): **충족**. 구현 착수는 **디자인 스펙(67 면제) HUMAN 승인 후**.  
-> 모체: [`feature-nutrition-food-db-prd.md`](./feature-nutrition-food-db-prd.md) §13 후속(수기 스냅샷만).
+> Gate 1(범위·정책·AC·API 소비): **충족**. 구현·디자인 승인 완료.  
+> **Supersede (부분):** [`feature-grams-only-transition-prd.md`](./feature-grams-only-transition-prd.md) Phase 1이 Log **신규 입력의 템플릿·1인분 병행** 가정을 대체한다. NF 검색·환산·§6.1 payload·§5.7은 **유효**.
 
 ## 0) 전제·가정
 

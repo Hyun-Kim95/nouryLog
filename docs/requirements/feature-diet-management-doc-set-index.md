@@ -39,8 +39,10 @@ tags: [requirements, index, prd-linked]
 - PRD: `docs/requirements/feature-nutrition-food-db-prd.md` (v0.4 **HUMAN 승인 2026-07-19**, UI 없음, Gate 1 통과)
 - API delta v1.17: `docs/requirements/api-contract-v1.17-nutrition-food-db-delta.md`
 - 출처·import: `docs/agent/nutrition-food-db-source.md`
-- 모바일 autofill PRD: `docs/requirements/feature-mobile-nutrition-autofill-prd.md` (v0.3 **HUMAN 승인 2026-07-21**, 디자인 승인 대기)
-- 디자인 증분: `docs/design/mobile-log-nutrition-autofill-ux-spec.md`
+- 모바일 autofill PRD: `docs/requirements/feature-mobile-nutrition-autofill-prd.md` (v0.3 **승인**, 구현·푸시 완료)
+- 디자인 증분: `docs/design/mobile-log-nutrition-autofill-ux-spec.md` (**디자인 승인**)
+- g-only 전환: `docs/requirements/feature-grams-only-transition-prd.md` (v0.2 Phase 1.1 레거시 목록·프리셋)
+- Phase 1/1.1 디자인: `docs/design/mobile-log-grams-only-phase1-ux-spec.md`
 - 상태 매핑 §6: `docs/requirements/feature-diet-management-state-mapping.md`
 - 모체 `6.6` 과금·Meal 기록 단위와 **비충돌 정책**은 PRD §0.1 참조 (`nutrition_kb` RAG와도 별개)
 

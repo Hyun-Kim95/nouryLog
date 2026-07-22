@@ -1,46 +1,56 @@
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useTheme } from '../theme';
-
-const PORTION_MIN = 0.25;
-const PORTION_MAX = 50;
-const PORTION_STEP = 0.5;
-
-function formatPortionDisplay(qty: number): string {
-  const rounded = Math.round(qty * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
-}
-
-function clampPortion(qty: number): number {
-  return Math.min(PORTION_MAX, Math.max(PORTION_MIN, Math.round(qty * 100) / 100));
-}
-
-export function nextPortionQty(current: number, delta: number): number | null {
-  const next = clampPortion(current + delta);
-  if (Math.abs(next - current) < 0.001) return null;
-  return next;
-}
+import {
+  MEAL_GRAMS_STEP,
+  nextMealGrams,
+} from '../lib/adjustMealGramsCore';
+import {
+  MEAL_PORTION_QTY_MAX,
+  MEAL_PORTION_QTY_MIN,
+  MEAL_PORTION_STEP,
+  formatListMealQuantity,
+  nextMealPortionQuantity,
+  type ListMealStepMode,
+} from '../lib/listMealQuantityDisplay';
+import {
+  NUTRITION_FOOD_GRAMS_MAX,
+  NUTRITION_FOOD_GRAMS_MIN,
+} from '../lib/nutritionFoodScale';
 
 type Props = {
+  /** Current quantity (grams or portion count depending on stepMode). */
   quantity: number;
   unitLabel?: string;
+  stepMode?: ListMealStepMode;
   disabled?: boolean;
   busy?: boolean;
-  onChange: (nextQty: number) => void;
+  onChange: (nextQuantity: number) => void;
   onPressCurrent?: () => void;
 };
 
+/** −/+ for list: grams ±10 or PORTION_COUNT ±1. */
 export function MealPortionStepper({
   quantity,
-  unitLabel,
+  unitLabel = 'g',
+  stepMode = 'grams',
   disabled,
   busy,
   onChange,
   onPressCurrent,
 }: Props) {
   const t = useTheme();
-  const display = formatPortionDisplay(quantity);
-  const atMin = quantity <= PORTION_MIN;
-  const atMax = quantity >= PORTION_MAX;
+  const display = formatListMealQuantity(quantity);
+  const atMin =
+    stepMode === 'portion'
+      ? quantity <= MEAL_PORTION_QTY_MIN
+      : quantity <= NUTRITION_FOOD_GRAMS_MIN;
+  const atMax =
+    stepMode === 'portion'
+      ? quantity >= MEAL_PORTION_QTY_MAX
+      : quantity >= NUTRITION_FOOD_GRAMS_MAX;
+
+  const decLabel = stepMode === 'portion' ? '1단위 감소' : '10그램 감소';
+  const incLabel = stepMode === 'portion' ? '1단위 증가' : '10그램 증가';
 
   const btnStyle = {
     width: 36,
@@ -57,7 +67,10 @@ export function MealPortionStepper({
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs }}>
       <Pressable
         onPress={() => {
-          const next = nextPortionQty(quantity, -PORTION_STEP);
+          const next =
+            stepMode === 'portion'
+              ? nextMealPortionQuantity(quantity, -MEAL_PORTION_STEP)
+              : nextMealGrams(quantity, -MEAL_GRAMS_STEP);
           if (next != null) onChange(next);
         }}
         disabled={disabled || busy || atMin}
@@ -67,7 +80,7 @@ export function MealPortionStepper({
           pressed && !(disabled || busy || atMin) && { opacity: 0.85 },
         ]}
         accessibilityRole="button"
-        accessibilityLabel="분량 줄이기"
+        accessibilityLabel={decLabel}
       >
         <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>−</Text>
       </Pressable>
@@ -93,7 +106,10 @@ export function MealPortionStepper({
       </Pressable>
       <Pressable
         onPress={() => {
-          const next = nextPortionQty(quantity, PORTION_STEP);
+          const next =
+            stepMode === 'portion'
+              ? nextMealPortionQuantity(quantity, MEAL_PORTION_STEP)
+              : nextMealGrams(quantity, MEAL_GRAMS_STEP);
           if (next != null) onChange(next);
         }}
         disabled={disabled || busy || atMax}
@@ -103,7 +119,7 @@ export function MealPortionStepper({
           pressed && !(disabled || busy || atMax) && { opacity: 0.85 },
         ]}
         accessibilityRole="button"
-        accessibilityLabel="분량 늘리기"
+        accessibilityLabel={incLabel}
       >
         <Text style={{ color: t.colors.fg, fontSize: t.fontSize.bodyLg, fontWeight: '700' }}>+</Text>
       </Pressable>
@@ -112,11 +128,19 @@ export function MealPortionStepper({
 }
 
 export function canAdjustPortionInList(meal: {
+  grams?: number | null;
   foodTemplateId?: string | null;
   mealInputMode?: string | null;
+  portionQuantity?: number | null;
 }): boolean {
-  if (meal.foodTemplateId) {
-    return meal.mealInputMode !== 'TOTAL_GRAMS';
+  if (
+    meal.foodTemplateId &&
+    meal.mealInputMode === 'PORTION_COUNT' &&
+    meal.portionQuantity != null &&
+    Number.isFinite(meal.portionQuantity) &&
+    meal.portionQuantity > 0
+  ) {
+    return true;
   }
-  return true;
+  return meal.grams != null && Number.isFinite(meal.grams) && meal.grams > 0;
 }

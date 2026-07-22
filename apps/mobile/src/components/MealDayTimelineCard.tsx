@@ -4,8 +4,18 @@ import { apiFetch } from '../api';
 import { listMeals, type FoodTemplateItem, type MealRow } from '../api/meals';
 import { isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
-import { adjustMealPortionOnServer, portionUnitLabel } from '../lib/adjustMealPortion';
-import { effectivePortionQty } from '../lib/manualPortion';
+import { adjustMealGramsOnServer, adjustMealPortionCountOnServer, effectiveMealGrams } from '../lib/adjustMealGrams';
+import {
+  MEAL_PORTION_QTY_MAX,
+  MEAL_PORTION_QTY_MIN,
+  buildFoodTemplateMap,
+  formatListMealQuantity,
+  listMealQuantityDisplay,
+} from '../lib/listMealQuantityDisplay';
+import {
+  NUTRITION_FOOD_GRAMS_MAX,
+  NUTRITION_FOOD_GRAMS_MIN,
+} from '../lib/nutritionFoodScale';
 import { canAdjustPortionInList, MealPortionStepper } from './MealPortionStepper';
 import { PortionQuantityModal } from './PortionQuantityModal';
 import { Banner, Card, CardTitle } from './ui';
@@ -94,13 +104,27 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
   const timeline = useMemo(() => groupMealsBySlotTimeline(meals), [meals]);
   const hasMeals = timeline.some((s) => s.items.length > 0);
   const summary = useMemo(() => sumMeals(meals), [meals]);
+  const tplById = useMemo(() => buildFoodTemplateMap(templates), [templates]);
 
   const adjustPortion = async (item: MealRow, nextQty: number) => {
     setPortionBusyMealId(item.mealId);
     try {
       const token = await ensureAccessToken();
       if (!token) throw new Error('로그인 필요');
-      await adjustMealPortionOnServer(token, item, nextQty);
+      const disp = listMealQuantityDisplay(item, tplById);
+      if (!disp) {
+        toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
+        return;
+      }
+      if (disp.stepMode === 'portion') {
+        await adjustMealPortionCountOnServer(token, item, nextQty);
+      } else {
+        if (!(effectiveMealGrams(item.grams) > 0)) {
+          toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
+          return;
+        }
+        await adjustMealGramsOnServer(token, item, nextQty);
+      }
       await load();
     } catch (e) {
       if (isAuthDenied(e)) return;
@@ -116,8 +140,13 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
   };
 
   const openPortionInput = (item: MealRow) => {
+    const disp = listMealQuantityDisplay(item, tplById);
+    if (!disp) {
+      toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
+      return;
+    }
     setPortionInputMeal(item);
-    setPortionInputValue(String(effectivePortionQty(item.portionQuantity)));
+    setPortionInputValue(formatListMealQuantity(disp.quantity));
   };
 
   const closePortionInput = () => {
@@ -128,12 +157,33 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
 
   const submitPortionInput = async () => {
     if (!portionInputMeal) return;
-    const nextQty = Number(String(portionInputValue).replace(',', '.'));
-    if (!Number.isFinite(nextQty) || nextQty < 0.25 || nextQty > 50) {
-      toast.show({ kind: 'error', message: '분량은 0.25~50 범위에서 입력해 주세요.' });
+    const disp = listMealQuantityDisplay(portionInputMeal, tplById);
+    if (!disp) {
+      toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
       return;
     }
-    await adjustPortion(portionInputMeal, Math.round(nextQty * 100) / 100);
+    const nextQty = Number(String(portionInputValue).replace(',', '.'));
+    if (disp.stepMode === 'portion') {
+      if (
+        !Number.isFinite(nextQty) ||
+        nextQty < MEAL_PORTION_QTY_MIN ||
+        nextQty > MEAL_PORTION_QTY_MAX
+      ) {
+        toast.show({ kind: 'error', message: LOG_COPY.portionQtyInvalid });
+        return;
+      }
+      await adjustPortion(portionInputMeal, Math.round(nextQty * 100) / 100);
+    } else {
+      if (
+        !Number.isFinite(nextQty) ||
+        nextQty < NUTRITION_FOOD_GRAMS_MIN ||
+        nextQty > NUTRITION_FOOD_GRAMS_MAX
+      ) {
+        toast.show({ kind: 'error', message: LOG_COPY.gramsInvalid });
+        return;
+      }
+      await adjustPortion(portionInputMeal, Math.round(nextQty * 10) / 10);
+    }
     setPortionInputMeal(null);
     setPortionInputValue('');
   };
@@ -198,7 +248,8 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
                 {section.title} · {section.summaryKcal} kcal
               </Text>
               {section.items.map((item) => {
-                const showStepper = canAdjustPortionInList(item);
+                const qtyDisp = listMealQuantityDisplay(item, tplById);
+                const showStepper = qtyDisp != null && canAdjustPortionInList(item);
                 return (
                   <View
                     key={item.mealId}
@@ -223,10 +274,11 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
                         {item.calories} kcal · {formatMacroLine(item)}
                       </Text>
                     </Pressable>
-                    {showStepper ? (
+                    {showStepper && qtyDisp ? (
                       <MealPortionStepper
-                        quantity={effectivePortionQty(item.portionQuantity)}
-                        unitLabel={portionUnitLabel(item, templates)}
+                        quantity={qtyDisp.quantity}
+                        unitLabel={qtyDisp.unitLabel}
+                        stepMode={qtyDisp.stepMode}
                         busy={portionBusyMealId === item.mealId}
                         disabled={portionBusyMealId != null && portionBusyMealId !== item.mealId}
                         onChange={(nextQty) => void adjustPortion(item, nextQty)}
@@ -283,7 +335,11 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
       <PortionQuantityModal
         visible={portionInputMeal != null}
         value={portionInputValue}
-        unitLabel={portionInputMeal ? portionUnitLabel(portionInputMeal, templates) : undefined}
+        unitLabel={
+          portionInputMeal
+            ? (listMealQuantityDisplay(portionInputMeal, tplById)?.unitLabel ?? 'g')
+            : 'g'
+        }
         busy={portionBusyMealId != null}
         onChangeValue={setPortionInputValue}
         onConfirm={() => void submitPortionInput()}

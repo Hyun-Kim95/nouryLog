@@ -70,16 +70,23 @@ import {
 } from '../hooks/useNutritionFoodSearch';
 import { formatMacroLine } from '../lib/formatNutrition';
 import { formatTplAmount as formatPortionAmount } from '../lib/mealEntryForm';
-import { adjustMealPortionOnServer, portionUnitLabel } from '../lib/adjustMealPortion';
 import {
-  effectivePortionQty,
-  parsePortionInput,
-  roundPerServingForForm,
-  scaleManualNutritionForSave,
-} from '../lib/manualPortion';
+  adjustMealGramsOnServer,
+  adjustMealPortionCountOnServer,
+  effectiveMealGrams,
+} from '../lib/adjustMealGrams';
+import { matchingGramPresets } from '../lib/gramPresets';
+import {
+  MEAL_PORTION_QTY_MAX,
+  MEAL_PORTION_QTY_MIN,
+  buildFoodTemplateMap,
+  formatListMealQuantity,
+  listMealQuantityDisplay,
+} from '../lib/listMealQuantityDisplay';
 import { parseManualNutrition } from '../lib/manualNutrition';
 import {
   buildNutritionFoodMealBody,
+  clampNutritionFoodGrams,
   formatScaledMacroForForm,
   NUTRITION_FOOD_GRAMS_MAX,
   NUTRITION_FOOD_GRAMS_MIN,
@@ -494,127 +501,76 @@ export function LogScreen() {
         }
       };
 
-      if (selectedTpl) {
-        const body = buildTemplateBody();
-        if (editingMealId) {
-          await updateMeal(token, editingMealId, body);
-        } else {
-          await createMealOnce(body);
-          track(AnalyticsEvents.mealRecorded, {
-            input_mode: 'template',
-            meal_slot: mealSlot.toLowerCase(),
-            from_ocr: false,
-          });
-        }
-      } else if (nutritionDraft) {
-        if (!name.trim()) throw new Error(LOG_COPY.nameRequired);
-        if (name.trim().length > NUTRITION_FOOD_NAME_MAX) throw new Error(LOG_COPY.nutritionDbNameTooLong);
-        let grams: number;
-        try {
-          grams = parseNutritionFoodGramsInput(nutritionGrams);
-        } catch {
-          throw new Error(LOG_COPY.nutritionDbGramsInvalid);
-        }
-        if (grams < NUTRITION_FOOD_GRAMS_MIN || grams > NUTRITION_FOOD_GRAMS_MAX) {
-          throw new Error(LOG_COPY.nutritionDbGramsInvalid);
-        }
-        const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
-        if (
-          ![nutrition.calories, nutrition.protein, nutrition.fat, nutrition.carbohydrate].every(
-            (n) => Number.isFinite(n),
-          )
-        ) {
-          throw new Error(LOG_COPY.nutritionDbScaleInvalid);
-        }
-        let body: Record<string, unknown>;
-        try {
-          body = buildNutritionFoodMealBody({
-            mealBodyBase: mealBodyBase(),
-            name,
-            grams,
-            ...nutrition,
-            editing: Boolean(editingMealId),
-            existingPortionQuantity: editingMealId
-              ? (() => {
-                  try {
-                    return effectivePortionQty(parsePortionInput(manualPortion));
-                  } catch {
-                    return 1;
-                  }
-                })()
-              : 1,
-          });
-        } catch (e) {
-          if (e instanceof Error && e.message === 'NAME_TOO_LONG') {
-            throw new Error(LOG_COPY.nutritionDbNameTooLong);
-          }
-          if (e instanceof Error && e.message === 'INVALID_GRAMS') {
-            throw new Error(LOG_COPY.nutritionDbGramsInvalid);
-          }
-          throw e;
-        }
-        if (editingMealId) {
-          await updateMeal(token, editingMealId, body);
-        } else {
-          await createMealOnce(body);
-          track(AnalyticsEvents.mealRecorded, {
-            input_mode: 'manual',
-            meal_slot: mealSlot.toLowerCase(),
-            from_ocr: false,
-          });
-        }
-      } else {
-        const perServing = parseManualNutrition({ calories, protein, carbohydrate, fat });
-        if (!name.trim()) throw new Error(LOG_COPY.nameRequired);
-        const portion = editingMealId ? effectivePortionQty(parsePortionInput(manualPortion)) : 1;
-        const nutrition = scaleManualNutritionForSave(perServing, portion);
-        const body: Record<string, unknown> = {
-          ...mealBodyBase(),
-          name: name.trim(),
+      // Phase 1 g-only: always name + grams + total macros (NF draft or pure manual).
+      if (!name.trim()) throw new Error(LOG_COPY.nameRequired);
+      if (name.trim().length > NUTRITION_FOOD_NAME_MAX) throw new Error(LOG_COPY.nutritionDbNameTooLong);
+      let grams: number;
+      try {
+        grams = parseNutritionFoodGramsInput(nutritionGrams);
+      } catch {
+        throw new Error(LOG_COPY.nutritionDbGramsInvalid);
+      }
+      if (grams < NUTRITION_FOOD_GRAMS_MIN || grams > NUTRITION_FOOD_GRAMS_MAX) {
+        throw new Error(LOG_COPY.nutritionDbGramsInvalid);
+      }
+      const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
+      let body: Record<string, unknown>;
+      try {
+        body = buildNutritionFoodMealBody({
+          mealBodyBase: mealBodyBase(),
+          name,
+          grams,
           ...nutrition,
-        };
-        if (!editingMealId) {
-          body.portionQuantity = 1;
+          editing: Boolean(editingMealId),
+          existingPortionQuantity: 1,
+        });
+      } catch (e) {
+        if (e instanceof Error && e.message === 'NAME_TOO_LONG') {
+          throw new Error(LOG_COPY.nutritionDbNameTooLong);
         }
-        if (editingMealId) {
-          await updateMeal(token, editingMealId, body);
-        } else {
-          const created = await createMealOnce(body);
-          const fromOcr = lastOcrSnapshot != null;
-          const currentFields: OcrFieldSnapshot = { calories, protein, carbohydrate, fat };
-          const editedBeforeSave = fromOcr && ocrFieldsEdited(lastOcrSnapshot, currentFields);
-          if (fromOcr) {
-            track(AnalyticsEvents.ocrCompleted, { edited_before_save: editedBeforeSave });
-          }
-          if (fromOcr && editedBeforeSave && lastOcrSnapshot) {
-            const rawOcr = {
-              calories: Math.round(Number(lastOcrSnapshot.calories)),
-              protein: Math.round(Number(lastOcrSnapshot.protein)),
-              carbohydrate: Math.round(Number(lastOcrSnapshot.carbohydrate)),
-              fat: Math.round(Number(lastOcrSnapshot.fat)),
-              rawText: lastOcrMeta?.rawText,
-            };
-            const corrected = {
-              calories: Math.round(Number(calories)),
-              protein: Math.round(Number(protein)),
-              carbohydrate: Math.round(Number(carbohydrate)),
-              fat: Math.round(Number(fat)),
-            };
-            void postOcrFeedback(token, {
-              rawOcr,
-              corrected,
-              mealId: created.mealId,
-              confidence: lastOcrMeta?.confidence,
-            }).catch(() => undefined);
-          }
-          track(AnalyticsEvents.mealRecorded, {
-            input_mode: fromOcr ? 'ocr' : 'manual',
-            meal_slot: mealSlot.toLowerCase(),
-            from_ocr: fromOcr,
-          });
-          setLastOcrSnapshot(null);
-          setLastOcrMeta(null);
+        if (e instanceof Error && e.message === 'INVALID_GRAMS') {
+          throw new Error(LOG_COPY.nutritionDbGramsInvalid);
         }
+        throw e;
+      }
+      if (editingMealId) {
+        await updateMeal(token, editingMealId, body);
+      } else {
+        const created = await createMealOnce(body);
+        const fromOcr = lastOcrSnapshot != null;
+        const currentFields: OcrFieldSnapshot = { calories, protein, carbohydrate, fat };
+        const editedBeforeSave = fromOcr && ocrFieldsEdited(lastOcrSnapshot, currentFields);
+        if (fromOcr) {
+          track(AnalyticsEvents.ocrCompleted, { edited_before_save: editedBeforeSave });
+        }
+        if (fromOcr && editedBeforeSave && lastOcrSnapshot) {
+          const rawOcr = {
+            calories: Math.round(Number(lastOcrSnapshot.calories)),
+            protein: Math.round(Number(lastOcrSnapshot.protein)),
+            carbohydrate: Math.round(Number(lastOcrSnapshot.carbohydrate)),
+            fat: Math.round(Number(lastOcrSnapshot.fat)),
+            rawText: lastOcrMeta?.rawText,
+          };
+          const corrected = {
+            calories: Math.round(Number(calories)),
+            protein: Math.round(Number(protein)),
+            carbohydrate: Math.round(Number(carbohydrate)),
+            fat: Math.round(Number(fat)),
+          };
+          void postOcrFeedback(token, {
+            rawOcr,
+            corrected,
+            mealId: created.mealId,
+            confidence: lastOcrMeta?.confidence,
+          }).catch(() => undefined);
+        }
+        track(AnalyticsEvents.mealRecorded, {
+          input_mode: fromOcr ? 'ocr' : 'manual',
+          meal_slot: mealSlot.toLowerCase(),
+          from_ocr: fromOcr,
+        });
+        setLastOcrSnapshot(null);
+        setLastOcrMeta(null);
       }
 
       pendingCreateRequestIdRef.current = null;
@@ -698,6 +654,7 @@ export function LogScreen() {
     setSelectedTpl(null);
     setEditingMealId(null);
     clearNutritionDraft();
+    setNutritionGrams('100');
     setCalories(String(Math.round(res.calories)));
     setProtein(String(Math.round(res.protein)));
     setCarbohydrate(String(Math.round(res.carbohydrate)));
@@ -805,25 +762,40 @@ export function LogScreen() {
     setLastOcrMeta(null);
     clearNutritionDraft();
     setName(m.name);
-    setManualPortion(
-      m.portionQuantity != null ? formatPortionAmount(m.portionQuantity) || '1' : '1',
-    );
-    setCalories(roundPerServingForForm(m.calories, m.portionQuantity));
-    setProtein(roundPerServingForForm(m.protein, m.portionQuantity));
-    setCarbohydrate(roundPerServingForForm(m.carbohydrate, m.portionQuantity));
-    setFat(roundPerServingForForm(m.fat, m.portionQuantity));
+    const g = m.grams != null && m.grams > 0 ? m.grams : 100;
+    setNutritionGrams(formatScaledMacroForForm(g));
+    setManualPortion('1');
+    setCalories(formatScaledMacroForForm(m.calories));
+    setProtein(formatScaledMacroForForm(m.protein));
+    setCarbohydrate(formatScaledMacroForForm(m.carbohydrate));
+    setFat(formatScaledMacroForForm(m.fat));
     if (m.mealSlot) setMealSlot(m.mealSlot);
     if (m.snackPlacement) setSnackPlacement(m.snackPlacement);
     toast.show({ kind: 'info', message: '입력란에 불러왔어요. 확인 후 저장해 주세요.' });
     scheduleScrollToEntry();
   };
 
+  const tplById = useMemo(() => buildFoodTemplateMap(templates), [templates]);
+
   const adjustMealPortion = async (item: MealRow, nextQty: number) => {
     setPortionBusyMealId(item.mealId);
     try {
       const token = await ensureAccessToken();
       if (!token) throw new Error('로그인 필요');
-      await adjustMealPortionOnServer(token, item, nextQty);
+      const disp = listMealQuantityDisplay(item, tplById);
+      if (!disp) {
+        toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
+        return;
+      }
+      if (disp.stepMode === 'portion') {
+        await adjustMealPortionCountOnServer(token, item, nextQty);
+      } else {
+        if (!(effectiveMealGrams(item.grams) > 0)) {
+          toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
+          return;
+        }
+        await adjustMealGramsOnServer(token, item, nextQty);
+      }
       await load();
     } catch (e) {
       if (isAuthDenied(e)) return;
@@ -839,8 +811,13 @@ export function LogScreen() {
   };
 
   const openPortionInput = (item: MealRow) => {
+    const disp = listMealQuantityDisplay(item, tplById);
+    if (!disp) {
+      toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
+      return;
+    }
     setPortionInputMeal(item);
-    setPortionInputValue(String(effectivePortionQty(item.portionQuantity)));
+    setPortionInputValue(formatListMealQuantity(disp.quantity));
   };
 
   const closePortionInput = () => {
@@ -851,37 +828,38 @@ export function LogScreen() {
 
   const submitPortionInput = async () => {
     if (!portionInputMeal) return;
-    const nextQty = Number(String(portionInputValue).replace(',', '.'));
-    if (!Number.isFinite(nextQty) || nextQty < 0.25 || nextQty > 50) {
-      toast.show({ kind: 'error', message: '분량은 0.25~50 범위에서 입력해 주세요.' });
+    const disp = listMealQuantityDisplay(portionInputMeal, tplById);
+    if (!disp) {
+      toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
       return;
     }
-    await adjustMealPortion(portionInputMeal, Math.round(nextQty * 100) / 100);
+    const nextQty = Number(String(portionInputValue).replace(',', '.'));
+    if (disp.stepMode === 'portion') {
+      if (
+        !Number.isFinite(nextQty) ||
+        nextQty < MEAL_PORTION_QTY_MIN ||
+        nextQty > MEAL_PORTION_QTY_MAX
+      ) {
+        toast.show({ kind: 'error', message: LOG_COPY.portionQtyInvalid });
+        return;
+      }
+      await adjustMealPortion(portionInputMeal, Math.round(nextQty * 100) / 100);
+    } else {
+      if (
+        !Number.isFinite(nextQty) ||
+        nextQty < NUTRITION_FOOD_GRAMS_MIN ||
+        nextQty > NUTRITION_FOOD_GRAMS_MAX
+      ) {
+        toast.show({ kind: 'error', message: LOG_COPY.gramsInvalid });
+        return;
+      }
+      await adjustMealPortion(portionInputMeal, Math.round(nextQty * 10) / 10);
+    }
     setPortionInputMeal(null);
     setPortionInputValue('');
   };
 
   const applyRecentMeal = (m: MealRow) => {
-    if (m.foodTemplateId) {
-      const tpl = templates.find((x) => x.id === m.foodTemplateId);
-      if (tpl) {
-        clearNutritionDraft();
-        setSelectedTpl(tpl);
-        setMealInputMode('PORTION_COUNT');
-        setTplAmount('1');
-        setName('');
-        setCalories('');
-        setProtein('');
-        setCarbohydrate('');
-        setFat('');
-        if (m.mealSlot) setMealSlot(m.mealSlot);
-        if (m.snackPlacement) setSnackPlacement(m.snackPlacement);
-        setLastOcrMeta(null);
-        toast.show({ kind: 'info', message: '템플릿으로 불러왔어요.' });
-        scheduleScrollToEntry();
-        return;
-      }
-    }
     applyManualFromMeal(m);
   };
 
@@ -893,48 +871,31 @@ export function LogScreen() {
     else if (item.mealSlot === 'SNACK') setSnackPlacement(defaultSnackPlacementForNow());
     setLastOcrMeta(null);
     clearNutritionDraft();
-
-    let templateApplied = false;
-    if (item.foodTemplateId) {
-      const tpl = templates.find((x) => x.id === item.foodTemplateId);
-      if (tpl) {
-        setSelectedTpl(tpl);
-        const mode = item.mealInputMode === 'TOTAL_GRAMS' ? 'TOTAL_GRAMS' : 'PORTION_COUNT';
-        setMealInputMode(mode);
-        setTplAmount(tplAmountFromMeal(item, tpl));
-        setName('');
-        setCalories('');
-        setProtein('');
-        setCarbohydrate('');
-        setFat('');
-        templateApplied = true;
-      }
-    }
-    if (!templateApplied) {
-      setSelectedTpl(null);
-      setName(item.name);
-      setManualPortion(
-        item.portionQuantity != null ? formatPortionAmount(item.portionQuantity) || '1' : '1',
-      );
-      setCalories(roundPerServingForForm(item.calories, item.portionQuantity));
-      setProtein(roundPerServingForForm(item.protein, item.portionQuantity));
-      setCarbohydrate(roundPerServingForForm(item.carbohydrate, item.portionQuantity));
-      setFat(roundPerServingForForm(item.fat, item.portionQuantity));
-    }
+    setSelectedTpl(null);
+    setName(item.name);
+    const g = item.grams != null && item.grams > 0 ? item.grams : 100;
+    setNutritionGrams(formatScaledMacroForForm(g));
+    setManualPortion('1');
+    setCalories(formatScaledMacroForForm(item.calories));
+    setProtein(formatScaledMacroForForm(item.protein));
+    setCarbohydrate(formatScaledMacroForForm(item.carbohydrate));
+    setFat(formatScaledMacroForForm(item.fat));
     scheduleScrollToEntry();
   };
 
   const selectTemplate = (item: FoodTemplateItem) => {
+    setSelectedTpl(null);
+    setLastOcrMeta(null);
+    setLastOcrSnapshot(null);
     clearNutritionDraft();
-    setSelectedTpl(item);
-    setMealInputMode('PORTION_COUNT');
-    setTplAmount(defaultTplAmount(item, 'PORTION_COUNT'));
-    setManualPortion('1');
-    setName('');
-    setCalories('');
-    setProtein('');
-    setCarbohydrate('');
-    setFat('');
+    const grams = item.servingGrams > 0 ? clampNutritionFoodGrams(item.servingGrams) : 100;
+    setName(item.name);
+    setNutritionGrams(formatScaledMacroForForm(grams));
+    setCalories(formatScaledMacroForForm(item.calories));
+    setProtein(formatScaledMacroForForm(item.protein));
+    setCarbohydrate(formatScaledMacroForForm(item.carbohydrate));
+    setFat(formatScaledMacroForForm(item.fat));
+    setNutritionMacrosLocked(false);
     scheduleScrollToEntry();
   };
 
@@ -1009,7 +970,9 @@ export function LogScreen() {
     );
   }, [editingMealId, selectedTpl, name, calories, protein, carbohydrate, fat]);
 
-  const nameSuggestEnabled = nameFocused && !selectedTpl && name.trim().length >= 1;
+  const gramPresets = useMemo(() => matchingGramPresets(name), [name]);
+
+  const nameSuggestEnabled = nameFocused && name.trim().length >= 1;
   const { items: nameSuggestions, status: nameSuggestStatus, errorKind: nameSuggestErrorKind } =
     useMealEntrySuggestions(name, nameSuggestEnabled);
   const {
@@ -1199,18 +1162,53 @@ export function LogScreen() {
           </View>
         ) : null}
       </View>
+      <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+        {LOG_COPY.manualPerServingHint}
+      </Text>
+      <View ref={gramsFieldRef} collapsable={false}>
+        <LabeledField
+          label={LOG_COPY.gramsInputLabel}
+          value={nutritionGrams}
+          onChangeText={onNutritionGramsChange}
+          keyboardType="numeric"
+          placeholder="100"
+          onFocus={() => scrollFieldIntoView(gramsFieldRef)}
+        />
+      </View>
+      {gramPresets.length > 0 ? (
+        <View style={{ gap: t.spacing.xs }}>
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+            {LOG_COPY.gramPresetHint}
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm }}>
+            {gramPresets.map((preset) => (
+              <Pressable
+                key={preset.id}
+                onPress={() => onNutritionGramsChange(String(preset.grams))}
+                style={({ pressed }) => ({
+                  paddingVertical: t.spacing.sm,
+                  paddingHorizontal: t.spacing.md,
+                  borderRadius: t.radius.md,
+                  borderWidth: 1,
+                  borderColor: t.colors.border,
+                  backgroundColor: pressed ? t.colors.surface2 : t.colors.surface,
+                })}
+                accessibilityRole="button"
+                accessibilityLabel={`${preset.label} ${preset.grams}그램`}
+              >
+                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
+                  {preset.label}
+                </Text>
+                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                  {preset.grams}g
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
       {nutritionDraft ? (
         <>
-          <View ref={gramsFieldRef} collapsable={false}>
-            <LabeledField
-              label={LOG_COPY.nutritionDbGramsLabel}
-              value={nutritionGrams}
-              onChangeText={onNutritionGramsChange}
-              keyboardType="numeric"
-              placeholder="100"
-              onFocus={() => scrollFieldIntoView(gramsFieldRef)}
-            />
-          </View>
           <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
             {LOG_COPY.nutritionDbSource}
           </Text>
@@ -1220,11 +1218,7 @@ export function LogScreen() {
             </Text>
           ) : null}
         </>
-      ) : (
-        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-          {LOG_COPY.manualPerServingHint}
-        </Text>
-      )}
+      ) : null}
       <View ref={caloriesFieldRef} collapsable={false}>
         <LabeledField
           label="칼로리 (kcal)"
@@ -1358,8 +1352,6 @@ export function LogScreen() {
           </View>
         </View>
 
-        {templateChips}
-
         <PrimaryButton
           title={MEAL_SET_COPY.logEntryCta}
           onPress={() => navigation.navigate('MealSetList')}
@@ -1448,7 +1440,7 @@ export function LogScreen() {
             {lastOcrMeta && lastOcrMeta.confidence < 0.6 ? (
               <Banner variant="warn">{LOG_COPY.ocrLowConfidence}</Banner>
             ) : null}
-            {!editingMealId && (selectedTpl || formHasPrefill) ? (
+            {!editingMealId && formHasPrefill && !nutritionDraft ? (
               <PrimaryButton
                 title={LOG_COPY.switchToManual}
                 onPress={switchToManualEntry}
@@ -1456,51 +1448,8 @@ export function LogScreen() {
               />
             ) : null}
 
-            {selectedTpl ? (
-            <View style={{ gap: t.spacing.sm, marginBottom: t.spacing.sm }}>
-              <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
-                {selectedTpl.name}
-              </Text>
-              <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                기준 분량: {baselineSummary(selectedTpl)} (영양 기준 {selectedTpl.servingGrams}g) · 기준당 약{' '}
-                {selectedTpl.calories} kcal
-                {!editingMealId
-                  ? ' · 저장 후 목록에서 분량 조절'
-                  : mealInputMode === 'PORTION_COUNT'
-                    ? ' · 분량은 목록에서 − / + 로 조절해요'
-                    : ''}
-              </Text>
-              {editingMealId && mealInputMode === 'TOTAL_GRAMS' ? (
-                <>
-                  <Segmented<TemplateInputMode>
-                    options={[
-                      { value: 'PORTION_COUNT', label: '분량 수' },
-                      { value: 'TOTAL_GRAMS', label: '총 g' },
-                    ]}
-                    value={mealInputMode}
-                    onChange={handleMealInputModeChange}
-                  />
-                  <View ref={tplAmountFieldRef} collapsable={false}>
-                    <LabeledField
-                      label="총 중량 (g)"
-                      value={tplAmount}
-                      onChangeText={setTplAmount}
-                      keyboardType="decimal-pad"
-                      placeholder="총 몇 g?"
-                      onFocus={() => scrollFieldIntoView(tplAmountFieldRef)}
-                    />
-                  </View>
-                  {previewKcal != null ? (
-                    <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                      예상 칼로리 약 {previewKcal} kcal
-                    </Text>
-                  ) : null}
-                </>
-              ) : null}
-            </View>
-          ) : (
-            macroFields
-          )}
+            {macroFields}
+
 
             <View style={{ gap: t.spacing.sm, marginTop: t.spacing.sm }}>
               <PrimaryButton
@@ -1561,10 +1510,7 @@ export function LogScreen() {
                         </Text>
                         {section.items.map((item) => {
                           const showStepper = canAdjustPortionInList(item);
-                          const tpl = item.foodTemplateId
-                            ? templates.find((x) => x.id === item.foodTemplateId)
-                            : undefined;
-                          const unitLabel = portionUnitLabel(item, templates);
+                          const qtyDisp = listMealQuantityDisplay(item, tplById);
                           return (
                             <View
                               key={item.mealId}
@@ -1589,10 +1535,11 @@ export function LogScreen() {
                                   {item.calories} kcal · {formatMacroLine(item)}
                                 </Text>
                               </Pressable>
-                              {showStepper ? (
+                              {showStepper && qtyDisp ? (
                                 <MealPortionStepper
-                                  quantity={effectivePortionQty(item.portionQuantity)}
-                                  unitLabel={unitLabel}
+                                  quantity={qtyDisp.quantity}
+                                  unitLabel={qtyDisp.unitLabel}
+                                  stepMode={qtyDisp.stepMode}
                                   busy={portionBusyMealId === item.mealId}
                                   disabled={portionBusyMealId != null && portionBusyMealId !== item.mealId}
                                   onChange={(nextQty) => void adjustMealPortion(item, nextQty)}
@@ -1626,7 +1573,11 @@ export function LogScreen() {
       <PortionQuantityModal
         visible={portionInputMeal != null}
         value={portionInputValue}
-        unitLabel={portionInputMeal ? portionUnitLabel(portionInputMeal, templates) : undefined}
+        unitLabel={
+          portionInputMeal
+            ? (listMealQuantityDisplay(portionInputMeal, tplById)?.unitLabel ?? 'g')
+            : 'g'
+        }
         busy={portionBusyMealId != null}
         onChangeValue={setPortionInputValue}
         onConfirm={() => void submitPortionInput()}
