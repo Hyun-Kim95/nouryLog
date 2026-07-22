@@ -23,7 +23,7 @@ export const LOG_COPY = {
   ocrImageTooLarge:
     '이미지가 너무 커요. 다른 사진을 선택하거나 해상도를 낮춰 주세요.',
   ocrDoneToast: (remaining: number) =>
-    `분석 완료 · 남은 무료 ${remaining}회 · 음식명을 입력한 뒤 저장해 주세요`,
+    `분석 완료 · 남은 무료 ${remaining}회 · 음식명·섭취량(g)을 확인한 뒤 저장해 주세요`,
   nameRequired: '음식명을 입력해 주세요.',
   sectionTemplates: '음식 템플릿',
   templatesHint: '탭해 선택한 뒤 기록 추가하세요. 분량은 저장 후 오늘 목록에서 조절해요.',
@@ -77,8 +77,10 @@ export const LOG_COPY = {
   gramsMissingAdjust: '그램 정보가 없어 조절할 수 없어요. 항목을 열어 수정해 주세요.',
   gramsInputLabel: '섭취량 (g)',
   gramsInvalid: '섭취량은 1~5000g',
+  gramsRequired: '섭취량(g)을 입력해 주세요',
   portionQtyInvalid: '분량은 0.25~50',
   gramPresetHint: '자주 쓰는 양',
+  gramsPlaceholder: '예: 100',
   protein: '단백질 (g)',
   carb: '탄수화물 (g)',
   fat: '지방 (g)',

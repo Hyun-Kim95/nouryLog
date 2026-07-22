@@ -88,3 +88,27 @@ export function portionQuantityToGrams(
   if (grams < NUTRITION_FOOD_GRAMS_MIN || grams > NUTRITION_FOOD_GRAMS_MAX) return null;
   return grams;
 }
+
+/** True when meal should stay on portion-unit list UX (개/접시…). */
+export function isLegacyPortionMeal(
+  meal: Pick<MealRow, 'foodTemplateId' | 'mealInputMode' | 'portionQuantity'>,
+): boolean {
+  return (
+    Boolean(meal.foodTemplateId?.trim()) &&
+    meal.mealInputMode === 'PORTION_COUNT' &&
+    meal.portionQuantity != null &&
+    Number.isFinite(meal.portionQuantity) &&
+    meal.portionQuantity > 0
+  );
+}
+
+/** Map form grams → portionQuantity for template PUT (keeps 개/접시 display). */
+export function gramsToPortionQuantity(
+  grams: number,
+  servingGrams: number,
+): number | null {
+  if (!(grams > 0) || !(servingGrams > 0)) return null;
+  const qty = Math.round((grams / servingGrams) * 100) / 100;
+  if (qty < MEAL_PORTION_QTY_MIN || qty > MEAL_PORTION_QTY_MAX) return null;
+  return qty;
+}

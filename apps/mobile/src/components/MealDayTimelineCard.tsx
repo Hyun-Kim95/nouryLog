@@ -10,6 +10,8 @@ import {
   MEAL_PORTION_QTY_MIN,
   buildFoodTemplateMap,
   formatListMealQuantity,
+  gramsToPortionQuantity,
+  isLegacyPortionMeal,
   listMealQuantityDisplay,
 } from '../lib/listMealQuantityDisplay';
 import {
@@ -111,13 +113,20 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
     try {
       const token = await ensureAccessToken();
       if (!token) throw new Error('로그인 필요');
-      const disp = listMealQuantityDisplay(item, tplById);
-      if (!disp) {
-        toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
-        return;
-      }
-      if (disp.stepMode === 'portion') {
-        await adjustMealPortionCountOnServer(token, item, nextQty);
+      const tplId = item.foodTemplateId?.trim() || null;
+      const tpl = tplId ? tplById.get(tplId) : undefined;
+      if (isLegacyPortionMeal(item) && tpl && tpl.servingGrams > 0) {
+        const disp = listMealQuantityDisplay(item, tplById);
+        let nextPortion = nextQty;
+        if (disp?.stepMode !== 'portion') {
+          const converted = gramsToPortionQuantity(nextQty, tpl.servingGrams);
+          if (converted == null) {
+            toast.show({ kind: 'error', message: LOG_COPY.portionQtyInvalid });
+            return;
+          }
+          nextPortion = converted;
+        }
+        await adjustMealPortionCountOnServer(token, item, nextPortion);
       } else {
         if (!(effectiveMealGrams(item.grams) > 0)) {
           toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });

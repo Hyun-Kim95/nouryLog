@@ -5,6 +5,8 @@ import {
   listMealQuantityDisplay,
   nextMealPortionQuantity,
   portionQuantityToGrams,
+  gramsToPortionQuantity,
+  isLegacyPortionMeal,
   buildFoodTemplateMap,
 } from './listMealQuantityDisplay';
 import { matchingGramPresets } from './gramPresets';
@@ -94,6 +96,16 @@ describe('AC-10 portion step to grams', () => {
 
   it('maps 3 × 50g → 150g', () => {
     assert.equal(portionQuantityToGrams(3, 50), 150);
+  });
+
+  it('maps grams back to portion for template save', () => {
+    assert.equal(gramsToPortionQuantity(150, 50), 3);
+    assert.equal(gramsToPortionQuantity(100, 50), 2);
+    assert.equal(isLegacyPortionMeal({
+      foodTemplateId: 'tpl-egg',
+      mealInputMode: 'PORTION_COUNT',
+      portionQuantity: 2,
+    }), true);
   });
 });
 

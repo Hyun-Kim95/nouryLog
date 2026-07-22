@@ -72,9 +72,10 @@ tags: [requirements, prd, grams-only, food-template, migration]
 1. Log: 템플릿 칩·PORTION_COUNT/TOTAL_GRAMS·tpl 분량 UI **숨김**
 2. 신규/인라인 저장: **grams 필수** + 총량 매크로 (NF·순수 수기 통일)
 3. 1인분 힌트 → g 안내 copy
-4. OCR 성공 후: 매크로 채움 + **grams 기본 100**(총량으로 해석). 사용자가 g 수정
+4. OCR 성공 후: 매크로 채움 + **grams 빈 칸**(사용자가 입력). 저장 시 필수
 5. 목록 −/+: **g ±10** (AC-07)
 6. 디자인 스펙 Phase 1 + AC
+7. Phase 1.1: 레거시 목록·프리셋 (별도)
 
 **제외 (Phase 1)**
 - MealSet UI/계약 변경
@@ -93,9 +94,9 @@ tags: [requirements, prd, grams-only, food-template, migration]
 Log → 템플릿 칩 없음
   → 음식명: suggestions(과거·template kind 유지) + 영양 DB
   → g + 총량 매크로 → 저장(grams 필수)
-  → OCR: 매크로 + g=100 기본
+  → OCR: 매크로 채움 + g **빈 칸**(저장 전 필수)
 목록 −/+: 기본 g ±10 "150g"; PORTION_COUNT 레거시 "2개" ±1
-폼: 섭취량(g) 아래 이름 매칭 프리셋(계란 1개=50g 등)
+폼: 섭취량(g) 기본 빈 · placeholder 100 · 이름 매칭 프리셋
 ```
 
 ### Phase 1.1 — 레거시 목록 + 1차 프리셋
@@ -138,7 +139,9 @@ Phase 1·1.1: 67 면제 — [`mobile-log-grams-only-phase1-ux-spec.md`](../desig
 ### AC-06 MealSet 회귀
 ### AC-07 목록 −/+ g ±10·매크로 비율
 ### AC-07b g 클램프 1..5000
-### AC-08 OCR 후 grams 기본 100
+### AC-08 OCR·신규 수기 grams 기본 빈 칸
+- When OCR 성공 또는 빈 수기 폼
+- Then 섭취량(g)은 **비어 있고** placeholder만 100. 저장 시 미입력이면 차단
 
 ### AC-09 (P1.1) 목록 PORTION_COUNT 표시
 - Given 계란 템플릿 meal `portionQuantity=2`, `grams=100`
@@ -194,3 +197,4 @@ nutritionFoodId, 카탈로그 확대, 김치·치킨 등 2차 프리셋, Phase 2
 | 0.1+승인 | 2026-07-21 | HUMAN 승인. OCR g=100 확정 |
 | 0.1+디자인 | 2026-07-21 | Phase 1 디자인 승인·구현 |
 | 0.2 | 2026-07-22 | Phase 1.1: 레거시 목록 표시·±1 + 1차 프리셋(D-10)·AC-09~11 |
+| 0.2a | 2026-07-22 | 신규/OCR g 기본 빈 칸(AC-08 개정). 저장 시 필수 |

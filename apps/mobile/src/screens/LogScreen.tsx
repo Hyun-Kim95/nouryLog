@@ -81,6 +81,8 @@ import {
   MEAL_PORTION_QTY_MIN,
   buildFoodTemplateMap,
   formatListMealQuantity,
+  gramsToPortionQuantity,
+  isLegacyPortionMeal,
   listMealQuantityDisplay,
 } from '../lib/listMealQuantityDisplay';
 import { parseManualNutrition } from '../lib/manualNutrition';
@@ -265,18 +267,20 @@ export function LogScreen() {
   const [portionBusyMealId, setPortionBusyMealId] = useState<string | null>(null);
   const [portionInputMeal, setPortionInputMeal] = useState<MealRow | null>(null);
   const [portionInputValue, setPortionInputValue] = useState('');
+  /** PORTION_COUNT 레거시 편집 시 템플릿 연동 유지(저장 후 g로 떨어지지 않게). */
+  const [editingLegacyPortionId, setEditingLegacyPortionId] = useState<string | null>(null);
   const [nameFocused, setNameFocused] = useState(false);
   const [nutritionDraft, setNutritionDraft] = useState<{
     foodId: string;
     per100g: Per100gMacros;
   } | null>(null);
-  const [nutritionGrams, setNutritionGrams] = useState('100');
+  const [nutritionGrams, setNutritionGrams] = useState('');
   const [nutritionMacrosLocked, setNutritionMacrosLocked] = useState(false);
   const gramsFieldRef = useRef<View>(null);
 
   const clearNutritionDraft = useCallback(() => {
     setNutritionDraft(null);
-    setNutritionGrams('100');
+    setNutritionGrams('');
     setNutritionMacrosLocked(false);
   }, []);
 
@@ -349,6 +353,7 @@ export function LogScreen() {
 
   const resetForm = useCallback(() => {
     setEditingMealId(null);
+    setEditingLegacyPortionId(null);
     setName(EMPTY_FORM.name);
     setCalories(EMPTY_FORM.calories);
     setProtein(EMPTY_FORM.protein);
@@ -432,6 +437,8 @@ export function LogScreen() {
     ),
   );
 
+  const tplById = useMemo(() => buildFoodTemplateMap(templates), [templates]);
+
   const newMealConsumedAt = (): string => {
     if (targetYmd) return kstNoonIsoFromYmd(targetYmd);
     return new Date().toISOString();
@@ -502,75 +509,98 @@ export function LogScreen() {
       };
 
       // Phase 1 g-only: always name + grams + total macros (NF draft or pure manual).
+      // Phase 1.1: editing a PORTION_COUNT template meal keeps template so list stays 개/접시.
       if (!name.trim()) throw new Error(LOG_COPY.nameRequired);
       if (name.trim().length > NUTRITION_FOOD_NAME_MAX) throw new Error(LOG_COPY.nutritionDbNameTooLong);
       let grams: number;
       try {
+        if (!String(nutritionGrams).trim()) {
+          throw new Error(LOG_COPY.gramsRequired);
+        }
         grams = parseNutritionFoodGramsInput(nutritionGrams);
-      } catch {
+      } catch (e) {
+        if (e instanceof Error && e.message === LOG_COPY.gramsRequired) throw e;
         throw new Error(LOG_COPY.nutritionDbGramsInvalid);
       }
       if (grams < NUTRITION_FOOD_GRAMS_MIN || grams > NUTRITION_FOOD_GRAMS_MAX) {
         throw new Error(LOG_COPY.nutritionDbGramsInvalid);
       }
-      const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
-      let body: Record<string, unknown>;
-      try {
-        body = buildNutritionFoodMealBody({
-          mealBodyBase: mealBodyBase(),
-          name,
-          grams,
-          ...nutrition,
-          editing: Boolean(editingMealId),
-          existingPortionQuantity: 1,
+
+      if (editingMealId && editingLegacyPortionId) {
+        const tpl = tplById.get(editingLegacyPortionId);
+        if (!tpl || !(tpl.servingGrams > 0)) {
+          throw new Error(LOG_COPY.portionAdjustError);
+        }
+        const portionQty = gramsToPortionQuantity(grams, tpl.servingGrams);
+        if (portionQty == null) {
+          throw new Error(LOG_COPY.portionQtyInvalid);
+        }
+        await updateMeal(token, editingMealId, {
+          ...mealBodyBase(),
+          foodTemplateId: tpl.id,
+          mealInputMode: 'PORTION_COUNT',
+          portionQuantity: portionQty,
         });
-      } catch (e) {
-        if (e instanceof Error && e.message === 'NAME_TOO_LONG') {
-          throw new Error(LOG_COPY.nutritionDbNameTooLong);
-        }
-        if (e instanceof Error && e.message === 'INVALID_GRAMS') {
-          throw new Error(LOG_COPY.nutritionDbGramsInvalid);
-        }
-        throw e;
-      }
-      if (editingMealId) {
-        await updateMeal(token, editingMealId, body);
       } else {
-        const created = await createMealOnce(body);
-        const fromOcr = lastOcrSnapshot != null;
-        const currentFields: OcrFieldSnapshot = { calories, protein, carbohydrate, fat };
-        const editedBeforeSave = fromOcr && ocrFieldsEdited(lastOcrSnapshot, currentFields);
-        if (fromOcr) {
-          track(AnalyticsEvents.ocrCompleted, { edited_before_save: editedBeforeSave });
+        const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
+        let body: Record<string, unknown>;
+        try {
+          body = buildNutritionFoodMealBody({
+            mealBodyBase: mealBodyBase(),
+            name,
+            grams,
+            ...nutrition,
+            editing: Boolean(editingMealId),
+            existingPortionQuantity: 1,
+          });
+        } catch (e) {
+          if (e instanceof Error && e.message === 'NAME_TOO_LONG') {
+            throw new Error(LOG_COPY.nutritionDbNameTooLong);
+          }
+          if (e instanceof Error && e.message === 'INVALID_GRAMS') {
+            throw new Error(LOG_COPY.nutritionDbGramsInvalid);
+          }
+          throw e;
         }
-        if (fromOcr && editedBeforeSave && lastOcrSnapshot) {
-          const rawOcr = {
-            calories: Math.round(Number(lastOcrSnapshot.calories)),
-            protein: Math.round(Number(lastOcrSnapshot.protein)),
-            carbohydrate: Math.round(Number(lastOcrSnapshot.carbohydrate)),
-            fat: Math.round(Number(lastOcrSnapshot.fat)),
-            rawText: lastOcrMeta?.rawText,
-          };
-          const corrected = {
-            calories: Math.round(Number(calories)),
-            protein: Math.round(Number(protein)),
-            carbohydrate: Math.round(Number(carbohydrate)),
-            fat: Math.round(Number(fat)),
-          };
-          void postOcrFeedback(token, {
-            rawOcr,
-            corrected,
-            mealId: created.mealId,
-            confidence: lastOcrMeta?.confidence,
-          }).catch(() => undefined);
+        if (editingMealId) {
+          await updateMeal(token, editingMealId, body);
+        } else {
+          const created = await createMealOnce(body);
+          const fromOcr = lastOcrSnapshot != null;
+          const currentFields: OcrFieldSnapshot = { calories, protein, carbohydrate, fat };
+          const editedBeforeSave = fromOcr && ocrFieldsEdited(lastOcrSnapshot, currentFields);
+          if (fromOcr) {
+            track(AnalyticsEvents.ocrCompleted, { edited_before_save: editedBeforeSave });
+          }
+          if (fromOcr && editedBeforeSave && lastOcrSnapshot) {
+            const rawOcr = {
+              calories: Math.round(Number(lastOcrSnapshot.calories)),
+              protein: Math.round(Number(lastOcrSnapshot.protein)),
+              carbohydrate: Math.round(Number(lastOcrSnapshot.carbohydrate)),
+              fat: Math.round(Number(lastOcrSnapshot.fat)),
+              rawText: lastOcrMeta?.rawText,
+            };
+            const corrected = {
+              calories: Math.round(Number(calories)),
+              protein: Math.round(Number(protein)),
+              carbohydrate: Math.round(Number(carbohydrate)),
+              fat: Math.round(Number(fat)),
+            };
+            void postOcrFeedback(token, {
+              rawOcr,
+              corrected,
+              mealId: created.mealId,
+              confidence: lastOcrMeta?.confidence,
+            }).catch(() => undefined);
+          }
+          track(AnalyticsEvents.mealRecorded, {
+            input_mode: fromOcr ? 'ocr' : 'manual',
+            meal_slot: mealSlot.toLowerCase(),
+            from_ocr: fromOcr,
+          });
+          setLastOcrSnapshot(null);
+          setLastOcrMeta(null);
         }
-        track(AnalyticsEvents.mealRecorded, {
-          input_mode: fromOcr ? 'ocr' : 'manual',
-          meal_slot: mealSlot.toLowerCase(),
-          from_ocr: fromOcr,
-        });
-        setLastOcrSnapshot(null);
-        setLastOcrMeta(null);
       }
 
       pendingCreateRequestIdRef.current = null;
@@ -653,8 +683,9 @@ export function LogScreen() {
     });
     setSelectedTpl(null);
     setEditingMealId(null);
+    setEditingLegacyPortionId(null);
     clearNutritionDraft();
-    setNutritionGrams('100');
+    // OCR 매크로는 총량. 섭취량(g)은 비워 사용자가 확인 후 입력.
     setCalories(String(Math.round(res.calories)));
     setProtein(String(Math.round(res.protein)));
     setCarbohydrate(String(Math.round(res.carbohydrate)));
@@ -762,8 +793,11 @@ export function LogScreen() {
     setLastOcrMeta(null);
     clearNutritionDraft();
     setName(m.name);
-    const g = m.grams != null && m.grams > 0 ? m.grams : 100;
-    setNutritionGrams(formatScaledMacroForForm(g));
+    if (m.grams != null && m.grams > 0) {
+      setNutritionGrams(formatScaledMacroForForm(m.grams));
+    } else {
+      setNutritionGrams('');
+    }
     setManualPortion('1');
     setCalories(formatScaledMacroForForm(m.calories));
     setProtein(formatScaledMacroForForm(m.protein));
@@ -775,20 +809,26 @@ export function LogScreen() {
     scheduleScrollToEntry();
   };
 
-  const tplById = useMemo(() => buildFoodTemplateMap(templates), [templates]);
-
   const adjustMealPortion = async (item: MealRow, nextQty: number) => {
     setPortionBusyMealId(item.mealId);
     try {
       const token = await ensureAccessToken();
       if (!token) throw new Error('로그인 필요');
-      const disp = listMealQuantityDisplay(item, tplById);
-      if (!disp) {
-        toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
-        return;
-      }
-      if (disp.stepMode === 'portion') {
-        await adjustMealPortionCountOnServer(token, item, nextQty);
+      const tplId = item.foodTemplateId?.trim() || null;
+      const tpl = tplId ? tplById.get(tplId) : undefined;
+      // Never convert legacy 개/접시 meals to g via grams ±10 (clears foodTemplateId).
+      if (isLegacyPortionMeal(item) && tpl && tpl.servingGrams > 0) {
+        const disp = listMealQuantityDisplay(item, tplById);
+        let nextPortion = nextQty;
+        if (disp?.stepMode !== 'portion') {
+          const converted = gramsToPortionQuantity(nextQty, tpl.servingGrams);
+          if (converted == null) {
+            toast.show({ kind: 'error', message: LOG_COPY.portionQtyInvalid });
+            return;
+          }
+          nextPortion = converted;
+        }
+        await adjustMealPortionCountOnServer(token, item, nextPortion);
       } else {
         if (!(effectiveMealGrams(item.grams) > 0)) {
           toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
@@ -873,13 +913,21 @@ export function LogScreen() {
     clearNutritionDraft();
     setSelectedTpl(null);
     setName(item.name);
-    const g = item.grams != null && item.grams > 0 ? item.grams : 100;
-    setNutritionGrams(formatScaledMacroForForm(g));
+    if (item.grams != null && item.grams > 0) {
+      setNutritionGrams(formatScaledMacroForForm(item.grams));
+    } else {
+      setNutritionGrams('');
+    }
     setManualPortion('1');
     setCalories(formatScaledMacroForForm(item.calories));
     setProtein(formatScaledMacroForForm(item.protein));
     setCarbohydrate(formatScaledMacroForForm(item.carbohydrate));
     setFat(formatScaledMacroForForm(item.fat));
+    const legacyTplId =
+      isLegacyPortionMeal(item) && item.foodTemplateId?.trim()
+        ? item.foodTemplateId.trim()
+        : null;
+    setEditingLegacyPortionId(legacyTplId);
     scheduleScrollToEntry();
   };
 
@@ -888,9 +936,13 @@ export function LogScreen() {
     setLastOcrMeta(null);
     setLastOcrSnapshot(null);
     clearNutritionDraft();
-    const grams = item.servingGrams > 0 ? clampNutritionFoodGrams(item.servingGrams) : 100;
     setName(item.name);
-    setNutritionGrams(formatScaledMacroForForm(grams));
+    if (item.servingGrams > 0) {
+      const grams = clampNutritionFoodGrams(item.servingGrams);
+      setNutritionGrams(formatScaledMacroForForm(grams));
+    } else {
+      setNutritionGrams('');
+    }
     setCalories(formatScaledMacroForForm(item.calories));
     setProtein(formatScaledMacroForForm(item.protein));
     setCarbohydrate(formatScaledMacroForForm(item.carbohydrate));
@@ -904,10 +956,24 @@ export function LogScreen() {
     setLastOcrMeta(null);
     setLastOcrSnapshot(null);
     setNutritionMacrosLocked(false);
-    const grams = resolveNutritionFoodDefaultGrams(item.defaultServingGrams);
     setNutritionDraft({ foodId: item.id, per100g: { ...item.per100g } });
-    setNutritionGrams(formatScaledMacroForForm(grams));
     setName(item.name);
+    const hasDefault =
+      item.defaultServingGrams != null &&
+      Number.isFinite(item.defaultServingGrams) &&
+      item.defaultServingGrams > 0;
+    if (!hasDefault) {
+      setNutritionGrams('');
+      setCalories('');
+      setProtein('');
+      setCarbohydrate('');
+      setFat('');
+      setNameFocused(false);
+      scheduleScrollToEntry();
+      return;
+    }
+    const grams = resolveNutritionFoodDefaultGrams(item.defaultServingGrams);
+    setNutritionGrams(formatScaledMacroForForm(grams));
     try {
       const scaled = scaleNutritionFromPer100g(item.per100g, grams);
       setCalories(formatScaledMacroForForm(scaled.calories));
@@ -1171,7 +1237,7 @@ export function LogScreen() {
           value={nutritionGrams}
           onChangeText={onNutritionGramsChange}
           keyboardType="numeric"
-          placeholder="100"
+          placeholder={LOG_COPY.gramsPlaceholder}
           onFocus={() => scrollFieldIntoView(gramsFieldRef)}
         />
       </View>
