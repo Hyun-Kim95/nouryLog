@@ -115,7 +115,12 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
       if (!token) throw new Error('로그인 필요');
       const tplId = item.foodTemplateId?.trim() || null;
       const tpl = tplId ? tplById.get(tplId) : undefined;
-      if (isLegacyPortionMeal(item) && tpl && tpl.servingGrams > 0) {
+      if (isLegacyPortionMeal(item)) {
+        if (!tpl || !(tpl.servingGrams > 0)) {
+          toast.show({ kind: 'error', message: LOG_COPY.portionTemplateLoadFailed });
+          await loadTemplates();
+          return;
+        }
         const disp = listMealQuantityDisplay(item, tplById);
         let nextPortion = nextQty;
         if (disp?.stepMode !== 'portion') {
@@ -258,7 +263,7 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
               </Text>
               {section.items.map((item) => {
                 const qtyDisp = listMealQuantityDisplay(item, tplById);
-                const showStepper = qtyDisp != null && canAdjustPortionInList(item);
+                const showStepper = canAdjustPortionInList(item, tplById);
                 return (
                   <View
                     key={item.mealId}
@@ -293,6 +298,15 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
                         onChange={(nextQty) => void adjustPortion(item, nextQty)}
                         onPressCurrent={() => openPortionInput(item)}
                       />
+                    ) : qtyDisp ? (
+                      <View style={{ minWidth: 52, alignItems: 'center' }}>
+                        <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '700' }}>
+                          {formatListMealQuantity(qtyDisp.quantity)}
+                        </Text>
+                        <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                          {qtyDisp.unitLabel}
+                        </Text>
+                      </View>
                     ) : null}
                     <View style={{ flexShrink: 0, gap: t.spacing.xs, minWidth: showStepper ? 52 : 76 }}>
                       {!showStepper ? (

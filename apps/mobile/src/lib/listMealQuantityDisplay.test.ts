@@ -8,6 +8,7 @@ import {
   gramsToPortionQuantity,
   isLegacyPortionMeal,
   buildFoodTemplateMap,
+  canAdjustMealQuantityInList,
 } from './listMealQuantityDisplay';
 import { matchingGramPresets } from './gramPresets';
 
@@ -84,6 +85,49 @@ describe('AC-09 listMealQuantityDisplay', () => {
       tplById,
     );
     assert.equal(disp, null);
+  });
+
+  it('returns null for manual server-default 100g', () => {
+    const disp = listMealQuantityDisplay(
+      meal({
+        mealId: 'm4',
+        name: '진라면',
+        grams: 100,
+        foodTemplateId: null,
+      }),
+      tplById,
+    );
+    assert.equal(disp, null);
+  });
+
+  it('canAdjust matches display (blocks PORTION when tpl missing)', () => {
+    const portionMeal = meal({
+      mealId: 'm5',
+      name: '계란',
+      grams: 100,
+      foodTemplateId: 'tpl-egg',
+      mealInputMode: 'PORTION_COUNT',
+      portionQuantity: 2,
+    });
+    assert.equal(canAdjustMealQuantityInList(portionMeal, tplById), true);
+    const missingTpl = listMealQuantityDisplay(portionMeal, new Map());
+    assert.equal(missingTpl?.stepMode, 'portion');
+    assert.equal(missingTpl?.servingGrams, null);
+    assert.equal(canAdjustMealQuantityInList(portionMeal, new Map()), false);
+    assert.equal(
+      canAdjustMealQuantityInList(
+        meal({ mealId: 'm6', name: '진라면', grams: 100, foodTemplateId: null }),
+        tplById,
+      ),
+      false,
+    );
+    assert.equal(
+      canAdjustMealQuantityInList(
+        meal({ mealId: 'm7', name: '밥', grams: 210, foodTemplateId: null }),
+        tplById,
+      ),
+      true,
+    );
   });
 });
 

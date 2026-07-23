@@ -12,6 +12,8 @@ import {
   nextMealPortionQuantity,
   type ListMealStepMode,
 } from '../lib/listMealQuantityDisplay';
+
+export { canAdjustMealQuantityInList as canAdjustPortionInList } from '../lib/listMealQuantityDisplay';
 import {
   NUTRITION_FOOD_GRAMS_MAX,
   NUTRITION_FOOD_GRAMS_MIN,
@@ -125,22 +127,4 @@ export function MealPortionStepper({
       </Pressable>
     </View>
   );
-}
-
-export function canAdjustPortionInList(meal: {
-  grams?: number | null;
-  foodTemplateId?: string | null;
-  mealInputMode?: string | null;
-  portionQuantity?: number | null;
-}): boolean {
-  if (
-    meal.foodTemplateId &&
-    meal.mealInputMode === 'PORTION_COUNT' &&
-    meal.portionQuantity != null &&
-    Number.isFinite(meal.portionQuantity) &&
-    meal.portionQuantity > 0
-  ) {
-    return true;
-  }
-  return meal.grams != null && Number.isFinite(meal.grams) && meal.grams > 0;
 }

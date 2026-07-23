@@ -115,7 +115,7 @@ Log → 템플릿 칩 없음
 | 구앱 | 템플릿 POST 수용(D-1) |
 | 목록 −/+ | 기본 `grams ± 10`; PORTION_COUNT 레거시 `portionQuantity ± 1` → grams·매크로 갱신 |
 | MealSet | Phase 1 기존 유지 |
-| 프리셋 | **Phase 1.1 In** — 라벨→고정 g, 저장 수기 g. 김치·치킨 접시/인분 2차 Out |
+| 프리셋 | **Phase 1.1 In** — 라벨→고정 g. **Phase 1.2:** 동일 음식명 「이전에 쓴 양」칩(빈도). 김치·치킨 접시 2차 Out |
 
 ### 비기능·보안(라이트)
 - vibe-coding-baseline 5항. 측정·성능·보안 엄격 게이트: 아니오.

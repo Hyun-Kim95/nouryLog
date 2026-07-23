@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { useCallback, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -76,6 +76,18 @@ import {
   effectiveMealGrams,
 } from '../lib/adjustMealGrams';
 import { matchingGramPresets } from '../lib/gramPresets';
+import {
+  displayAmountFromGrams,
+  findTemplateForIntakeUnit,
+  gramsFromIntakeAmount,
+  intakeUnitOptionsForName,
+  macrosForIntakeAmount,
+  mealNameMatchesQuery,
+  priorMealAmountsForName,
+  type IntakeUnitOption,
+  type PriorMealAmount,
+} from '../lib/priorMealAmounts';
+import { resolvedEditableGrams } from '../lib/unsetManualGrams';
 import {
   MEAL_PORTION_QTY_MAX,
   MEAL_PORTION_QTY_MIN,
@@ -239,6 +251,7 @@ export function LogScreen() {
   const fatFieldRef = useRef<View>(null);
   const tplAmountFieldRef = useRef<View>(null);
   const [recentMeals, setRecentMeals] = useState<MealRow[]>([]);
+  const [amountHistoryMeals, setAmountHistoryMeals] = useState<MealRow[]>([]);
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
   const [protein, setProtein] = useState('');
@@ -264,6 +277,8 @@ export function LogScreen() {
   const [mealInputMode, setMealInputMode] = useState<TemplateInputMode>('PORTION_COUNT');
   const [tplAmount, setTplAmount] = useState('1');
   const [editingMealId, setEditingMealId] = useState<string | null>(null);
+  /** Original name when edit started — used to detect “new food” vs rename/update. */
+  const [editingOriginalName, setEditingOriginalName] = useState<string | null>(null);
   const [portionBusyMealId, setPortionBusyMealId] = useState<string | null>(null);
   const [portionInputMeal, setPortionInputMeal] = useState<MealRow | null>(null);
   const [portionInputValue, setPortionInputValue] = useState('');
@@ -275,12 +290,18 @@ export function LogScreen() {
     per100g: Per100gMacros;
   } | null>(null);
   const [nutritionGrams, setNutritionGrams] = useState('');
+  const [amountInput, setAmountInput] = useState('');
+  const [intakeUnitId, setIntakeUnitId] = useState('g');
+  const [selectedPriorAmountId, setSelectedPriorAmountId] = useState<string | null>(null);
   const [nutritionMacrosLocked, setNutritionMacrosLocked] = useState(false);
   const gramsFieldRef = useRef<View>(null);
 
   const clearNutritionDraft = useCallback(() => {
     setNutritionDraft(null);
     setNutritionGrams('');
+    setAmountInput('');
+    setIntakeUnitId('g');
+    setSelectedPriorAmountId(null);
     setNutritionMacrosLocked(false);
   }, []);
 
@@ -351,9 +372,18 @@ export function LogScreen() {
     clearNutritionDraft();
   }, [clearNutritionDraft]);
 
+  const leaveEditForNewFood = useCallback(() => {
+    if (!editingMealId) return;
+    setEditingMealId(null);
+    setEditingLegacyPortionId(null);
+    setEditingOriginalName(null);
+    toast.show({ kind: 'info', message: LOG_COPY.editSwitchedToNew });
+  }, [editingMealId, toast]);
+
   const resetForm = useCallback(() => {
     setEditingMealId(null);
     setEditingLegacyPortionId(null);
+    setEditingOriginalName(null);
     setName(EMPTY_FORM.name);
     setCalories(EMPTY_FORM.calories);
     setProtein(EMPTY_FORM.protein);
@@ -404,11 +434,13 @@ export function LogScreen() {
     if (!token) return;
     try {
       const { from, to } = localDayBounds();
-      const [todayRes, recent] = await Promise.all([
+      const [todayRes, recent, historyRes] = await Promise.all([
         listMeals(token, { page: 1, size: 100, from, to }),
         listMeals(token, { page: 1, size: 30, excludeFoodTemplate: true }),
+        listMeals(token, { page: 1, size: 100 }),
       ]);
       setItems(todayRes.items ?? []);
+      setAmountHistoryMeals(historyRes.items ?? []);
       const seen = new Set<string>();
       const deduped: MealRow[] = [];
       for (const m of recent.items ?? []) {
@@ -423,6 +455,7 @@ export function LogScreen() {
       if (isAuthDenied(e)) return;
       setItems([]);
       setRecentMeals([]);
+      setAmountHistoryMeals([]);
     }
   }, []);
 
@@ -444,10 +477,10 @@ export function LogScreen() {
     return new Date().toISOString();
   };
 
-  const mealBodyBase = (): Record<string, unknown> => {
+  const mealBodyBase = (opts?: { keepConsumedAt?: boolean }): Record<string, unknown> => {
     const base: Record<string, unknown> = {
       mealSlot,
-      consumedAt: editingMealId ? consumedAt : newMealConsumedAt(),
+      consumedAt: opts?.keepConsumedAt ? consumedAt : newMealConsumedAt(),
     };
     if (mealSlot === 'SNACK') {
       base.snackPlacement = snackPlacement;
@@ -470,7 +503,7 @@ export function LogScreen() {
     const amt = Number(String(tplAmount).replace(',', '.'));
     if (!Number.isFinite(amt) || amt <= 0) throw new Error('수량을 올바르게 입력해 주세요.');
     const body: Record<string, unknown> = {
-      ...mealBodyBase(),
+      ...mealBodyBase({ keepConsumedAt: true }),
       foodTemplateId: selectedTpl.id,
       mealInputMode,
     };
@@ -482,10 +515,12 @@ export function LogScreen() {
     return body;
   };
 
-  const saveMeal = async () => {
+  const saveMeal = async (opts?: { forceCreate?: boolean }) => {
     if (saveInFlightRef.current) return;
     saveInFlightRef.current = true;
     setSaveBusy(true);
+    const targetMealId = opts?.forceCreate ? null : editingMealId;
+    const keepConsumedAt = Boolean(targetMealId);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('로그인 필요');
@@ -526,31 +561,60 @@ export function LogScreen() {
         throw new Error(LOG_COPY.nutritionDbGramsInvalid);
       }
 
-      if (editingMealId && editingLegacyPortionId) {
-        const tpl = tplById.get(editingLegacyPortionId);
-        if (!tpl || !(tpl.servingGrams > 0)) {
-          throw new Error(LOG_COPY.portionAdjustError);
-        }
-        const portionQty = gramsToPortionQuantity(grams, tpl.servingGrams);
-        if (portionQty == null) {
+      const portionTpl =
+        intakeUnit.kind === 'portion'
+          ? findTemplateForIntakeUnit(name, intakeUnit, templates) ??
+            (editingLegacyPortionId && targetMealId
+              ? tplById.get(editingLegacyPortionId) ?? null
+              : null)
+          : editingLegacyPortionId && targetMealId
+            ? tplById.get(editingLegacyPortionId) ?? null
+            : null;
+
+      if (intakeUnit.kind === 'portion' && !portionTpl) {
+        throw new Error(LOG_COPY.portionTemplateMissing);
+      }
+
+      if (portionTpl && (intakeUnit.kind === 'portion' || (editingLegacyPortionId && targetMealId))) {
+        const portionQty =
+          intakeUnit.kind === 'portion'
+            ? Number(String(amountInput).replace(',', '.'))
+            : gramsToPortionQuantity(grams, portionTpl.servingGrams);
+        if (
+          portionQty == null ||
+          !Number.isFinite(portionQty) ||
+          portionQty < MEAL_PORTION_QTY_MIN ||
+          portionQty > MEAL_PORTION_QTY_MAX
+        ) {
           throw new Error(LOG_COPY.portionQtyInvalid);
         }
-        await updateMeal(token, editingMealId, {
-          ...mealBodyBase(),
-          foodTemplateId: tpl.id,
+        const tplBody: Record<string, unknown> = {
+          ...mealBodyBase({ keepConsumedAt }),
+          foodTemplateId: portionTpl.id,
           mealInputMode: 'PORTION_COUNT',
-          portionQuantity: portionQty,
-        });
+          portionQuantity: Math.round(portionQty * 100) / 100,
+        };
+        if (targetMealId) {
+          await updateMeal(token, targetMealId, tplBody);
+        } else {
+          const created = await createMealOnce(tplBody);
+          track(AnalyticsEvents.mealRecorded, {
+            input_mode: 'manual',
+            meal_slot: mealSlot.toLowerCase(),
+            from_ocr: false,
+          });
+          void created;
+        }
       } else {
         const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
         let body: Record<string, unknown>;
         try {
           body = buildNutritionFoodMealBody({
-            mealBodyBase: mealBodyBase(),
+            mealBodyBase: mealBodyBase({ keepConsumedAt }),
             name,
             grams,
             ...nutrition,
-            editing: Boolean(editingMealId),
+            editing: Boolean(targetMealId),
             existingPortionQuantity: 1,
           });
         } catch (e) {
@@ -562,8 +626,8 @@ export function LogScreen() {
           }
           throw e;
         }
-        if (editingMealId) {
-          await updateMeal(token, editingMealId, body);
+        if (targetMealId) {
+          await updateMeal(token, targetMealId, body);
         } else {
           const created = await createMealOnce(body);
           const fromOcr = lastOcrSnapshot != null;
@@ -606,7 +670,7 @@ export function LogScreen() {
       pendingCreateRequestIdRef.current = null;
       toast.show({
         kind: 'success',
-        message: editingMealId ? LOG_COPY.editSuccess : LOG_COPY.saveSuccess,
+        message: targetMealId ? LOG_COPY.editSuccess : LOG_COPY.saveSuccess,
       });
       resetForm();
       await load();
@@ -621,6 +685,29 @@ export function LogScreen() {
       saveInFlightRef.current = false;
       setSaveBusy(false);
     }
+  };
+
+  const requestSaveMeal = () => {
+    if (saveInFlightRef.current || saveBusy) return;
+    if (
+      editingMealId &&
+      editingOriginalName != null &&
+      !mealNameMatchesQuery(name, editingOriginalName)
+    ) {
+      Alert.alert(LOG_COPY.editNameChangedTitle, LOG_COPY.editNameChangedBody, [
+        { text: '취소', style: 'cancel' },
+        {
+          text: LOG_COPY.editNameChangedUpdate,
+          onPress: () => void saveMeal({ forceCreate: false }),
+        },
+        {
+          text: LOG_COPY.editNameChangedCreate,
+          onPress: () => void saveMeal({ forceCreate: true }),
+        },
+      ]);
+      return;
+    }
+    void saveMeal();
   };
 
   const confirmDelete = () => {
@@ -684,6 +771,7 @@ export function LogScreen() {
     setSelectedTpl(null);
     setEditingMealId(null);
     setEditingLegacyPortionId(null);
+    setEditingOriginalName(null);
     clearNutritionDraft();
     // OCR 매크로는 총량. 섭취량(g)은 비워 사용자가 확인 후 입력.
     setCalories(String(Math.round(res.calories)));
@@ -789,15 +877,29 @@ export function LogScreen() {
   };
 
   const applyManualFromMeal = (m: MealRow) => {
+    leaveEditForNewFood();
     setSelectedTpl(null);
     setLastOcrMeta(null);
     clearNutritionDraft();
     setName(m.name);
-    if (m.grams != null && m.grams > 0) {
-      setNutritionGrams(formatScaledMacroForForm(m.grams));
+    const g = resolvedEditableGrams(m);
+    if (g != null) {
+      setNutritionGrams(formatScaledMacroForForm(g));
+      const disp = listMealQuantityDisplay(m, tplById);
+      if (disp?.stepMode === 'portion') {
+        const unitId = `p:${disp.unitLabel}:${disp.servingGrams}`;
+        setIntakeUnitId(unitId);
+        setAmountInput(formatListMealQuantity(disp.quantity));
+      } else {
+        setIntakeUnitId('g');
+        setAmountInput(formatScaledMacroForForm(g));
+      }
     } else {
       setNutritionGrams('');
+      setAmountInput('');
+      setIntakeUnitId('g');
     }
+    setSelectedPriorAmountId(null);
     setManualPortion('1');
     setCalories(formatScaledMacroForForm(m.calories));
     setProtein(formatScaledMacroForForm(m.protein));
@@ -817,7 +919,12 @@ export function LogScreen() {
       const tplId = item.foodTemplateId?.trim() || null;
       const tpl = tplId ? tplById.get(tplId) : undefined;
       // Never convert legacy 개/접시 meals to g via grams ±10 (clears foodTemplateId).
-      if (isLegacyPortionMeal(item) && tpl && tpl.servingGrams > 0) {
+      if (isLegacyPortionMeal(item)) {
+        if (!tpl || !(tpl.servingGrams > 0)) {
+          toast.show({ kind: 'error', message: LOG_COPY.portionTemplateLoadFailed });
+          await loadTemplates();
+          return;
+        }
         const disp = listMealQuantityDisplay(item, tplById);
         let nextPortion = nextQty;
         if (disp?.stepMode !== 'portion') {
@@ -905,6 +1012,7 @@ export function LogScreen() {
 
   const startEditMeal = (item: MealRow) => {
     setEditingMealId(item.mealId);
+    setEditingOriginalName(item.name);
     setConsumedAt(item.consumedAt);
     if (item.mealSlot) setMealSlot(item.mealSlot);
     if (item.snackPlacement) setSnackPlacement(item.snackPlacement);
@@ -913,11 +1021,23 @@ export function LogScreen() {
     clearNutritionDraft();
     setSelectedTpl(null);
     setName(item.name);
-    if (item.grams != null && item.grams > 0) {
-      setNutritionGrams(formatScaledMacroForForm(item.grams));
+    const g = resolvedEditableGrams(item);
+    if (g != null) {
+      setNutritionGrams(formatScaledMacroForForm(g));
+      const disp = listMealQuantityDisplay(item, tplById);
+      if (disp?.stepMode === 'portion') {
+        setIntakeUnitId(`p:${disp.unitLabel}:${disp.servingGrams}`);
+        setAmountInput(formatListMealQuantity(disp.quantity));
+      } else {
+        setIntakeUnitId('g');
+        setAmountInput(formatScaledMacroForForm(g));
+      }
     } else {
       setNutritionGrams('');
+      setAmountInput('');
+      setIntakeUnitId('g');
     }
+    setSelectedPriorAmountId(null);
     setManualPortion('1');
     setCalories(formatScaledMacroForForm(item.calories));
     setProtein(formatScaledMacroForForm(item.protein));
@@ -932,6 +1052,7 @@ export function LogScreen() {
   };
 
   const selectTemplate = (item: FoodTemplateItem) => {
+    leaveEditForNewFood();
     setSelectedTpl(null);
     setLastOcrMeta(null);
     setLastOcrSnapshot(null);
@@ -940,8 +1061,26 @@ export function LogScreen() {
     if (item.servingGrams > 0) {
       const grams = clampNutritionFoodGrams(item.servingGrams);
       setNutritionGrams(formatScaledMacroForForm(grams));
+      if (item.portionUnit !== 'GRAM') {
+        const unitLabel =
+          item.portionLabel ||
+          (item.portionUnit === 'PIECE'
+            ? '개'
+            : item.portionUnit === 'PLATE'
+              ? '접시'
+              : item.portionUnit === 'BOWL'
+                ? '공기'
+                : '단위');
+        setIntakeUnitId(`p:${unitLabel}:${item.servingGrams}`);
+        setAmountInput('1');
+      } else {
+        setIntakeUnitId('g');
+        setAmountInput(formatScaledMacroForForm(grams));
+      }
     } else {
       setNutritionGrams('');
+      setAmountInput('');
+      setIntakeUnitId('g');
     }
     setCalories(formatScaledMacroForForm(item.calories));
     setProtein(formatScaledMacroForForm(item.protein));
@@ -952,6 +1091,7 @@ export function LogScreen() {
   };
 
   const selectNutritionFood = (item: NutritionFoodItem) => {
+    leaveEditForNewFood();
     setSelectedTpl(null);
     setLastOcrMeta(null);
     setLastOcrSnapshot(null);
@@ -964,6 +1104,8 @@ export function LogScreen() {
       item.defaultServingGrams > 0;
     if (!hasDefault) {
       setNutritionGrams('');
+      setAmountInput('');
+      setIntakeUnitId('g');
       setCalories('');
       setProtein('');
       setCarbohydrate('');
@@ -973,6 +1115,8 @@ export function LogScreen() {
       return;
     }
     const grams = resolveNutritionFoodDefaultGrams(item.defaultServingGrams);
+    setIntakeUnitId('g');
+    setAmountInput(formatScaledMacroForForm(grams));
     setNutritionGrams(formatScaledMacroForForm(grams));
     try {
       const scaled = scaleNutritionFromPer100g(item.per100g, grams);
@@ -989,17 +1133,110 @@ export function LogScreen() {
     scheduleScrollToEntry();
   };
 
+  const applyMacros = (macros: { calories: number; protein: number; carbohydrate: number; fat: number }) => {
+    setCalories(formatScaledMacroForForm(macros.calories));
+    setProtein(formatScaledMacroForForm(macros.protein));
+    setCarbohydrate(formatScaledMacroForForm(macros.carbohydrate));
+    setFat(formatScaledMacroForForm(macros.fat));
+  };
+
+  const syncGramsFromAmount = (unit: IntakeUnitOption, text: string) => {
+    const grams = gramsFromIntakeAmount(unit, text);
+    if (grams == null) {
+      setNutritionGrams('');
+      return null;
+    }
+    setNutritionGrams(formatScaledMacroForForm(grams));
+    return grams;
+  };
+
+  const onAmountInputChange = (text: string) => {
+    setAmountInput(text);
+    setSelectedPriorAmountId(null);
+    const grams = syncGramsFromAmount(intakeUnit, text);
+    if (grams == null) return;
+
+    if (intakeUnit.kind === 'portion') {
+      const portionMacros = macrosForIntakeAmount(intakeUnit, text);
+      if (portionMacros && !nutritionMacrosLocked) {
+        applyMacros(portionMacros);
+        return;
+      }
+    }
+    if (!nutritionDraft || nutritionMacrosLocked) return;
+    try {
+      if (grams < NUTRITION_FOOD_GRAMS_MIN || grams > NUTRITION_FOOD_GRAMS_MAX) return;
+      const scaled = scaleNutritionFromPer100g(nutritionDraft.per100g, grams);
+      applyMacros(scaled);
+    } catch {
+      /* typing incomplete */
+    }
+  };
+
+  const onIntakeUnitChange = (unitId: string) => {
+    setIntakeUnitId(unitId);
+    setSelectedPriorAmountId(null);
+    const unit = intakeUnits.find((u) => u.id === unitId) ?? intakeUnits[0]!;
+    if (unit.kind === 'portion') {
+      const tpl = findTemplateForIntakeUnit(name, unit, templates);
+      setEditingLegacyPortionId(tpl?.id ?? editingLegacyPortionId);
+    } else if (!editingMealId) {
+      setEditingLegacyPortionId(null);
+    }
+    let grams = 0;
+    try {
+      grams = parseNutritionFoodGramsInput(nutritionGrams);
+    } catch {
+      grams = 0;
+    }
+    if (grams > 0) {
+      setAmountInput(displayAmountFromGrams(unit, grams));
+      if (unit.kind === 'portion' && !nutritionMacrosLocked) {
+        const qtyText = displayAmountFromGrams(unit, grams);
+        const portionMacros = macrosForIntakeAmount(unit, qtyText);
+        if (portionMacros) applyMacros(portionMacros);
+      }
+    } else {
+      setAmountInput('');
+    }
+  };
+
+  const applyPriorAmount = (amt: PriorMealAmount) => {
+    setNutritionDraft(null);
+    setNutritionMacrosLocked(false);
+    setIntakeUnitId(amt.unitId);
+    setAmountInput(formatListMealQuantity(amt.unitQuantity));
+    setNutritionGrams(formatScaledMacroForForm(amt.grams));
+    applyMacros(amt.macros);
+    setSelectedPriorAmountId(amt.id);
+    const unit =
+      intakeUnits.find((u) => u.id === amt.unitId) ??
+      ({
+        id: amt.unitId,
+        label: amt.unitLabel,
+        kind: amt.unitId === 'g' ? 'grams' : 'portion',
+        servingGrams: amt.unitId === 'g' ? null : amt.grams / Math.max(amt.unitQuantity, 1e-9),
+        perUnitMacros: null,
+      } satisfies IntakeUnitOption);
+    if (unit.kind === 'portion') {
+      const tpl = findTemplateForIntakeUnit(name, unit, templates);
+      setEditingLegacyPortionId(tpl?.id ?? null);
+    } else {
+      setEditingLegacyPortionId(null);
+    }
+  };
+
   const onNutritionGramsChange = (text: string) => {
+    // Legacy helper: treat as grams-unit amount entry.
+    setIntakeUnitId('g');
+    setAmountInput(text);
     setNutritionGrams(text);
     if (!nutritionDraft || nutritionMacrosLocked) return;
     try {
       const grams = parseNutritionFoodGramsInput(text);
       if (grams < NUTRITION_FOOD_GRAMS_MIN || grams > NUTRITION_FOOD_GRAMS_MAX) return;
       const scaled = scaleNutritionFromPer100g(nutritionDraft.per100g, grams);
-      setCalories(formatScaledMacroForForm(scaled.calories));
-      setProtein(formatScaledMacroForForm(scaled.protein));
-      setCarbohydrate(formatScaledMacroForForm(scaled.carbohydrate));
-      setFat(formatScaledMacroForForm(scaled.fat));
+      applyMacros(scaled);
     } catch {
       /* typing incomplete */
     }
@@ -1037,6 +1274,39 @@ export function LogScreen() {
   }, [editingMealId, selectedTpl, name, calories, protein, carbohydrate, fat]);
 
   const gramPresets = useMemo(() => matchingGramPresets(name), [name]);
+  const priorAmounts = useMemo(
+    () => priorMealAmountsForName(name, amountHistoryMeals, tplById, 5),
+    [name, amountHistoryMeals, tplById],
+  );
+  const intakeUnits = useMemo(
+    () => intakeUnitOptionsForName(name, amountHistoryMeals, templates),
+    [name, amountHistoryMeals, templates],
+  );
+  const intakeUnit: IntakeUnitOption = useMemo(() => {
+    return intakeUnits.find((u) => u.id === intakeUnitId) ?? intakeUnits[0]!;
+  }, [intakeUnits, intakeUnitId]);
+  const gramPresetsExtra = useMemo(() => {
+    if (priorAmounts.length === 0) return gramPresets;
+    return gramPresets.filter(
+      (p) => !priorAmounts.some((a) => Math.abs(a.grams - p.grams) < 0.05),
+    );
+  }, [gramPresets, priorAmounts]);
+
+  // Drop stale portion unit when food name no longer supports it.
+  useEffect(() => {
+    if (intakeUnits.some((u) => u.id === intakeUnitId)) return;
+    setIntakeUnitId('g');
+    setSelectedPriorAmountId(null);
+    if (!editingMealId) setEditingLegacyPortionId(null);
+    let grams = 0;
+    try {
+      grams = parseNutritionFoodGramsInput(nutritionGrams);
+    } catch {
+      grams = 0;
+    }
+    // Keep amountInput aligned with nutritionGrams (avoid showing "2" while saving 100g).
+    setAmountInput(grams > 0 ? formatScaledMacroForForm(grams) : '');
+  }, [intakeUnits, intakeUnitId, nutritionGrams, editingMealId]);
 
   const nameSuggestEnabled = nameFocused && name.trim().length >= 1;
   const { items: nameSuggestions, status: nameSuggestStatus, errorKind: nameSuggestErrorKind } =
@@ -1231,26 +1501,100 @@ export function LogScreen() {
       <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
         {LOG_COPY.manualPerServingHint}
       </Text>
+      {intakeUnits.length > 1 ? (
+        <Segmented<string>
+          label={LOG_COPY.intakeUnitLabel}
+          options={intakeUnits.map((u) => ({ value: u.id, label: u.label }))}
+          value={intakeUnit.id}
+          onChange={onIntakeUnitChange}
+        />
+      ) : null}
       <View ref={gramsFieldRef} collapsable={false}>
         <LabeledField
-          label={LOG_COPY.gramsInputLabel}
-          value={nutritionGrams}
-          onChangeText={onNutritionGramsChange}
+          label={`${LOG_COPY.gramsInputLabel} (${intakeUnit.label})`}
+          value={amountInput}
+          onChangeText={onAmountInputChange}
           keyboardType="numeric"
-          placeholder={LOG_COPY.gramsPlaceholder}
+          placeholder={
+            intakeUnit.kind === 'grams' ? LOG_COPY.gramsPlaceholder : LOG_COPY.portionAmountPlaceholder
+          }
           onFocus={() => scrollFieldIntoView(gramsFieldRef)}
         />
       </View>
-      {gramPresets.length > 0 ? (
+      {priorAmounts.length > 0 ? (
+        <View style={{ gap: t.spacing.xs }}>
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+            {LOG_COPY.priorAmountHint}
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm }}>
+            {priorAmounts.map((amt) => {
+              const selected = selectedPriorAmountId === amt.id;
+              return (
+              <Pressable
+                key={amt.id}
+                onPress={() => applyPriorAmount(amt)}
+                style={({ pressed }) => ({
+                  paddingVertical: t.spacing.sm,
+                  paddingHorizontal: t.spacing.md,
+                  borderRadius: t.radius.md,
+                  borderWidth: selected ? 2 : 1,
+                  borderColor: selected ? t.colors.primary : t.colors.border,
+                  backgroundColor: selected
+                    ? t.colors.surface2
+                    : pressed
+                      ? t.colors.surface2
+                      : t.colors.surface,
+                })}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${LOG_COPY.priorAmountHint} ${amt.label}${selected ? ` ${LOG_COPY.priorAmountSelected}` : ''}`}
+              >
+                <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '700' }}>
+                  {amt.label}
+                  {selected ? ` · ${LOG_COPY.priorAmountSelected}` : ''}
+                </Text>
+                <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                  {Math.round(amt.macros.calories)} kcal
+                </Text>
+              </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+      {gramPresetsExtra.length > 0 ? (
         <View style={{ gap: t.spacing.xs }}>
           <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
             {LOG_COPY.gramPresetHint}
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm }}>
-            {gramPresets.map((preset) => (
+            {gramPresetsExtra.map((preset) => (
               <Pressable
                 key={preset.id}
-                onPress={() => onNutritionGramsChange(String(preset.grams))}
+                onPress={() => {
+                  setSelectedPriorAmountId(null);
+                  const unitLabel = preset.label.replace(/^[\d.]+/, '');
+                  const matched =
+                    intakeUnits.find(
+                      (u) =>
+                        u.kind === 'portion' &&
+                        u.label === unitLabel &&
+                        u.servingGrams === preset.grams,
+                    ) ||
+                    intakeUnits.find((u) => u.kind === 'portion' && u.label === unitLabel);
+                  if (matched) {
+                    setNutritionDraft(null);
+                    setNutritionMacrosLocked(false);
+                    setIntakeUnitId(matched.id);
+                    setAmountInput('1');
+                    setNutritionGrams(formatScaledMacroForForm(preset.grams));
+                    const m = macrosForIntakeAmount(matched, '1');
+                    if (m) applyMacros(m);
+                    else onNutritionGramsChange(String(preset.grams));
+                  } else {
+                    onNutritionGramsChange(String(preset.grams));
+                  }
+                }}
                 style={({ pressed }) => ({
                   paddingVertical: t.spacing.sm,
                   paddingHorizontal: t.spacing.md,
@@ -1501,7 +1845,9 @@ export function LogScreen() {
 
           <Card>
             {editingMealId ? (
-              <Banner variant="info">{LOG_COPY.editBanner(name.trim() || selectedTpl?.name || '식사')}</Banner>
+              <Banner variant="info">
+                {LOG_COPY.editBanner(editingOriginalName?.trim() || name.trim() || selectedTpl?.name || '식사')}
+              </Banner>
             ) : null}
             {lastOcrMeta && lastOcrMeta.confidence < 0.6 ? (
               <Banner variant="warn">{LOG_COPY.ocrLowConfidence}</Banner>
@@ -1520,7 +1866,7 @@ export function LogScreen() {
             <View style={{ gap: t.spacing.sm, marginTop: t.spacing.sm }}>
               <PrimaryButton
                 title={editingMealId ? LOG_COPY.saveEdit : LOG_COPY.addMeal}
-                onPress={() => void saveMeal()}
+                onPress={requestSaveMeal}
                 loading={saveBusy}
               />
               {editingMealId ? (
@@ -1575,8 +1921,8 @@ export function LogScreen() {
                           {section.title} · {section.summaryKcal} kcal
                         </Text>
                         {section.items.map((item) => {
-                          const showStepper = canAdjustPortionInList(item);
                           const qtyDisp = listMealQuantityDisplay(item, tplById);
+                          const showStepper = canAdjustPortionInList(item, tplById);
                           return (
                             <View
                               key={item.mealId}
@@ -1611,6 +1957,15 @@ export function LogScreen() {
                                   onChange={(nextQty) => void adjustMealPortion(item, nextQty)}
                                   onPressCurrent={() => openPortionInput(item)}
                                 />
+                              ) : qtyDisp ? (
+                                <View style={{ minWidth: 52, alignItems: 'center' }}>
+                                  <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '700' }}>
+                                    {formatListMealQuantity(qtyDisp.quantity)}
+                                  </Text>
+                                  <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                                    {qtyDisp.unitLabel}
+                                  </Text>
+                                </View>
                               ) : null}
                             </View>
                           );

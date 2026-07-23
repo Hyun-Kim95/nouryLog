@@ -5,6 +5,7 @@ import {
   NUTRITION_FOOD_GRAMS_MAX,
   NUTRITION_FOOD_GRAMS_MIN,
 } from './nutritionFoodScale';
+import { isLikelyUnsetManualGrams } from './unsetManualGrams';
 
 export const MEAL_PORTION_QTY_MIN = 0.25;
 export const MEAL_PORTION_QTY_MAX = 50;
@@ -34,22 +35,35 @@ export function listMealQuantityDisplay(
 ): ListMealQuantityDisplay | null {
   const tplId = meal.foodTemplateId?.trim() || null;
   const tpl = tplId ? tplById.get(tplId) : undefined;
-  const isPortionCount =
-    tpl != null &&
+  const hasPortionQty =
     meal.mealInputMode === 'PORTION_COUNT' &&
     meal.portionQuantity != null &&
     Number.isFinite(meal.portionQuantity) &&
-    meal.portionQuantity > 0 &&
-    tpl.servingGrams > 0;
+    meal.portionQuantity > 0;
 
-  if (isPortionCount && tpl && tplId) {
+  if (tplId && hasPortionQty) {
+    if (tpl && tpl.servingGrams > 0) {
+      return {
+        stepMode: 'portion',
+        quantity: meal.portionQuantity!,
+        unitLabel: unitHint(tpl),
+        servingGrams: tpl.servingGrams,
+        foodTemplateId: tplId,
+      };
+    }
+    // Template linked but not loaded — never fall through to grams ± (clears FK).
     return {
       stepMode: 'portion',
       quantity: meal.portionQuantity!,
-      unitLabel: unitHint(tpl),
-      servingGrams: tpl.servingGrams,
+      unitLabel: '단위',
+      servingGrams: null,
       foodTemplateId: tplId,
     };
+  }
+
+  // Manual rows that only have server-default 100g: treat as no grams in list.
+  if (isLikelyUnsetManualGrams(meal)) {
+    return null;
   }
 
   const grams = effectiveMealGrams(meal.grams);
@@ -100,6 +114,25 @@ export function isLegacyPortionMeal(
     Number.isFinite(meal.portionQuantity) &&
     meal.portionQuantity > 0
   );
+}
+
+/**
+ * List −/+ is allowed only when quantity can be shown and safely adjusted.
+ * PORTION_COUNT without a loaded template is visible but not ±-adjustable.
+ */
+export function canAdjustMealQuantityInList(
+  meal: Pick<
+    MealRow,
+    'grams' | 'foodTemplateId' | 'mealInputMode' | 'portionQuantity'
+  >,
+  templates: FoodTemplateItem[] | Map<string, FoodTemplateItem>,
+): boolean {
+  const disp = listMealQuantityDisplay(meal, templates);
+  if (disp == null) return false;
+  if (disp.stepMode === 'portion' && !(disp.servingGrams != null && disp.servingGrams > 0)) {
+    return false;
+  }
+  return true;
 }
 
 /** Map form grams → portionQuantity for template PUT (keeps 개/접시 display). */
