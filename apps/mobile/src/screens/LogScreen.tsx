@@ -1318,18 +1318,9 @@ export function LogScreen() {
   } = useNutritionFoodSearch(name, nameSuggestEnabled);
   const fallbackNameSuggestions = useMemo(() => {
     const needle = name.trim().toLowerCase();
-    if (!needle) return [] as Array<{ kind: 'template'; template: FoodTemplateItem } | { kind: 'past_meal'; meal: MealRow }>;
-    const picked: Array<{ kind: 'template'; template: FoodTemplateItem } | { kind: 'past_meal'; meal: MealRow }> = [];
+    if (!needle) return [] as Array<{ kind: 'past_meal'; meal: MealRow }>;
+    const picked: Array<{ kind: 'past_meal'; meal: MealRow }> = [];
     const seen = new Set<string>();
-    for (const tpl of templates) {
-      const n = tpl.name.trim();
-      if (!n.toLowerCase().includes(needle)) continue;
-      const key = n.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      picked.push({ kind: 'template', template: tpl });
-      if (picked.length >= 8) return picked;
-    }
     for (const meal of recentMeals) {
       const n = meal.name.trim();
       if (!n.toLowerCase().includes(needle)) continue;
@@ -1340,8 +1331,14 @@ export function LogScreen() {
       if (picked.length >= 8) return picked;
     }
     return picked;
-  }, [name, templates, recentMeals]);
-  const displayNameSuggestions = nameSuggestions.length > 0 ? nameSuggestions : fallbackNameSuggestions;
+  }, [name, recentMeals]);
+  const displayNameSuggestions = useMemo(() => {
+    const pastFromApi = nameSuggestions.filter(
+      (s): s is Extract<(typeof nameSuggestions)[number], { kind: 'past_meal' }> =>
+        s.kind === 'past_meal',
+    );
+    return pastFromApi.length > 0 ? pastFromApi : fallbackNameSuggestions;
+  }, [nameSuggestions, fallbackNameSuggestions]);
 
   const macroFields = (
     <View style={{ gap: t.spacing.sm }}>
@@ -1389,13 +1386,9 @@ export function LogScreen() {
             ) : (
               displayNameSuggestions.map((s, idx) => (
                 <Pressable
-                  key={s.kind === 'template' ? `tpl-${s.template.id}` : s.meal.mealId}
+                  key={s.meal.mealId}
                   onPress={() => {
-                    if (s.kind === 'template') {
-                      selectTemplate(s.template);
-                    } else {
-                      applyRecentMeal(s.meal);
-                    }
+                    applyRecentMeal(s.meal);
                     setNameFocused(false);
                   }}
                   style={{
@@ -1405,30 +1398,16 @@ export function LogScreen() {
                   }}
                 >
                   <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '600' }}>
-                    {s.kind === 'template' ? s.template.name : s.meal.name}
-                    {s.kind === 'template' ? (
-                      <Text style={{ color: t.colors.fgMuted, fontWeight: '400' }}>
-                        {' '}
-                        · {LOG_COPY.nameSuggestTemplate}
-                      </Text>
-                    ) : null}
+                    {s.meal.name}
                   </Text>
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-                    {s.kind === 'template' ? (
-                      <>
-                        {baselineSummary(s.template)} · {Math.round(s.template.calories)} kcal/1인분
-                      </>
-                    ) : (
-                      <>
-                        {formatMacroLine({
-                          protein: s.meal.protein,
-                          carbohydrate: s.meal.carbohydrate,
-                          fat: s.meal.fat,
-                        })}
-                        {' · '}
-                        {Math.round(s.meal.calories)} kcal
-                      </>
-                    )}
+                    {formatMacroLine({
+                      protein: s.meal.protein,
+                      carbohydrate: s.meal.carbohydrate,
+                      fat: s.meal.fat,
+                    })}
+                    {' · '}
+                    {Math.round(s.meal.calories)} kcal
                   </Text>
                 </Pressable>
               ))

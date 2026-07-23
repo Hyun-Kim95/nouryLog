@@ -62,7 +62,7 @@ tags: [requirements, prd, grams-only, food-template, migration]
 | D-6 | 기존 Meal FK | Phase 3 전까지 유지. 편집은 g 스냅샷 우선 |
 | D-7 | Admin Foods | Phase 1~2 **동결**(신규 비권장). 삭제는 Phase 3 |
 | D-8 | autofill | Phase 1이 「템플릿 병행」을 **대체** |
-| D-9 | suggestions template | Phase 1 **유지**. Phase 3 제거 |
+| D-9 | suggestions template | Log 음식명 제안에서 **템플릿 제외**(과거 기록만). 영양 DB는 별도 섹션. (당초 Phase 3 → **2026-07-23 앞당김**) |
 
 ## 3) 단계 범위
 
@@ -92,7 +92,7 @@ tags: [requirements, prd, grams-only, food-template, migration]
 
 ```
 Log → 템플릿 칩 없음
-  → 음식명: suggestions(과거·template kind 유지) + 영양 DB
+  → 음식명: suggestions(**과거 기록만**) + 영양 DB(별도)
   → g + 총량 매크로 → 저장(grams 필수)
   → OCR: 매크로 채움 + g **빈 칸**(저장 전 필수)
 목록 −/+: 기본 g ±10 "150g"; PORTION_COUNT 레거시 "2개" ±1

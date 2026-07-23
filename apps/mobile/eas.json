@@ -23,6 +23,16 @@
       "android": {
         "buildType": "app-bundle"
       }
+    },
+    "production-local": {
+      "extends": "production",
+      "autoIncrement": false,
+      "env": {
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   },
   "submit": {

@@ -188,11 +188,13 @@ PRD **성능 게이트=예**이면 [`docs/performance/README.md`](../../../docs/
 3. 활성 플랫폼 `perf-last.json` `ok: true`(또는 팀 합의)이고 **배포 가능 수준**이면 루프를 종료한다. `perf-last.ok: false`이면 완료 선언하지 않는다(권고, `policy-and-contract.md`).
 
 ## 단계 7 — 작업 완료 처리
-1. `document-change` 또는 `docs-agent`로 완료 요약·영향 범위·알려진 제한·운영 확인 포인트를 정리한다.
+1. `document-change` 또는 `docs-agent`로 완료 요약·영향 범위·알려진 제한·운영 확인 포인트를 정리한다. (`document-change` 출력의 **왜 바꿨는지** 포함)
 
-2. 필요 시 `release-check`를 수행한다.
+2. **(권장)** 되돌리기 비싼 결정(스택·인증·도메인 모델·핵심 UX·대외 API)이 이번 프로젝트에서 확정됐다면 `/kit-wiki`로 `docs/wiki/`에 **결정 (왜)**(배경·대안·근거) 노트 1건을 남긴다. 강제 아님 — [`docs/agent/enforcement-matrix.md`](../../../docs/agent/enforcement-matrix.md) 「권장」.
 
-3. 사용자에게 **완료 보고**를 한다.
+3. 필요 시 `release-check`를 수행한다.
+
+4. 사용자에게 **완료 보고**를 한다.
 
 ---
 
@@ -207,7 +209,7 @@ PRD **성능 게이트=예**이면 [`docs/performance/README.md`](../../../docs/
 | ATDD-lite | [`docs/qa/atdd-lite.md`](../../../docs/qa/atdd-lite.md), `stage3-entry-checklist` §3d |
 | 검증 | `verify-change`, `qa-agent` |
 | 다축 검증·GATE (선택) | 단계 4B~4D, `docs/qa/reviewer-gate-rubric.md` |
-| 문서 | `document-change`, `docs-agent` |
+| 문서 | `document-change`, `docs-agent`, (권장) `kit-wiki` |
 | 측정·분석 (측정=예) | `docs/product-analytics/` |
 | 성능 게이트 (성능 게이트=예) | `docs/performance/` |
 | 보안 게이트 (보안 게이트=예) | `docs/security/` |
