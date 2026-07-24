@@ -151,6 +151,26 @@ function parseOptionalManualPortionQuantity(
   return q;
 }
 
+/** Manual / NutritionFood g saves may send TOTAL_GRAMS; PORTION_COUNT requires a template. */
+function parseOptionalManualMealInputMode(
+  b: Record<string, unknown>,
+  res: Response,
+): MealInputMode | null | 'invalid' {
+  if (b.mealInputMode === undefined || b.mealInputMode === null || b.mealInputMode === '') {
+    return null;
+  }
+  const mode = parseMealInputMode(b.mealInputMode);
+  if (mode === MealInputMode.TOTAL_GRAMS) return mode;
+  if (mode === MealInputMode.PORTION_COUNT) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '수기 기록에는 mealInputMode=PORTION_COUNT를 사용할 수 없습니다.', {
+      field: 'mealInputMode',
+    });
+    return 'invalid';
+  }
+  sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'mealInputMode가 올바르지 않습니다.', { field: 'mealInputMode' });
+  return 'invalid';
+}
+
 function isTemplateNutritionComplete(t: {
   servingGrams: number | null;
   calories: number | null;
@@ -1176,6 +1196,9 @@ meRouter.post('/meals', async (req, res) => {
 
   const manualPortion = parseOptionalManualPortionQuantity(b, res);
   if (manualPortion === 'invalid') return;
+  const manualMode = parseOptionalManualMealInputMode(b, res);
+  if (manualMode === 'invalid') return;
+  const isTotalGrams = manualMode === MealInputMode.TOTAL_GRAMS;
 
   const { mealId, created } = await createMealIdempotent(userId, clientRequestId, {
     userId,
@@ -1189,8 +1212,8 @@ meRouter.post('/meals', async (req, res) => {
     note: b.note ? String(b.note) : null,
     imageUrl: b.imageUrl ? String(b.imageUrl) : null,
     foodTemplateId: null,
-    mealInputMode: null,
-    portionQuantity: manualPortion,
+    mealInputMode: isTotalGrams ? MealInputMode.TOTAL_GRAMS : null,
+    portionQuantity: isTotalGrams ? null : manualPortion,
     mealSlot,
     snackPlacement: snackForCreate,
   });
@@ -1401,12 +1424,15 @@ meRouter.put('/meals/:mealId', async (req, res) => {
     }
     const manualPortionClear = parseOptionalManualPortionQuantity(b, res);
     if (manualPortionClear === 'invalid') return;
+    const manualModeClear = parseOptionalManualMealInputMode(b, res);
+    if (manualModeClear === 'invalid') return;
+    const isTotalGramsClear = manualModeClear === MealInputMode.TOTAL_GRAMS;
     await prisma.meal.update({
       where: { id: mealId },
       data: {
         foodTemplateId: null,
-        mealInputMode: null,
-        portionQuantity: manualPortionClear,
+        mealInputMode: isTotalGramsClear ? MealInputMode.TOTAL_GRAMS : null,
+        portionQuantity: isTotalGramsClear ? null : manualPortionClear,
         name: nextName,
         ...(b.consumedAt !== undefined ? { consumedAt: new Date(String(b.consumedAt)) } : {}),
         ...(b.grams !== undefined ? { grams: Number(b.grams) } : {}),
@@ -1517,6 +1543,9 @@ meRouter.put('/meals/:mealId', async (req, res) => {
   }>;
   const manualPortionPatch = parseOptionalManualPortionQuantity(b, res);
   if (manualPortionPatch === 'invalid') return;
+  const manualModePatch = parseOptionalManualMealInputMode(b, res);
+  if (manualModePatch === 'invalid') return;
+  const isTotalGramsPatch = manualModePatch === MealInputMode.TOTAL_GRAMS;
 
   await prisma.meal.update({
     where: { id: mealId },
@@ -1528,9 +1557,14 @@ meRouter.put('/meals/:mealId', async (req, res) => {
       ...(legacy.carbohydrate !== undefined ? { carbohydrate: Number(legacy.carbohydrate) } : {}),
       ...(legacy.protein !== undefined ? { protein: Number(legacy.protein) } : {}),
       ...(legacy.fat !== undefined ? { fat: Number(legacy.fat) } : {}),
-      ...(manualPortionPatch !== null || Object.prototype.hasOwnProperty.call(b, 'portionQuantity')
-        ? { portionQuantity: manualPortionPatch }
-        : {}),
+      ...(isTotalGramsPatch
+        ? { mealInputMode: MealInputMode.TOTAL_GRAMS, portionQuantity: null }
+        : {
+            ...(Object.prototype.hasOwnProperty.call(b, 'mealInputMode') ? { mealInputMode: null } : {}),
+            ...(manualPortionPatch !== null || Object.prototype.hasOwnProperty.call(b, 'portionQuantity')
+              ? { portionQuantity: manualPortionPatch }
+              : {}),
+          }),
       ...(legacy.note !== undefined ? { note: legacy.note ? String(legacy.note) : null } : {}),
       ...(legacy.imageUrl !== undefined ? { imageUrl: legacy.imageUrl ? String(legacy.imageUrl) : null } : {}),
       ...slotData,

@@ -30,7 +30,7 @@ export function buildFoodTemplateMap(
 
 /** AC-09: PORTION_COUNT + template → show N{unit}; else grams. No fake || 100. */
 export function listMealQuantityDisplay(
-  meal: MealRow,
+  meal: Pick<MealRow, 'grams' | 'foodTemplateId' | 'mealInputMode' | 'portionQuantity'>,
   tplById: Map<string, FoodTemplateItem>,
 ): ListMealQuantityDisplay | null {
   const tplId = meal.foodTemplateId?.trim() || null;
@@ -61,7 +61,7 @@ export function listMealQuantityDisplay(
     };
   }
 
-  // Manual rows that only have server-default 100g: treat as no grams in list.
+  // Missing/invalid grams only — intentional 100g (NF/manual) stays visible.
   if (isLikelyUnsetManualGrams(meal)) {
     return null;
   }
@@ -127,7 +127,8 @@ export function canAdjustMealQuantityInList(
   >,
   templates: FoodTemplateItem[] | Map<string, FoodTemplateItem>,
 ): boolean {
-  const disp = listMealQuantityDisplay(meal, templates);
+  const tplById = templates instanceof Map ? templates : buildFoodTemplateMap(templates);
+  const disp = listMealQuantityDisplay(meal, tplById);
   if (disp == null) return false;
   if (disp.stepMode === 'portion' && !(disp.servingGrams != null && disp.servingGrams > 0)) {
     return false;

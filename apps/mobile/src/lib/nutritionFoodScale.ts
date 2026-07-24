@@ -62,6 +62,30 @@ export function parseNutritionFoodGramsInput(text: string): number {
   return n;
 }
 
+/**
+ * Search row subtitle: match select fill (defaultServingGrams), else 100g hint.
+ * Example: "248 kcal · 150g" / "165 kcal/100g"
+ */
+export function nutritionFoodListEnergyHint(item: {
+  per100g: Per100gMacros;
+  defaultServingGrams: number | null | undefined;
+}): string {
+  const hasDefault =
+    item.defaultServingGrams != null &&
+    Number.isFinite(item.defaultServingGrams) &&
+    item.defaultServingGrams > 0;
+  if (!hasDefault) {
+    return `${Math.round(item.per100g.calories)} kcal/100g`;
+  }
+  const grams = resolveNutritionFoodDefaultGrams(item.defaultServingGrams);
+  try {
+    const scaled = scaleNutritionFromPer100g(item.per100g, grams);
+    return `${Math.round(scaled.calories)} kcal · ${formatScaledMacroForForm(grams)}g`;
+  } catch {
+    return `${Math.round(item.per100g.calories)} kcal/100g`;
+  }
+}
+
 /** 표시용: 최대 1소수, 불필요 0 생략. */
 export function formatScaledMacroForForm(value: number): string {
   if (!Number.isFinite(value)) return '';
@@ -78,9 +102,9 @@ export function buildNutritionFoodMealBody(params: {
   protein: number;
   fat: number;
   carbohydrate: number;
-  editing: boolean;
-  existingPortionQuantity?: number | null;
+  editing: boolean; // kept for call-site symmetry (create vs edit)
 }): Record<string, unknown> {
+  void params.editing;
   const name = params.name.trim();
   if (!name) throw new Error('NAME_REQUIRED');
   if (name.length > NUTRITION_FOOD_NAME_MAX) throw new Error('NAME_TOO_LONG');
@@ -101,7 +125,8 @@ export function buildNutritionFoodMealBody(params: {
       throw new Error(`INVALID_${key.toUpperCase()}`);
     }
   }
-  const body: Record<string, unknown> = {
+  // TOTAL_GRAMS marks intentional intake; do not send portionQuantity=1 (looked like legacy unset).
+  return {
     ...params.mealBodyBase,
     name,
     grams: params.grams,
@@ -110,11 +135,7 @@ export function buildNutritionFoodMealBody(params: {
     fat: params.fat,
     carbohydrate: params.carbohydrate,
     foodTemplateId: null,
+    mealInputMode: 'TOTAL_GRAMS',
+    portionQuantity: null,
   };
-  if (!params.editing) {
-    body.portionQuantity = 1;
-  } else if (params.existingPortionQuantity != null && Number.isFinite(params.existingPortionQuantity)) {
-    body.portionQuantity = params.existingPortionQuantity;
-  }
-  return body;
 }

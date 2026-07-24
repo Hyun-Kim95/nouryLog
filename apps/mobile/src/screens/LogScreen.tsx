@@ -105,6 +105,7 @@ import {
   NUTRITION_FOOD_GRAMS_MAX,
   NUTRITION_FOOD_GRAMS_MIN,
   NUTRITION_FOOD_NAME_MAX,
+  nutritionFoodListEnergyHint,
   parseNutritionFoodGramsInput,
   resolveNutritionFoodDefaultGrams,
   scaleNutritionFromPer100g,
@@ -615,7 +616,6 @@ export function LogScreen() {
             grams,
             ...nutrition,
             editing: Boolean(targetMealId),
-            existingPortionQuantity: 1,
           });
         } catch (e) {
           if (e instanceof Error && e.message === 'NAME_TOO_LONG') {
@@ -1469,7 +1469,7 @@ export function LogScreen() {
                   </Text>
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
                     {item.category ? `${item.category} · ` : ''}
-                    {Math.round(item.per100g.calories)} kcal/100g
+                    {nutritionFoodListEnergyHint(item)}
                   </Text>
                 </Pressable>
               ))

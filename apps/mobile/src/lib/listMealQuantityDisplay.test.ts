@@ -87,17 +87,21 @@ describe('AC-09 listMealQuantityDisplay', () => {
     assert.equal(disp, null);
   });
 
-  it('returns null for manual server-default 100g', () => {
+  it('shows 100g for intentional manual/NF 100g (not masked as unset)', () => {
     const disp = listMealQuantityDisplay(
       meal({
         mealId: 'm4',
         name: '진라면',
         grams: 100,
         foodTemplateId: null,
+        mealInputMode: 'TOTAL_GRAMS',
+        portionQuantity: null,
       }),
       tplById,
     );
-    assert.equal(disp, null);
+    assert.ok(disp);
+    assert.equal(disp.stepMode, 'grams');
+    assert.equal(disp.quantity, 100);
   });
 
   it('canAdjust matches display (blocks PORTION when tpl missing)', () => {
@@ -116,10 +120,16 @@ describe('AC-09 listMealQuantityDisplay', () => {
     assert.equal(canAdjustMealQuantityInList(portionMeal, new Map()), false);
     assert.equal(
       canAdjustMealQuantityInList(
-        meal({ mealId: 'm6', name: '진라면', grams: 100, foodTemplateId: null }),
+        meal({
+          mealId: 'm6',
+          name: '진라면',
+          grams: 100,
+          foodTemplateId: null,
+          mealInputMode: 'TOTAL_GRAMS',
+        }),
         tplById,
       ),
-      false,
+      true,
     );
     assert.equal(
       canAdjustMealQuantityInList(

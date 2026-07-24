@@ -4,6 +4,7 @@ import {
   buildNutritionFoodMealBody,
   clampNutritionFoodGrams,
   formatScaledMacroForForm,
+  nutritionFoodListEnergyHint,
   resolveNutritionFoodDefaultGrams,
   scaleNutritionFromPer100g,
 } from './nutritionFoodScale';
@@ -39,8 +40,30 @@ describe('AC-02/AC-03 nutritionFoodScale', () => {
   });
 });
 
+describe('nutritionFoodListEnergyHint', () => {
+  it('shows scaled kcal and serving grams when defaultServingGrams set', () => {
+    assert.equal(
+      nutritionFoodListEnergyHint({
+        per100g: { calories: 165, protein: 31, fat: 3.6, carbohydrate: 0 },
+        defaultServingGrams: 150,
+      }),
+      '248 kcal · 150g',
+    );
+  });
+
+  it('falls back to per 100g when defaultServingGrams missing', () => {
+    assert.equal(
+      nutritionFoodListEnergyHint({
+        per100g: { calories: 165, protein: 31, fat: 3.6, carbohydrate: 0 },
+        defaultServingGrams: null,
+      }),
+      '165 kcal/100g',
+    );
+  });
+});
+
 describe('AC-07 buildNutritionFoodMealBody', () => {
-  it('includes grams and portionQuantity 1 on create', () => {
+  it('includes grams and TOTAL_GRAMS (not legacy portionQuantity=1)', () => {
     const body = buildNutritionFoodMealBody({
       mealBodyBase: { mealSlot: 'LUNCH' },
       name: '닭가슴살',
@@ -52,7 +75,8 @@ describe('AC-07 buildNutritionFoodMealBody', () => {
       editing: false,
     });
     assert.equal(body.grams, 150);
-    assert.equal(body.portionQuantity, 1);
+    assert.equal(body.mealInputMode, 'TOTAL_GRAMS');
+    assert.equal(body.portionQuantity, null);
     assert.equal(body.foodTemplateId, null);
     assert.equal(body.calories, 247.5);
   });
