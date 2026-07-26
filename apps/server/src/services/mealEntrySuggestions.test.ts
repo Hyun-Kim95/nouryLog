@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mergeMealEntrySuggestions,
+  parseMealEntrySuggestionsSources,
   type FoodTemplatePublicRow,
   type MealSuggestionMealRow,
 } from './mealEntrySuggestions.js';
@@ -93,5 +94,36 @@ describe('mergeMealEntrySuggestions', () => {
     );
     assert.equal(items.length, 1);
     assert.equal(items[0].kind, 'template');
+  });
+
+  it('past_meal-only merge keeps meal when template list is empty (Log D-9)', () => {
+    const items = mergeMealEntrySuggestions(
+      [],
+      [meal('m1', '닭가슴살', '2026-01-01T00:00:00.000Z')],
+      8,
+    );
+    assert.equal(items.length, 1);
+    assert.equal(items[0].kind, 'past_meal');
+    if (items[0].kind === 'past_meal') {
+      assert.equal(items[0].meal.mealId, 'm1');
+    }
+  });
+});
+
+describe('parseMealEntrySuggestionsSources', () => {
+  it('defaults to all when omitted or empty', () => {
+    assert.equal(parseMealEntrySuggestionsSources(undefined), 'all');
+    assert.equal(parseMealEntrySuggestionsSources(''), 'all');
+    assert.equal(parseMealEntrySuggestionsSources('all'), 'all');
+  });
+
+  it('accepts past_meal (case-insensitive trim)', () => {
+    assert.equal(parseMealEntrySuggestionsSources('past_meal'), 'past_meal');
+    assert.equal(parseMealEntrySuggestionsSources(' PAST_MEAL '), 'past_meal');
+  });
+
+  it('rejects unknown values', () => {
+    assert.equal(parseMealEntrySuggestionsSources('template'), null);
+    assert.equal(parseMealEntrySuggestionsSources('past'), null);
   });
 });

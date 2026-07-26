@@ -98,6 +98,7 @@ import {
   listMealQuantityDisplay,
 } from '../lib/listMealQuantityDisplay';
 import { parseManualNutrition } from '../lib/manualNutrition';
+import { extractServingGramsFromOcrText } from '../lib/ocrServingGrams';
 import {
   buildNutritionFoodMealBody,
   clampNutritionFoodGrams,
@@ -752,6 +753,7 @@ export function LogScreen() {
       carbohydrate: number;
       protein: number;
       fat: number;
+      servingGrams?: number | null;
       confidence: number;
       missingFields: string[];
       remainingFreeQuota: number;
@@ -773,16 +775,36 @@ export function LogScreen() {
     setEditingLegacyPortionId(null);
     setEditingOriginalName(null);
     clearNutritionDraft();
-    // OCR 매크로는 총량. 섭취량(g)은 비워 사용자가 확인 후 입력.
+    // OCR 매크로는 총량. API servingGrams 또는 rawText 파싱으로 섭취량 채움.
     setCalories(String(Math.round(res.calories)));
     setProtein(String(Math.round(res.protein)));
     setCarbohydrate(String(Math.round(res.carbohydrate)));
     setFat(String(Math.round(res.fat)));
+    const fromApi =
+      typeof res.servingGrams === 'number' &&
+      Number.isFinite(res.servingGrams) &&
+      res.servingGrams >= NUTRITION_FOOD_GRAMS_MIN &&
+      res.servingGrams <= NUTRITION_FOOD_GRAMS_MAX
+        ? res.servingGrams
+        : null;
+    const serving = fromApi ?? extractServingGramsFromOcrText(res.rawText);
+    if (serving != null) {
+      const gText = formatScaledMacroForForm(serving);
+      setNutritionGrams(gText);
+      setAmountInput(gText);
+      setIntakeUnitId('g');
+    }
     await loadEntitlements();
     toast.show({
       kind: 'info',
       message: LOG_COPY.ocrDoneToast(res.remainingFreeQuota),
     });
+    if (serving == null) {
+      toast.show({
+        kind: 'info',
+        message: LOG_COPY.ocrServingGramsMissing,
+      });
+    }
     scheduleScrollToEntry();
   };
 
@@ -1310,7 +1332,7 @@ export function LogScreen() {
 
   const nameSuggestEnabled = nameFocused && name.trim().length >= 1;
   const { items: nameSuggestions, status: nameSuggestStatus, errorKind: nameSuggestErrorKind } =
-    useMealEntrySuggestions(name, nameSuggestEnabled);
+    useMealEntrySuggestions(name, nameSuggestEnabled, { sources: 'past_meal' });
   const {
     items: nutritionFoodItems,
     status: nutritionFoodStatus,
@@ -1321,7 +1343,8 @@ export function LogScreen() {
     if (!needle) return [] as Array<{ kind: 'past_meal'; meal: MealRow }>;
     const picked: Array<{ kind: 'past_meal'; meal: MealRow }> = [];
     const seen = new Set<string>();
-    for (const meal of recentMeals) {
+    // recentMeals는 excludeFoodTemplate+소수라 좁음 → 이력(최대 100)을 먼저 본다.
+    for (const meal of [...amountHistoryMeals, ...recentMeals]) {
       const n = meal.name.trim();
       if (!n.toLowerCase().includes(needle)) continue;
       const key = n.toLowerCase();
@@ -1331,13 +1354,24 @@ export function LogScreen() {
       if (picked.length >= 8) return picked;
     }
     return picked;
-  }, [name, recentMeals]);
+  }, [name, amountHistoryMeals, recentMeals]);
   const displayNameSuggestions = useMemo(() => {
     const pastFromApi = nameSuggestions.filter(
       (s): s is Extract<(typeof nameSuggestions)[number], { kind: 'past_meal' }> =>
         s.kind === 'past_meal',
     );
-    return pastFromApi.length > 0 ? pastFromApi : fallbackNameSuggestions;
+    // API가 템플릿만 주거나 구서버면 past가 비므로, 로컬 이력 폴백을 병합(이름 중복 제거).
+    if (pastFromApi.length === 0) return fallbackNameSuggestions;
+    const seen = new Set(pastFromApi.map((s) => s.meal.name.trim().toLowerCase()));
+    const merged = [...pastFromApi];
+    for (const fb of fallbackNameSuggestions) {
+      const key = fb.meal.name.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(fb);
+      if (merged.length >= 8) break;
+    }
+    return merged;
   }, [nameSuggestions, fallbackNameSuggestions]);
 
   const macroFields = (

@@ -2,7 +2,7 @@
 type: design-spec
 project: dietManagement
 status: approved
-updated_at: 2026-07-22
+updated_at: 2026-07-26
 approved_at: 2026-07-21
 phase_1_1_approved_at: 2026-07-22
 parent_prd: docs/requirements/feature-grams-only-transition-prd.md
@@ -43,7 +43,7 @@ related:
 
 | 요소 | 스펙 |
 |---|---|
-| 섭취량(g) | 신규·수기·NF·OCR 후 **항상 표시**. **기본 빈 칸**. 저장 시 grams 1..5000 |
+| 섭취량(g) | 신규·수기·NF·OCR 후 **항상 표시**. 신규/수기 **기본 빈 칸**. OCR: `servingGrams` 있으면 채움, 없으면 빈 칸+「제공량을 확인해 주세요」토스트. 저장 시 grams 1..5000 |
 | 단위 선택 (P1.2) | `g` 기본. 음식명에 과거/템플릿 개·접시 등이 있으면 Segmented로 선택. 수량 변경 시 매크로 연동 |
 | 이전에 쓴 양 | 동일 음식명 집계. 탭 시 **g + 해당 분량 영양** 함께 적용(칼로리 칩 하단에 표시) |
 | 프리셋 (P1.1) | 하드코드 pill. 단위·1단위 매크로 있으면 개 모드로 적용 |

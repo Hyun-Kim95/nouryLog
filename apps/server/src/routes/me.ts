@@ -64,6 +64,7 @@ import {
   buildMealEntrySuggestions,
   mapFoodTemplatePublic,
   parseMealEntrySuggestionsLimit,
+  parseMealEntrySuggestionsSources,
 } from '../services/mealEntrySuggestions.js';
 
 export const meRouter = Router();
@@ -966,11 +967,19 @@ meRouter.get('/me/meal-entry-suggestions', async (req, res) => {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '검색어가 필요합니다.', { field: 'q' });
     return;
   }
+  const sources = parseMealEntrySuggestionsSources(req.query.sources);
+  if (sources === null) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'sources는 all 또는 past_meal만 허용됩니다.', {
+      field: 'sources',
+    });
+    return;
+  }
   const limit = parseMealEntrySuggestionsLimit(req.query.limit);
   const items = await buildMealEntrySuggestions({
     userId: req.auth!.userId,
     q,
     limit,
+    sources,
   });
   res.json({ items });
 });
@@ -1716,6 +1725,7 @@ meRouter.post('/nutrition/ocr', async (req, res) => {
       carbohydrate: parsed.carbohydrate,
       protein: parsed.protein,
       fat: parsed.fat,
+      servingGrams: parsed.servingGrams,
       confidence: parsed.confidence,
       missingFields: parsed.missingFields,
       remainingFreeQuota,

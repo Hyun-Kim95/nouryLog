@@ -115,26 +115,47 @@ function dedupeMealsByNameNewestFirst(meals: MealSuggestionMealRow[]): MealSugge
   return [...byName.values()];
 }
 
+/** 기본(all): 템플릿+과거. past_meal: 과거 기록만(Log D-9). */
+export type MealEntrySuggestionsSources = 'all' | 'past_meal';
+
 export async function buildMealEntrySuggestions(params: {
   userId: string;
   q: string;
   limit: number;
+  sources?: MealEntrySuggestionsSources;
 }): Promise<MealEntrySuggestionItem[]> {
   const needle = params.q.trim();
   const limit = params.limit;
+  const sources = params.sources ?? 'all';
+  const pastOnly = sources === 'past_meal';
   const mealTake = Math.min(80, limit * 10);
 
   const nameFilter = { contains: needle, mode: 'insensitive' as const };
 
+  const mealSelect = {
+    id: true,
+    name: true,
+    calories: true,
+    protein: true,
+    carbohydrate: true,
+    fat: true,
+    foodTemplateId: true,
+    mealInputMode: true,
+    portionQuantity: true,
+    consumedAt: true,
+  } as const;
+
   const [templateRows, mealRows] = await Promise.all([
-    prisma.foodTemplate.findMany({
-      where: {
-        ...FOOD_TEMPLATE_WHERE_BASE,
-        name: nameFilter,
-      },
-      orderBy: { name: 'asc' },
-      take: limit,
-    }),
+    pastOnly
+      ? Promise.resolve([])
+      : prisma.foodTemplate.findMany({
+          where: {
+            ...FOOD_TEMPLATE_WHERE_BASE,
+            name: nameFilter,
+          },
+          orderBy: { name: 'asc' },
+          take: limit,
+        }),
     prisma.meal.findMany({
       where: {
         userId: params.userId,
@@ -143,18 +164,7 @@ export async function buildMealEntrySuggestions(params: {
       },
       orderBy: { consumedAt: 'desc' },
       take: mealTake,
-      select: {
-        id: true,
-        name: true,
-        calories: true,
-        protein: true,
-        carbohydrate: true,
-        fat: true,
-        foodTemplateId: true,
-        mealInputMode: true,
-        portionQuantity: true,
-        consumedAt: true,
-      },
+      select: mealSelect,
     }),
   ]);
 
@@ -182,4 +192,13 @@ export function parseMealEntrySuggestionsLimit(raw: unknown): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 1) return 8;
   return Math.min(15, Math.max(1, Math.floor(n)));
+}
+
+/** `sources` 미전달·빈 값 → all. 그 외 past_meal만 허용. 잘못된 값은 null. */
+export function parseMealEntrySuggestionsSources(raw: unknown): MealEntrySuggestionsSources | null {
+  if (raw === undefined || raw === null || raw === '') return 'all';
+  const s = String(raw).trim().toLowerCase();
+  if (s === 'all') return 'all';
+  if (s === 'past_meal') return 'past_meal';
+  return null;
 }

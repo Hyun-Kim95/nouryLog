@@ -24,6 +24,7 @@ export const LOG_COPY = {
     '이미지가 너무 커요. 다른 사진을 선택하거나 해상도를 낮춰 주세요.',
   ocrDoneToast: (remaining: number) =>
     `분석 완료 · 남은 무료 ${remaining}회 · 음식명·섭취량(g)을 확인한 뒤 저장해 주세요`,
+  ocrServingGramsMissing: '제공량을 확인해 주세요',
   nameRequired: '음식명을 입력해 주세요.',
   sectionTemplates: '음식 템플릿',
   templatesHint: '탭해 선택한 뒤 기록 추가하세요. 분량은 저장 후 오늘 목록에서 조절해요.',
@@ -68,8 +69,8 @@ export const LOG_COPY = {
   pastModalClose: '닫기',
   sectionRecent: '최근 먹은 음식',
   recentHint: '탭하면 아래 입력란에 채워져요.',
-  nameSuggestHint: '템플릿·과거 기록에서 선택하면 입력란이 채워져요.',
-  nameSuggestEmpty: '일치하는 템플릿·과거 기록이 없어요.',
+  nameSuggestHint: '과거 기록에서 선택하면 입력란이 채워져요.',
+  nameSuggestEmpty: '일치하는 과거 기록이 없어요.',
   nameSuggestLoading: '검색 중…',
   nameSuggestLoadError: '제안을 불러오지 못했어요. 네트워크를 확인해 주세요.',
   nameSuggestNotAvailable: '음식 제안 기능을 사용할 수 없어요. 앱을 최신 버전으로 업데이트해 주세요.',

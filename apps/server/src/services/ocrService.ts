@@ -1,5 +1,9 @@
 import { OCR_API_KEY, OCR_API_URL, OCR_PROVIDER } from '../lib/config.js';
-import { parseNutritionFromText, type ParsedNutrition } from './nutritionParser.js';
+import {
+  allMacrosMissing,
+  parseNutritionFromText,
+  type ParsedNutrition,
+} from './nutritionParser.js';
 
 type OcrInput = {
   imageBase64?: string;
@@ -80,7 +84,8 @@ export async function detectNutrition(input: OcrInput): Promise<DetectNutritionR
   }
   const text = await fetchGoogleVisionText(input);
   const parsed = parseNutritionFromText(text);
-  if (parsed.missingFields.length === 4) {
+  // servingGrams 미검출은 OCR 실패가 아님(매크로 4필드 기준).
+  if (allMacrosMissing(parsed.missingFields)) {
     throw new Error('ocr_parse_failed');
   }
   return { ...parsed, rawText: text.slice(0, 2000) };

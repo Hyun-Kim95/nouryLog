@@ -123,6 +123,7 @@ tags: [api, contract, backend, frontend]
 
 응답 예시 필드:
 - `calories`, `carbohydrate`, `protein`, `fat`
+- `servingGrams` (`number | null`, 1회 제공량 g · API v1.19). 미검출 시 null, `missingFields`에 `servingGrams` 가능(매크로만으로도 성공)
 - `confidence` (0~1)
 - `missingFields` (배열)
 - `remainingFreeQuota` (남은 무료 OCR 횟수)

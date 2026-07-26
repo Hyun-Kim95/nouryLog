@@ -289,6 +289,8 @@ export interface paths {
                 query: {
                     q: string;
                     limit?: number;
+                    /** @description all(기본)=템플릿+과거 식사(템플릿 우선·이름 중복 제거). past_meal=과거 식사만(Log D-9). 잘못된 값은 422. */
+                    sources?: "all" | "past_meal";
                 };
                 header?: never;
                 path?: never;
@@ -1422,6 +1424,8 @@ export interface components {
             carbohydrate?: number;
             protein?: number;
             fat?: number;
+            /** @description 영양표에서 파싱한 1회 제공량(g). 미검출·범위 밖이면 null. missingFields에 servingGrams가 포함될 수 있음(OCR 전체 실패 아님). */
+            servingGrams?: number | null;
             confidence?: number;
             missingFields?: string[];
             remainingFreeQuota?: number;

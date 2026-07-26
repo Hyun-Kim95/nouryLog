@@ -12,14 +12,21 @@ export type MealEntrySuggestionsStatus = 'idle' | 'loading' | 'success' | 'error
 
 export type MealEntrySuggestionsError = 'network' | 'unavailable' | null;
 
+export type UseMealEntrySuggestionsOptions = {
+  /** Log D-9: past_meal. MealSet 등 기본(all)=템플릿+과거. */
+  sources?: 'all' | 'past_meal';
+};
+
 export function useMealEntrySuggestions(
   q: string,
   enabled: boolean,
+  options?: UseMealEntrySuggestionsOptions,
 ): {
   items: MealEntrySuggestionItem[];
   status: MealEntrySuggestionsStatus;
   errorKind: MealEntrySuggestionsError;
 } {
+  const sources = options?.sources ?? 'all';
   const [debouncedQ, setDebouncedQ] = useState('');
   const [items, setItems] = useState<MealEntrySuggestionItem[]>([]);
   const [status, setStatus] = useState<MealEntrySuggestionsStatus>('idle');
@@ -68,6 +75,7 @@ export function useMealEntrySuggestions(
         const res = await fetchMealEntrySuggestions(token, {
           q: debouncedQ,
           limit: SUGGEST_LIMIT,
+          sources,
           signal: controller.signal,
         });
         if (stale) return;
@@ -97,7 +105,7 @@ export function useMealEntrySuggestions(
       stale = true;
       controller.abort();
     };
-  }, [debouncedQ, enabled]);
+  }, [debouncedQ, enabled, sources]);
 
   return { items, status, errorKind };
 }

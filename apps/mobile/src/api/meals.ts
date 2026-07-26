@@ -124,13 +124,23 @@ export type MealEntrySuggestionItem =
   | { kind: 'template'; template: FoodTemplateItem }
   | { kind: 'past_meal'; meal: MealRow };
 
+export type MealEntrySuggestionsSources = 'all' | 'past_meal';
+
 export async function fetchMealEntrySuggestions(
   token: string,
-  params: { q: string; limit?: number; signal?: AbortSignal },
+  params: {
+    q: string;
+    limit?: number;
+    sources?: MealEntrySuggestionsSources;
+    signal?: AbortSignal;
+  },
 ): Promise<{ items: MealEntrySuggestionItem[] }> {
   const search = new URLSearchParams();
   search.set('q', params.q.trim());
   search.set('limit', String(params.limit ?? 8));
+  if (params.sources && params.sources !== 'all') {
+    search.set('sources', params.sources);
+  }
   return apiFetch<{ items: MealEntrySuggestionItem[] }>(
     `/me/meal-entry-suggestions?${search}`,
     { token, signal: params.signal, onAuthFailure: 'silent' },

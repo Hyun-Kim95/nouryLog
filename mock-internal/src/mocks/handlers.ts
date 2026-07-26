@@ -81,6 +81,7 @@ export const handlers = [
       carbohydrate: 20,
       protein: 6,
       fat: 2,
+      servingGrams: 30,
       confidence: 0.92,
       missingFields: [] as string[],
       remainingFreeQuota: 3,
