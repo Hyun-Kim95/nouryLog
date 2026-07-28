@@ -142,10 +142,12 @@ describe('AC-09 listMealQuantityDisplay', () => {
 });
 
 describe('AC-10 portion step to grams', () => {
-  it('steps portion ±1', () => {
-    assert.equal(nextMealPortionQuantity(2, 1), 3);
-    assert.equal(nextMealPortionQuantity(2, -1), 1);
-    assert.equal(nextMealPortionQuantity(0.25, -1), null);
+  it('steps portion ±0.1 (one decimal)', () => {
+    assert.equal(nextMealPortionQuantity(1, -0.1), 0.9);
+    assert.equal(nextMealPortionQuantity(0.5, -0.1), 0.4);
+    assert.equal(nextMealPortionQuantity(0.3, -0.1), 0.2);
+    assert.equal(nextMealPortionQuantity(2, 0.1), 2.1);
+    assert.equal(nextMealPortionQuantity(0.1, -0.1), null);
   });
 
   it('maps 3 × 50g → 150g', () => {

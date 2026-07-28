@@ -22,8 +22,12 @@ import {
 export const mealSetRouter = Router();
 mealSetRouter.use(requireAuth);
 
-const PORTION_QTY_MIN = 0.25;
+const PORTION_QTY_MIN = 0.1;
 const PORTION_QTY_MAX = 50;
+
+function normalizePortionQuantity(q: number): number {
+  return Math.round(q * 10) / 10;
+}
 const TOTAL_GRAMS_MIN = 1;
 const TOTAL_GRAMS_MAX = 5000;
 // kind=manual(수기 항목) 스냅샷 한계
@@ -134,8 +138,12 @@ function parseItemsInput(raw: unknown): ItemsParse {
       let portionQuantity: number | null = null;
       let totalGrams: number | null = null;
       if (mode === MealInputMode.PORTION_COUNT) {
-        const q = typeof it.portionQuantity === 'number' ? it.portionQuantity : Number(it.portionQuantity);
-        if (!Number.isFinite(q) || q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
+        const qNum = typeof it.portionQuantity === 'number' ? it.portionQuantity : Number(it.portionQuantity);
+        if (!Number.isFinite(qNum)) {
+          return { ok: false, message: `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, field: `items[${i}].portionQuantity` };
+        }
+        const q = normalizePortionQuantity(qNum);
+        if (q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
           return { ok: false, message: `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, field: `items[${i}].portionQuantity` };
         }
         portionQuantity = q;

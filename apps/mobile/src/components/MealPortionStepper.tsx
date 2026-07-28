@@ -30,7 +30,7 @@ type Props = {
   onPressCurrent?: () => void;
 };
 
-/** −/+ for list: grams ±10 or PORTION_COUNT ±1. */
+/** −/+ for list: grams ±10 or PORTION_COUNT ±0.1. */
 export function MealPortionStepper({
   quantity,
   unitLabel = 'g',
@@ -51,8 +51,8 @@ export function MealPortionStepper({
       ? quantity >= MEAL_PORTION_QTY_MAX
       : quantity >= NUTRITION_FOOD_GRAMS_MAX;
 
-  const decLabel = stepMode === 'portion' ? '1단위 감소' : '10그램 감소';
-  const incLabel = stepMode === 'portion' ? '1단위 증가' : '10그램 증가';
+  const decLabel = stepMode === 'portion' ? '0.1단위 감소' : '10그램 감소';
+  const incLabel = stepMode === 'portion' ? '0.1단위 증가' : '10그램 증가';
 
   const btnStyle = {
     width: 36,

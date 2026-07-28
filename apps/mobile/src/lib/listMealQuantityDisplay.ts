@@ -7,9 +7,10 @@ import {
 } from './nutritionFoodScale';
 import { isLikelyUnsetManualGrams } from './unsetManualGrams';
 
-export const MEAL_PORTION_QTY_MIN = 0.25;
+export const MEAL_PORTION_QTY_MIN = 0.1;
 export const MEAL_PORTION_QTY_MAX = 50;
-export const MEAL_PORTION_STEP = 1;
+/** One decimal place; list −/+ and direct entry. */
+export const MEAL_PORTION_STEP = 0.1;
 
 export type ListMealStepMode = 'grams' | 'portion';
 
@@ -82,12 +83,17 @@ export function formatListMealQuantity(quantity: number): string {
   return formatTplAmount(quantity) || String(quantity);
 }
 
+/** Normalize to one decimal place (0.1 step). */
+export function normalizeMealPortionQuantity(qty: number): number {
+  return Math.round(qty * 10) / 10;
+}
+
 export function nextMealPortionQuantity(
   currentQty: number,
   delta: number,
 ): number | null {
   if (!(currentQty > 0) || !Number.isFinite(currentQty)) return null;
-  const next = Math.round((currentQty + delta) * 100) / 100;
+  const next = normalizeMealPortionQuantity(currentQty + delta);
   if (next < MEAL_PORTION_QTY_MIN || next > MEAL_PORTION_QTY_MAX) return null;
   if (Math.abs(next - currentQty) < 0.001) return null;
   return next;
@@ -142,7 +148,7 @@ export function gramsToPortionQuantity(
   servingGrams: number,
 ): number | null {
   if (!(grams > 0) || !(servingGrams > 0)) return null;
-  const qty = Math.round((grams / servingGrams) * 100) / 100;
+  const qty = normalizeMealPortionQuantity(grams / servingGrams);
   if (qty < MEAL_PORTION_QTY_MIN || qty > MEAL_PORTION_QTY_MAX) return null;
   return qty;
 }

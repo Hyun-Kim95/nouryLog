@@ -104,7 +104,7 @@ tags: [api, contract, backend, frontend]
 - 템플릿 기록 시 `name`은 **항상 템플릿의 `name`**으로 저장한다(요청 `name` 무시).
 
 검증·한도(422, `details.field`):
-- `portionQuantity`: 0.25 이상 50 이하.
+- `portionQuantity`: 0.1 이상 50 이하(소수 첫째 자리, 0.1 단위).
 - `totalGrams`: 1 이상 5000 이하.
 - 템플릿의 `servingGrams`가 0 이하이거나 영양 필드가 비어 있으면 템플릿 모드 사용 불가.
 

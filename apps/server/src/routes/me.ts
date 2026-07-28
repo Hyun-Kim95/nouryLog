@@ -90,8 +90,13 @@ meRouter.use(async (req, res, next) => {
   next();
 });
 
-const PORTION_QTY_MIN = 0.25;
+const PORTION_QTY_MIN = 0.1;
 const PORTION_QTY_MAX = 50;
+
+/** One decimal place (0.1 step), matching mobile list stepper. */
+function normalizePortionQuantity(q: number): number {
+  return Math.round(q * 10) / 10;
+}
 const TOTAL_GRAMS_MIN = 1;
 const TOTAL_GRAMS_MAX = 5000;
 
@@ -142,8 +147,15 @@ function parseOptionalManualPortionQuantity(
   if (b.portionQuantity === undefined || b.portionQuantity === null || b.portionQuantity === '') {
     return null;
   }
-  const q = typeof b.portionQuantity === 'number' ? b.portionQuantity : Number(b.portionQuantity);
-  if (!Number.isFinite(q) || q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
+  const qRaw = typeof b.portionQuantity === 'number' ? b.portionQuantity : Number(b.portionQuantity);
+  if (!Number.isFinite(qRaw)) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, {
+      field: 'portionQuantity',
+    });
+    return 'invalid';
+  }
+  const q = normalizePortionQuantity(qRaw);
+  if (q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
     sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, {
       field: 'portionQuantity',
     });
@@ -1132,8 +1144,15 @@ meRouter.post('/meals', async (req, res) => {
     let portionQuantity: number | null = null;
     if (mode === MealInputMode.PORTION_COUNT) {
       const qRaw = b.portionQuantity;
-      const q = typeof qRaw === 'number' ? qRaw : Number(qRaw);
-      if (!Number.isFinite(q) || q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
+      const qNum = typeof qRaw === 'number' ? qRaw : Number(qRaw);
+      if (!Number.isFinite(qNum)) {
+        sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, {
+          field: 'portionQuantity',
+        });
+        return;
+      }
+      const q = normalizePortionQuantity(qNum);
+      if (q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
         sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, {
           field: 'portionQuantity',
         });
@@ -1479,8 +1498,15 @@ meRouter.put('/meals/:mealId', async (req, res) => {
     let portionQuantity: number | null = null;
     if (mode === MealInputMode.PORTION_COUNT) {
       const qRaw = b.portionQuantity;
-      const q = typeof qRaw === 'number' ? qRaw : Number(qRaw);
-      if (!Number.isFinite(q) || q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
+      const qNum = typeof qRaw === 'number' ? qRaw : Number(qRaw);
+      if (!Number.isFinite(qNum)) {
+        sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, {
+          field: 'portionQuantity',
+        });
+        return;
+      }
+      const q = normalizePortionQuantity(qNum);
+      if (q < PORTION_QTY_MIN || q > PORTION_QTY_MAX) {
         sendError(res, 422, ErrorCodes.VALIDATION_FAILED, `portionQuantity는 ${PORTION_QTY_MIN}~${PORTION_QTY_MAX} 사이여야 합니다.`, {
           field: 'portionQuantity',
         });

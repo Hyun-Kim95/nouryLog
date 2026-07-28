@@ -89,7 +89,7 @@ export const LOG_COPY = {
   gramsInputLabel: '섭취량',
   gramsInvalid: '섭취량은 1~5000g',
   gramsRequired: '섭취량을 입력해 주세요',
-  portionQtyInvalid: '분량은 0.25~50',
+  portionQtyInvalid: '분량은 0.1~50 (소수 첫째 자리)',
   gramPresetHint: '자주 쓰는 양',
   priorAmountHint: '이전에 쓴 양',
   priorAmountSelected: '선택됨',

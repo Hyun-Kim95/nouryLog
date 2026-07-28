@@ -46,7 +46,7 @@ export function PortionQuantityModal({
         >
           <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '700' }}>분량 직접 입력</Text>
           <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
-            0.25~50 범위의 숫자를 입력해 주세요.
+            0.1~50, 소수 첫째 자리까지 입력해 주세요.
           </Text>
           <TextInput
             value={value}

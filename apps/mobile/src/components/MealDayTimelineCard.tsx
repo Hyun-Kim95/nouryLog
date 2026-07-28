@@ -13,6 +13,7 @@ import {
   gramsToPortionQuantity,
   isLegacyPortionMeal,
   listMealQuantityDisplay,
+  normalizeMealPortionQuantity,
 } from '../lib/listMealQuantityDisplay';
 import {
   NUTRITION_FOOD_GRAMS_MAX,
@@ -178,15 +179,16 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
     }
     const nextQty = Number(String(portionInputValue).replace(',', '.'));
     if (disp.stepMode === 'portion') {
+      const portionQty = normalizeMealPortionQuantity(nextQty);
       if (
         !Number.isFinite(nextQty) ||
-        nextQty < MEAL_PORTION_QTY_MIN ||
-        nextQty > MEAL_PORTION_QTY_MAX
+        portionQty < MEAL_PORTION_QTY_MIN ||
+        portionQty > MEAL_PORTION_QTY_MAX
       ) {
         toast.show({ kind: 'error', message: LOG_COPY.portionQtyInvalid });
         return;
       }
-      await adjustPortion(portionInputMeal, Math.round(nextQty * 100) / 100);
+      await adjustPortion(portionInputMeal, portionQty);
     } else {
       if (
         !Number.isFinite(nextQty) ||

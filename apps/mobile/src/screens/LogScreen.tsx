@@ -96,6 +96,7 @@ import {
   gramsToPortionQuantity,
   isLegacyPortionMeal,
   listMealQuantityDisplay,
+  normalizeMealPortionQuantity,
 } from '../lib/listMealQuantityDisplay';
 import { parseManualNutrition } from '../lib/manualNutrition';
 import { extractServingGramsFromOcrText } from '../lib/ocrServingGrams';
@@ -578,13 +579,16 @@ export function LogScreen() {
       }
 
       if (portionTpl && (intakeUnit.kind === 'portion' || (editingLegacyPortionId && targetMealId))) {
-        const portionQty =
+        const portionQtyRaw =
           intakeUnit.kind === 'portion'
             ? Number(String(amountInput).replace(',', '.'))
             : gramsToPortionQuantity(grams, portionTpl.servingGrams);
+        const portionQty =
+          portionQtyRaw == null || !Number.isFinite(portionQtyRaw)
+            ? null
+            : normalizeMealPortionQuantity(portionQtyRaw);
         if (
           portionQty == null ||
-          !Number.isFinite(portionQty) ||
           portionQty < MEAL_PORTION_QTY_MIN ||
           portionQty > MEAL_PORTION_QTY_MAX
         ) {
@@ -594,7 +598,7 @@ export function LogScreen() {
           ...mealBodyBase({ keepConsumedAt }),
           foodTemplateId: portionTpl.id,
           mealInputMode: 'PORTION_COUNT',
-          portionQuantity: Math.round(portionQty * 100) / 100,
+          portionQuantity: portionQty,
         };
         if (targetMealId) {
           await updateMeal(token, targetMealId, tplBody);
@@ -1004,15 +1008,16 @@ export function LogScreen() {
     }
     const nextQty = Number(String(portionInputValue).replace(',', '.'));
     if (disp.stepMode === 'portion') {
+      const portionQty = normalizeMealPortionQuantity(nextQty);
       if (
         !Number.isFinite(nextQty) ||
-        nextQty < MEAL_PORTION_QTY_MIN ||
-        nextQty > MEAL_PORTION_QTY_MAX
+        portionQty < MEAL_PORTION_QTY_MIN ||
+        portionQty > MEAL_PORTION_QTY_MAX
       ) {
         toast.show({ kind: 'error', message: LOG_COPY.portionQtyInvalid });
         return;
       }
-      await adjustMealPortion(portionInputMeal, Math.round(nextQty * 100) / 100);
+      await adjustMealPortion(portionInputMeal, portionQty);
     } else {
       if (
         !Number.isFinite(nextQty) ||
