@@ -51,6 +51,7 @@ alwaysApply: true
 - 기본·로딩·빈·오류·권한 등 상태 처리 반영(제품 UI 규칙 준수)
 - 웹/앱·반응형·다크모드 영향 점검(해당 시)
 - 회귀 위험 검토(`verify-change` 또는 `qa-agent`)
+- **생성·검증 분리(기본):** `qa-agent` 독립 검증 산출이 `docs/qa/verify-{날짜 또는 slug}.md`에 남아 있고, 해당 산출의 **BLOCKER가 0**이어야 한다. 메인은 이 판정을 **인용만** 한다(자체 재해석·완화 금지). 상세: [`shared/skills/verify-change/SKILL.md`](../../shared/skills/verify-change/SKILL.md) **독립 검증 계약**. `AGENTS.md` **직접 처리 가능한 예외**·Gate 1 면제 범위는 본 항 생략 가능.
 - 전달용 변경 요약·영향 범위 정리는 **권장**한다(`document-change` 또는 `docs-agent` 활용).
 - **횡단 자산·공유 패키지·kit 연동** 범위에서는 [`docs/qa/integration-consumption-gate.md`](../../docs/qa/integration-consumption-gate.md)의 **소비 완료** 조건을 포함한다. **생성만** 완료(패키지 publish, submodule add, sync 1회, mock/스펙만 존재)이면 해당 변경은 **Gate 3 미충족**이다. Gate 1에서 식별한 **첫 소비자**에 대한 **소비 증거**(경로·PR·스모크)가 없으면 완료 선언하지 않는다.
 

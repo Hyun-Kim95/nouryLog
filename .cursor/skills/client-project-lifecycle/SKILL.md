@@ -101,19 +101,19 @@ PRD가 확정된 뒤에만 진행한다.
 
 7. 계약 변경 시 `document-change`로 동기화한다.
 
-8. **기능·요구 일치·DoD**는 단계 4에서 **생성·검증 분리**로 판정한다: 산출물 경로 → `qa-agent` 독립 검증 → `verify-change` Gate 3. 메인 **self-verify 금지**. 단계 3만으로 “완료”를 선언하지 않는다.
+8. **기능·요구 일치·DoD**는 단계 4에서 **생성·검증 분리**로 판정한다 ([`verify-change`](../../../shared/skills/verify-change/SKILL.md) **독립 검증 계약**). 단계 3만으로 “완료”를 선언하지 않는다.
 
 ### 선택 — 완료 루프 하네스(Ralph류 반복)
 
 단계 3 이후(구현·검증·성능 구간)에 **상태 파일 + 훅 경고 + (선택) 테스트 루프**를 쓰려면 `docs/agent/delivery-loop-harness.md`를 따른다.
 
 - **HUMAN·Gate 정의는 변하지 않는다.** PRD 승인·디자인 선택·리뷰어 GATE는 기존 **HUMAN** 규칙이 우선이다.
-- 로컬 상태: `docs/qa/delivery-loop-state.example.json`을 참고해 `.cursor/state/delivery-ralph.json`을 두고, `enabled`를 켠 뒤 `lifecyclePhase`를 `verify` / `perf` / `blocker_loop` 중 하나로 맞춘다.
+- 로컬 상태: `docs/qa/delivery-loop-state.example.json`을 참고해 `.cursor/state/delivery-ralph.json`을 두고, `enabled`를 켠 뒤 `lifecyclePhase`를 `verify` / `perf` / `blocker_loop` 중 하나로 맞춘다. `maxVerifyRounds`(기본 3)·`verifyRound`·초과 시 HUMAN은 [`docs/agent/delivery-loop-harness.md`](../../../docs/agent/delivery-loop-harness.md).
 - 편집 시: `.cursor/hooks/guard-delivery-loop.ps1`가 완료 선언과 체크리스트·증빙 키워드를 대조해 **경고**할 수 있다.
 - 터미널: `scripts/delivery/Invoke-DeliveryLoop.ps1`로 테스트 명령을 상한까지 반복 실행할 수 있다.
 
 ## 단계 4 — 구현 완료 후 PRD 재검증 (루프)
-1. **생성·검증 분리:** 구현·문서 산출 후 메인 self-verify 금지. `artifactPaths`·`rubricRef`·`forbidden`만 [`docs/agent/agent-brief.md`](../../../docs/agent/agent-brief.md) **9) Verifier Handoff**로 `qa-agent`에 넘긴 뒤, `verify-change`로 **확정 PRD**와 구현·문서·API 계약 일치를 검증한다 (Gate 3 / DoD).
+1. **생성·검증 분리:** [`verify-change`](../../../shared/skills/verify-change/SKILL.md) **독립 검증 계약**으로 `qa-agent` handoff 후 **확정 PRD**와 구현·문서·API 계약 일치를 검증한다 (Gate 3 / DoD). 완료 선언 전 `docs/qa/verify-*.md` 저장·**BLOCKER 0** 확인.
 
 2. 불일치면 구현 또는 문서를 수정하고 **다시 단계 4**로 돌아간다.
 
@@ -150,9 +150,11 @@ PRD **측정=예**이고 North Star 퍼널 instrumentation이 범위에 포함�
 
 2. FE·BE 모두 해당하면 `frontend-agent`·`backend-agent`로 **병렬 수정**을 검토한다.
 
-3. 수정 후 **단계 4B(해당 축만)** 또는 **단계 4**부터 다시 점검한다. BLOCKER가 없을 때까지 루프한다.
+3. 수정 후 **단계 4B(해당 축만)** 또는 **단계 4**부터 다시 점검한다. 라운드마다 `docs/qa/verify-*.md`를 갱신하고 **`verifyRound`를 +1** 한다(delivery-ralph 사용 시 JSON에도 반영). 상세: [`docs/agent/delivery-loop-harness.md`](../../../docs/agent/delivery-loop-harness.md).
 
-4. 4B를 수행하지 않았다면 이 단계는 생략한다.
+4. **verify round 상한:** 기본 `maxVerifyRounds: 3`. `verifyRound >= maxVerifyRounds` **이고** BLOCKER가 남으면 추가 수정·재검증을 **자동으로 이어가지 않고 HUMAN**에 맡긴다(범위 축소 / 상한 상향 / 중단). 사용자 명시 후 `verifyRoundExceededHuman=true` 또는 카운터 리셋.
+
+5. 4B를 수행하지 않았다면 이 단계는 생략한다.
 
 ## 단계 4D — 리뷰어 GATE (선택)
 출시 직전 **한 번 더** 품질을 잠글 때 사용한다. 루브릭은 `docs/qa/reviewer-gate-rubric.md`를 따른다.
