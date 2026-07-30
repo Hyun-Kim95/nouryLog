@@ -54,6 +54,21 @@ export function resolveNutritionFoodDefaultGrams(defaultServingGrams: number | n
   return clampNutritionFoodGrams(defaultServingGrams);
 }
 
+/**
+ * Catalog "참고 1인분" only when MFDS/defaultServingGrams is set.
+ * Null → no reference chip (fill still uses resolve → 100).
+ */
+export function catalogReferenceServingGrams(
+  defaultServingGrams: number | null | undefined,
+): number | null {
+  if (defaultServingGrams == null || !Number.isFinite(defaultServingGrams) || !(defaultServingGrams > 0)) {
+    return null;
+  }
+  return clampNutritionFoodGrams(defaultServingGrams);
+}
+
+export const REFERENCE_SERVING_CHIP_ID = 'ref-serving';
+
 export function parseNutritionFoodGramsInput(text: string): number {
   const n = Number(String(text).replace(',', '.').trim());
   if (!Number.isFinite(n)) {

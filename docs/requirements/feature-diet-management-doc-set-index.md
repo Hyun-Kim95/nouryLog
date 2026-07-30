@@ -40,6 +40,7 @@ tags: [requirements, index, prd-linked]
 - API delta v1.17: `docs/requirements/api-contract-v1.17-nutrition-food-db-delta.md`
 - 출처·import: `docs/agent/nutrition-food-db-source.md`
 - 모바일 autofill PRD: `docs/requirements/feature-mobile-nutrition-autofill-prd.md` (v0.3 **승인**, 구현·푸시 완료)
+- 참고 1인분·섭취량 추천: `docs/requirements/feature-nutrition-food-reference-serving-prd.md` (v0.1)
 - 디자인 증분: `docs/design/mobile-log-nutrition-autofill-ux-spec.md` (**디자인 승인**)
 - g-only 전환: `docs/requirements/feature-grams-only-transition-prd.md` (v0.2 Phase 1.1 레거시 목록·프리셋)
 - Phase 1/1.1 디자인: `docs/design/mobile-log-grams-only-phase1-ux-spec.md`

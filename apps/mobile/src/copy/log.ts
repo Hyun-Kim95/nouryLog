@@ -93,6 +93,8 @@ export const LOG_COPY = {
   gramPresetHint: '자주 쓰는 양',
   priorAmountHint: '이전에 쓴 양',
   priorAmountSelected: '선택됨',
+  referenceServingHint: '참고 1인분',
+  referenceServingChip: (grams: number) => `참고 1인분 ${grams}g`,
   intakeUnitLabel: '단위',
   gramsPlaceholder: '예: 100',
   portionAmountPlaceholder: '예: 1',

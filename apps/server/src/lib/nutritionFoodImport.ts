@@ -122,9 +122,18 @@ export function parseNutritionFoodRows(
       return;
     }
 
+    // 참고 1인분 g: 정규화 필드 또는 MFDS SERVING_WT / servingWt 별칭 (PRD reference-serving AC-05)
     let defaultServingGrams: number | null = null;
-    if (o.defaultServingGrams !== undefined && o.defaultServingGrams !== null && o.defaultServingGrams !== '') {
-      const s = num(o.defaultServingGrams);
+    const servingRaw =
+      o.defaultServingGrams !== undefined && o.defaultServingGrams !== null && o.defaultServingGrams !== ''
+        ? o.defaultServingGrams
+        : o.SERVING_WT !== undefined && o.SERVING_WT !== null && o.SERVING_WT !== ''
+          ? o.SERVING_WT
+          : o.servingWt !== undefined && o.servingWt !== null && o.servingWt !== ''
+            ? o.servingWt
+            : undefined;
+    if (servingRaw !== undefined) {
+      const s = num(servingRaw);
       if (s === null || !(s > 0)) {
         skipped.push({ row: rowNum, code: 'INVALID_SERVING' });
         return;

@@ -102,6 +102,7 @@ import { parseManualNutrition } from '../lib/manualNutrition';
 import { extractServingGramsFromOcrText } from '../lib/ocrServingGrams';
 import {
   buildNutritionFoodMealBody,
+  catalogReferenceServingGrams,
   clampNutritionFoodGrams,
   formatScaledMacroForForm,
   NUTRITION_FOOD_GRAMS_MAX,
@@ -109,6 +110,7 @@ import {
   NUTRITION_FOOD_NAME_MAX,
   nutritionFoodListEnergyHint,
   parseNutritionFoodGramsInput,
+  REFERENCE_SERVING_CHIP_ID,
   resolveNutritionFoodDefaultGrams,
   scaleNutritionFromPer100g,
   type Per100gMacros,
@@ -291,6 +293,8 @@ export function LogScreen() {
   const [nutritionDraft, setNutritionDraft] = useState<{
     foodId: string;
     per100g: Per100gMacros;
+    /** Catalog 참고 1인분; null이면 칩 숨김(채움은 100g). */
+    referenceServingGrams: number | null;
   } | null>(null);
   const [nutritionGrams, setNutritionGrams] = useState('');
   const [amountInput, setAmountInput] = useState('');
@@ -1123,28 +1127,20 @@ export function LogScreen() {
     setLastOcrMeta(null);
     setLastOcrSnapshot(null);
     setNutritionMacrosLocked(false);
-    setNutritionDraft({ foodId: item.id, per100g: { ...item.per100g } });
+    const referenceServingGrams = catalogReferenceServingGrams(item.defaultServingGrams);
+    setNutritionDraft({
+      foodId: item.id,
+      per100g: { ...item.per100g },
+      referenceServingGrams,
+    });
     setName(item.name);
-    const hasDefault =
-      item.defaultServingGrams != null &&
-      Number.isFinite(item.defaultServingGrams) &&
-      item.defaultServingGrams > 0;
-    if (!hasDefault) {
-      setNutritionGrams('');
-      setAmountInput('');
-      setIntakeUnitId('g');
-      setCalories('');
-      setProtein('');
-      setCarbohydrate('');
-      setFat('');
-      setNameFocused(false);
-      scheduleScrollToEntry();
-      return;
-    }
     const grams = resolveNutritionFoodDefaultGrams(item.defaultServingGrams);
     setIntakeUnitId('g');
     setAmountInput(formatScaledMacroForForm(grams));
     setNutritionGrams(formatScaledMacroForForm(grams));
+    setSelectedPriorAmountId(
+      referenceServingGrams != null ? REFERENCE_SERVING_CHIP_ID : null,
+    );
     try {
       const scaled = scaleNutritionFromPer100g(item.per100g, grams);
       setCalories(formatScaledMacroForForm(scaled.calories));
@@ -1165,6 +1161,32 @@ export function LogScreen() {
     setProtein(formatScaledMacroForForm(macros.protein));
     setCarbohydrate(formatScaledMacroForForm(macros.carbohydrate));
     setFat(formatScaledMacroForForm(macros.fat));
+  };
+
+  /** NF 초안: g만 적용하고 per100g로 재환산(잠금 해제). */
+  const applyDraftGrams = (grams: number, chipId: string | null) => {
+    if (!nutritionDraft) return false;
+    const g = clampNutritionFoodGrams(grams);
+    if (g < NUTRITION_FOOD_GRAMS_MIN || g > NUTRITION_FOOD_GRAMS_MAX) return false;
+    try {
+      const scaled = scaleNutritionFromPer100g(nutritionDraft.per100g, g);
+      setNutritionMacrosLocked(false);
+      setIntakeUnitId('g');
+      setAmountInput(formatScaledMacroForForm(g));
+      setNutritionGrams(formatScaledMacroForForm(g));
+      applyMacros(scaled);
+      setSelectedPriorAmountId(chipId);
+      setEditingLegacyPortionId(null);
+      return true;
+    } catch {
+      toast.show({ kind: 'error', message: LOG_COPY.nutritionDbScaleInvalid });
+      return false;
+    }
+  };
+
+  const applyReferenceServing = () => {
+    if (!nutritionDraft?.referenceServingGrams) return;
+    applyDraftGrams(nutritionDraft.referenceServingGrams, REFERENCE_SERVING_CHIP_ID);
   };
 
   const syncGramsFromAmount = (unit: IntakeUnitOption, text: string) => {
@@ -1229,6 +1251,10 @@ export function LogScreen() {
   };
 
   const applyPriorAmount = (amt: PriorMealAmount) => {
+    if (nutritionDraft) {
+      applyDraftGrams(amt.grams, amt.id);
+      return;
+    }
     setNutritionDraft(null);
     setNutritionMacrosLocked(false);
     setIntakeUnitId(amt.unitId);
@@ -1539,6 +1565,55 @@ export function LogScreen() {
           onFocus={() => scrollFieldIntoView(gramsFieldRef)}
         />
       </View>
+      {nutritionDraft?.referenceServingGrams != null ? (
+        <View style={{ gap: t.spacing.xs }}>
+          <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+            {LOG_COPY.referenceServingHint}
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm }}>
+            {(() => {
+              const refG = nutritionDraft.referenceServingGrams;
+              const selected = selectedPriorAmountId === REFERENCE_SERVING_CHIP_ID;
+              let kcalLabel = '';
+              try {
+                kcalLabel = `${Math.round(scaleNutritionFromPer100g(nutritionDraft.per100g, refG).calories)} kcal`;
+              } catch {
+                kcalLabel = '';
+              }
+              return (
+                <Pressable
+                  onPress={applyReferenceServing}
+                  style={({ pressed }) => ({
+                    paddingVertical: t.spacing.sm,
+                    paddingHorizontal: t.spacing.md,
+                    borderRadius: t.radius.md,
+                    borderWidth: selected ? 2 : 1,
+                    borderColor: selected ? t.colors.primary : t.colors.border,
+                    backgroundColor: selected
+                      ? t.colors.surface2
+                      : pressed
+                        ? t.colors.surface2
+                        : t.colors.surface,
+                  })}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${LOG_COPY.referenceServingChip(refG)}${selected ? ` ${LOG_COPY.priorAmountSelected}` : ''}`}
+                >
+                  <Text style={{ color: t.colors.fg, fontSize: t.fontSize.body, fontWeight: '700' }}>
+                    {LOG_COPY.referenceServingChip(refG)}
+                    {selected ? ` · ${LOG_COPY.priorAmountSelected}` : ''}
+                  </Text>
+                  {kcalLabel ? (
+                    <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                      {kcalLabel}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            })()}
+          </View>
+        </View>
+      ) : null}
       {priorAmounts.length > 0 ? (
         <View style={{ gap: t.spacing.xs }}>
           <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
@@ -1591,6 +1666,10 @@ export function LogScreen() {
                 key={preset.id}
                 onPress={() => {
                   setSelectedPriorAmountId(null);
+                  if (nutritionDraft) {
+                    applyDraftGrams(preset.grams, `preset:${preset.id}`);
+                    return;
+                  }
                   const unitLabel = preset.label.replace(/^[\d.]+/, '');
                   const matched =
                     intakeUnits.find(

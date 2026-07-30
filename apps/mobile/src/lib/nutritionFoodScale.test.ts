@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   buildNutritionFoodMealBody,
+  catalogReferenceServingGrams,
   clampNutritionFoodGrams,
   formatScaledMacroForForm,
   nutritionFoodListEnergyHint,
@@ -37,6 +38,16 @@ describe('AC-02/AC-03 nutritionFoodScale', () => {
   it('formatScaledMacroForForm keeps one decimal when needed', () => {
     assert.equal(formatScaledMacroForForm(247.5), '247.5');
     assert.equal(formatScaledMacroForForm(100), '100');
+  });
+
+  it('AC-04: catalogReferenceServingGrams null when missing', () => {
+    assert.equal(catalogReferenceServingGrams(null), null);
+    assert.equal(catalogReferenceServingGrams(undefined), null);
+    assert.equal(catalogReferenceServingGrams(0), null);
+  });
+
+  it('AC-01: catalogReferenceServingGrams keeps catalog value', () => {
+    assert.equal(catalogReferenceServingGrams(210), 210);
   });
 });
 

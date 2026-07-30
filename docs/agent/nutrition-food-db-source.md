@@ -46,8 +46,10 @@ PRD: [`docs/requirements/feature-nutrition-food-db-prd.md`](../requirements/feat
 | `per100gProtein` | g/100g | 단백질 |
 | `per100gFat` | g/100g | 지방 |
 | `per100gCarbohydrate` | g/100g | 탄수화물 |
+| `defaultServingGrams` | 참고 1인분 g (선택) | `SERVING_WT` / `servingWt` / `defaultServingGrams`. **영양 SSOT는 아님** — UX 기본·칩용 |
 
-원본이 “1회 제공량” 기준이면 **100g로 환산 후** 적재한다. 환산 불가면 해당 행 스킵.
+원본이 “1회 제공량” 기준이면 **100g로 환산 후** 적재한다. 환산 불가면 해당 행 스킵.  
+1회제공량(g)은 가능하면 `defaultServingGrams`에 넣고, 앱에서는 **「참고 1인분」** 으로만 노출한다(표준 보장 아님).
 
 ## 환산·반올림
 

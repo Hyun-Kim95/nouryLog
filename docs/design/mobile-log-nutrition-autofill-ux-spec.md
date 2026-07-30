@@ -50,6 +50,8 @@ parent_design: docs/design/mobile-log-input-ux-spec.md
 | 필드 | 표시 |
 |---|---|
 | 섭취량 (g) | 숫자 키패드. 라벨 명확 |
+| 참고 1인분 칩 | 카탈로그 `defaultServingGrams` 있을 때만. prior 칩과 **동일 패턴**. 탭 → g·매크로 복귀·잠금 해제 ([reference-serving PRD](../requirements/feature-nutrition-food-reference-serving-prd.md)) |
+| 이전 쓴 양 | 초안 중에도 유지. 탭 시 초안 유지 + g 적용 + per100g 재환산 |
 | 칼로리·P·C·F | 기존 수기 필드 재사용, **총량** 의미. 소수 1자리까지 표시 가능 |
 | 출처 | caption muted: 「식품의약품안전처 식품영양성분 DB 기반(일부)」 |
 | 잠금 힌트 | 매크로 수동 수정 후: 「영양을 직접 수정했어요…」 |
@@ -91,3 +93,4 @@ parent_design: docs/design/mobile-log-input-ux-spec.md
 |---|---|---|
 | 0.1 | 2026-07-21 | 67 면제 초안 |
 | 0.1+승인 | 2026-07-21 | HUMAN 디자인 승인. 구현 착수 가능 |
+| 0.2 | 2026-07-30 | 참고 1인분·이전 양×초안 정합 (67 동일 면제·칩 슬롯) |
