@@ -4,6 +4,7 @@ nouryLog Android(`com.nourylog.app`) Play Store 정식 출시 전 준비 목록�
 코드·문서(에이전트)와 콘솔·비밀값(사용자)을 구분합니다.
 
 **Railway production 점검 결과:** [railway-production-status.md](./railway-production-status.md)  
+**출시 노트·versionCode·포함 커밋 기록:** [play-store-release-notes.md](./play-store-release-notes.md)  
 **프로덕션 API:** `https://api-server-production-52bc.up.railway.app`
 
 ## 요약 표
@@ -110,8 +111,9 @@ Railway **api-server** Start Command 권장: `npm run start:release -w @diet-man
 2. 모바일 `npx tsc --noEmit` (workspace `mobile`)
 3. EAS **development** APK — SNS [회귀 시나리오](../qa/native-sns-sdk-regression.md)
 4. EAS **production** AAB — 내부 테스트 트랙 업로드
-5. 테스터: OCR 월 한도(10회) · Paywall 구매 버튼 없음 · 하단 **플랜 탭 없음**
-6. (2차) 구독 구매 · entitlements · 광고 제거
+5. production AAB(Docker 로컬) 성공 시 [play-store-release-notes.md](./play-store-release-notes.md) **자동 기록** — 업로드 후 track/status만 HUMAN 갱신. 미리 쓸 문구: `docs/release/pending-play-release-notes.txt`
+6. 테스터: OCR 월 한도(10회) · Paywall 구매 버튼 없음 · 하단 **플랜 탭 없음**
+7. (2차) 구독 구매 · entitlements · 광고 제거
 
 ---
 

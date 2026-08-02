@@ -9,7 +9,7 @@ export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/35.0.0"
 
 apt-get update -qq
-apt-get install -y -qq openjdk-17-jdk-headless git curl ca-certificates unzip wget >/dev/null
+apt-get install -y -qq openjdk-17-jdk-headless git curl ca-certificates unzip wget python3 >/dev/null
 java -version
 
 if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
@@ -46,8 +46,17 @@ cd /workspace/apps/mobile
 # Ensure expo can resolve app plugins from workspace install
 npx expo config --type public >/tmp/expo-config-check.txt
 # production: remote credentials + autoIncrement (Play upload signing)
+EAS_LOG=/tmp/eas-production-aab.log
+set -o pipefail
 eas build --platform android --profile production --local --non-interactive \
-  --output /workspace/apps/mobile/dist/nourylog-production.aab
+  --output /workspace/apps/mobile/dist/nourylog-production.aab \
+  2>&1 | tee "$EAS_LOG"
 
 ls -la /workspace/apps/mobile/dist/nourylog-production.aab
 echo "AAB_READY=/workspace/apps/mobile/dist/nourylog-production.aab"
+
+# Auto-fill docs/release/play-store-release-notes.md + dist sidecar JSON
+bash /workspace/apps/mobile/scripts/record-play-release-notes.sh \
+  --log "$EAS_LOG" \
+  --aab /workspace/apps/mobile/dist/nourylog-production.aab \
+  --build-how "apps/mobile/scripts/docker-local-production-aab.sh"
