@@ -4,10 +4,12 @@ import type { FoodTemplateItem, MealRow } from '../api/meals';
 import {
   findTemplateForIntakeUnit,
   gramsFromIntakeAmount,
+  intakeUnitNeedsServingGrams,
   intakeUnitOptionsForName,
   macrosForIntakeAmount,
   mealNameMatchesQuery,
   priorMealAmountsForName,
+  withServingGrams,
 } from './priorMealAmounts';
 
 const eggTpl: FoodTemplateItem = {
@@ -82,6 +84,33 @@ describe('intakeUnitOptionsForName', () => {
     const opts = intakeUnitOptionsForName('계란', [], [eggTpl]);
     assert.equal(opts[0].id, 'g');
     assert.ok(opts.some((o) => o.label === '개' && o.servingGrams === 50));
+  });
+
+  // AC-04: g-only name still exposes unit chips (P1.3)
+  it('always includes default unit chips even without history/template', () => {
+    const opts = intakeUnitOptionsForName('신규음식', [], []);
+    assert.equal(opts[0].id, 'g');
+    for (const label of ['개', '접시', '공기', '병', '장']) {
+      const u = opts.find((o) => o.label === label);
+      assert.ok(u, `missing ${label}`);
+      assert.equal(u!.kind, 'portion');
+      assert.equal(u!.servingGrams, null);
+      assert.equal(intakeUnitNeedsServingGrams(u!), true);
+    }
+  });
+
+  // AC-01: user 1단위=g converts quantity → grams (no template)
+  it('converts with user serving grams overlay', () => {
+    const unit = intakeUnitOptionsForName('신규음식', [], []).find((o) => o.label === '개')!;
+    assert.equal(gramsFromIntakeAmount(unit, '2'), null);
+    const resolved = withServingGrams(unit, 50);
+    assert.equal(gramsFromIntakeAmount(resolved, '2'), 100);
+  });
+
+  it('does not duplicate 개 when template already provides it', () => {
+    const opts = intakeUnitOptionsForName('계란', [], [eggTpl]);
+    assert.equal(opts.filter((o) => o.label === '개').length, 1);
+    assert.equal(opts.find((o) => o.label === '개')!.servingGrams, 50);
   });
 
   it('converts portion amount to grams and macros', () => {

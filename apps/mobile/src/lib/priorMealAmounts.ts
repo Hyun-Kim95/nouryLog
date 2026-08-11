@@ -18,11 +18,35 @@ export type IntakeUnitOption = {
   id: string;
   label: string;
   kind: 'grams' | 'portion';
-  /** grams per 1 unit; null when kind=grams */
+  /** grams per 1 unit; null when kind=grams or unresolved default unit (P1.3) */
   servingGrams: number | null;
   /** nutrition for 1 unit (portion) when known */
   perUnitMacros: MealMacros | null;
 };
+
+/** Always offered in Log unit Segmented when not already provided by history/template (P1.3). */
+export const DEFAULT_INTAKE_UNIT_LABELS = ['개', '접시', '공기', '병', '장'] as const;
+
+export function unresolvedIntakeUnitId(label: string): string {
+  return `u:${label}`;
+}
+
+/** True when portion unit needs user-entered 1단위=g (AC-02 / AC-04). */
+export function intakeUnitNeedsServingGrams(unit: IntakeUnitOption): boolean {
+  return unit.kind === 'portion' && !(unit.servingGrams != null && unit.servingGrams > 0);
+}
+
+/** Overlay user 1단위=g onto a portion unit for grams/macro conversion. */
+export function withServingGrams(
+  unit: IntakeUnitOption,
+  servingGrams: number | null,
+): IntakeUnitOption {
+  if (unit.kind === 'grams') return unit;
+  if (servingGrams != null && Number.isFinite(servingGrams) && servingGrams > 0) {
+    return { ...unit, servingGrams };
+  }
+  return unit;
+}
 
 export type PriorMealAmount = {
   id: string;
@@ -159,7 +183,7 @@ export function priorMealAmountsForName(
     }));
 }
 
-/** Unit choices for the current food name: always g, plus portion units from history/templates. */
+/** Unit choices: always g + default chips; plus portion units from history/templates (P1.3). */
 export function intakeUnitOptionsForName(
   foodName: string,
   meals: MealRow[],
@@ -168,56 +192,76 @@ export function intakeUnitOptionsForName(
   const options: IntakeUnitOption[] = [
     { id: 'g', label: 'g', kind: 'grams', servingGrams: null, perUnitMacros: null },
   ];
-  const q = foodName.trim();
-  if (!q) return options;
-
-  const tplById = buildFoodTemplateMap(templates);
   const seen = new Set<string>(['g']);
+  const seenLabels = new Set<string>(['g']);
+  const q = foodName.trim();
 
-  for (const meal of meals) {
-    if (!mealNameMatchesQuery(meal.name, q)) continue;
-    const disp = listMealQuantityDisplay(meal, tplById);
-    if (!disp || disp.stepMode !== 'portion' || !(disp.servingGrams! > 0)) continue;
-    const id = `p:${disp.unitLabel}:${disp.servingGrams}`;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const perUnit =
-      disp.quantity > 0 ? scaleMacros(mealMacros(meal), 1 / disp.quantity) : null;
-    options.push({
-      id,
-      label: disp.unitLabel,
-      kind: 'portion',
-      servingGrams: disp.servingGrams,
-      perUnitMacros: perUnit,
-    });
+  if (q) {
+    const tplById = buildFoodTemplateMap(templates);
+
+    for (const meal of meals) {
+      if (!mealNameMatchesQuery(meal.name, q)) continue;
+      const disp = listMealQuantityDisplay(meal, tplById);
+      if (!disp || disp.stepMode !== 'portion' || !(disp.servingGrams! > 0)) continue;
+      const id = `p:${disp.unitLabel}:${disp.servingGrams}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      seenLabels.add(disp.unitLabel);
+      const perUnit =
+        disp.quantity > 0 ? scaleMacros(mealMacros(meal), 1 / disp.quantity) : null;
+      options.push({
+        id,
+        label: disp.unitLabel,
+        kind: 'portion',
+        servingGrams: disp.servingGrams,
+        perUnitMacros: perUnit,
+      });
+    }
+
+    for (const tpl of templates) {
+      if (!mealNameMatchesQuery(tpl.name, q)) continue;
+      if (!(tpl.servingGrams > 0) || tpl.portionUnit === 'GRAM') continue;
+      const unitLabel =
+        tpl.portionLabel ||
+        (tpl.portionUnit === 'PIECE'
+          ? '개'
+          : tpl.portionUnit === 'PLATE'
+            ? '접시'
+            : tpl.portionUnit === 'BOWL'
+              ? '공기'
+              : '단위');
+      const id = `p:${unitLabel}:${tpl.servingGrams}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      seenLabels.add(unitLabel);
+      options.push({
+        id,
+        label: unitLabel,
+        kind: 'portion',
+        servingGrams: tpl.servingGrams,
+        perUnitMacros: {
+          calories: tpl.calories,
+          protein: tpl.protein,
+          carbohydrate: tpl.carbohydrate,
+          fat: tpl.fat,
+        },
+      });
+    }
   }
 
-  for (const tpl of templates) {
-    if (!mealNameMatchesQuery(tpl.name, q)) continue;
-    if (!(tpl.servingGrams > 0) || tpl.portionUnit === 'GRAM') continue;
-    const unitLabel =
-      tpl.portionLabel ||
-      (tpl.portionUnit === 'PIECE'
-        ? '개'
-        : tpl.portionUnit === 'PLATE'
-          ? '접시'
-          : tpl.portionUnit === 'BOWL'
-            ? '공기'
-            : '단위');
-    const id = `p:${unitLabel}:${tpl.servingGrams}`;
+  // P1.3: default chips when label not already resolved from history/template.
+  for (const label of DEFAULT_INTAKE_UNIT_LABELS) {
+    if (seenLabels.has(label)) continue;
+    const id = unresolvedIntakeUnitId(label);
     if (seen.has(id)) continue;
     seen.add(id);
+    seenLabels.add(label);
     options.push({
       id,
-      label: unitLabel,
+      label,
       kind: 'portion',
-      servingGrams: tpl.servingGrams,
-      perUnitMacros: {
-        calories: tpl.calories,
-        protein: tpl.protein,
-        carbohydrate: tpl.carbohydrate,
-        fat: tpl.fat,
-      },
+      servingGrams: null,
+      perUnitMacros: null,
     });
   }
 

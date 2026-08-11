@@ -80,10 +80,12 @@ import {
   displayAmountFromGrams,
   findTemplateForIntakeUnit,
   gramsFromIntakeAmount,
+  intakeUnitNeedsServingGrams,
   intakeUnitOptionsForName,
   macrosForIntakeAmount,
   mealNameMatchesQuery,
   priorMealAmountsForName,
+  withServingGrams,
   type IntakeUnitOption,
   type PriorMealAmount,
 } from '../lib/priorMealAmounts';
@@ -299,6 +301,7 @@ export function LogScreen() {
   const [nutritionGrams, setNutritionGrams] = useState('');
   const [amountInput, setAmountInput] = useState('');
   const [intakeUnitId, setIntakeUnitId] = useState('g');
+  const [customServingGramsText, setCustomServingGramsText] = useState('');
   const [selectedPriorAmountId, setSelectedPriorAmountId] = useState<string | null>(null);
   const [nutritionMacrosLocked, setNutritionMacrosLocked] = useState(false);
   const gramsFieldRef = useRef<View>(null);
@@ -308,6 +311,7 @@ export function LogScreen() {
     setNutritionGrams('');
     setAmountInput('');
     setIntakeUnitId('g');
+    setCustomServingGramsText('');
     setSelectedPriorAmountId(null);
     setNutritionMacrosLocked(false);
   }, []);
@@ -568,9 +572,10 @@ export function LogScreen() {
         throw new Error(LOG_COPY.nutritionDbGramsInvalid);
       }
 
+      const unitForSave = resolveEffectiveUnit(intakeUnit);
       const portionTpl =
-        intakeUnit.kind === 'portion'
-          ? findTemplateForIntakeUnit(name, intakeUnit, templates) ??
+        unitForSave.kind === 'portion'
+          ? findTemplateForIntakeUnit(name, unitForSave, templates) ??
             (editingLegacyPortionId && targetMealId
               ? tplById.get(editingLegacyPortionId) ?? null
               : null)
@@ -578,13 +583,25 @@ export function LogScreen() {
             ? tplById.get(editingLegacyPortionId) ?? null
             : null;
 
-      if (intakeUnit.kind === 'portion' && !portionTpl) {
-        throw new Error(LOG_COPY.portionTemplateMissing);
+      // P1.3: portion without template → manual grams path (AC-01). Require 1단위=g when unresolved (AC-02).
+      if (intakeUnitNeedsServingGrams(intakeUnit)) {
+        if (!String(customServingGramsText).trim()) {
+          throw new Error(LOG_COPY.servingGramsPerUnitRequired);
+        }
+        let perUnit: number;
+        try {
+          perUnit = parseNutritionFoodGramsInput(customServingGramsText);
+        } catch {
+          throw new Error(LOG_COPY.servingGramsPerUnitInvalid);
+        }
+        if (perUnit < NUTRITION_FOOD_GRAMS_MIN || perUnit > NUTRITION_FOOD_GRAMS_MAX) {
+          throw new Error(LOG_COPY.servingGramsPerUnitInvalid);
+        }
       }
 
-      if (portionTpl && (intakeUnit.kind === 'portion' || (editingLegacyPortionId && targetMealId))) {
+      if (portionTpl && (unitForSave.kind === 'portion' || (editingLegacyPortionId && targetMealId))) {
         const portionQtyRaw =
-          intakeUnit.kind === 'portion'
+          unitForSave.kind === 'portion'
             ? Number(String(amountInput).replace(',', '.'))
             : gramsToPortionQuantity(grams, portionTpl.servingGrams);
         const portionQty =
@@ -1199,14 +1216,51 @@ export function LogScreen() {
     return grams;
   };
 
+  const parseCustomServingGrams = (text: string): number | null => {
+    const n = Number(String(text).replace(',', '.').trim());
+    if (!Number.isFinite(n) || !(n > 0)) return null;
+    return n;
+  };
+
+  const resolveEffectiveUnit = (unit: IntakeUnitOption) => {
+    if (!intakeUnitNeedsServingGrams(unit)) return unit;
+    return withServingGrams(unit, parseCustomServingGrams(customServingGramsText));
+  };
+
   const onAmountInputChange = (text: string) => {
     setAmountInput(text);
     setSelectedPriorAmountId(null);
-    const grams = syncGramsFromAmount(intakeUnit, text);
+    const base = intakeUnits.find((u) => u.id === intakeUnitId) ?? intakeUnits[0]!;
+    const unit = resolveEffectiveUnit(base);
+    const grams = syncGramsFromAmount(unit, text);
     if (grams == null) return;
 
-    if (intakeUnit.kind === 'portion') {
-      const portionMacros = macrosForIntakeAmount(intakeUnit, text);
+    if (unit.kind === 'portion') {
+      const portionMacros = macrosForIntakeAmount(unit, text);
+      if (portionMacros && !nutritionMacrosLocked) {
+        applyMacros(portionMacros);
+        return;
+      }
+    }
+    if (!nutritionDraft || nutritionMacrosLocked) return;
+    try {
+      if (grams < NUTRITION_FOOD_GRAMS_MIN || grams > NUTRITION_FOOD_GRAMS_MAX) return;
+      const scaled = scaleNutritionFromPer100g(nutritionDraft.per100g, grams);
+      applyMacros(scaled);
+    } catch {
+      /* typing incomplete */
+    }
+  };
+
+  const onCustomServingGramsChange = (text: string) => {
+    setCustomServingGramsText(text);
+    setSelectedPriorAmountId(null);
+    const base = intakeUnits.find((u) => u.id === intakeUnitId) ?? intakeUnits[0]!;
+    const unit = withServingGrams(base, parseCustomServingGrams(text));
+    const grams = syncGramsFromAmount(unit, amountInput);
+    if (grams == null) return;
+    if (unit.kind === 'portion') {
+      const portionMacros = macrosForIntakeAmount(unit, amountInput);
       if (portionMacros && !nutritionMacrosLocked) {
         applyMacros(portionMacros);
         return;
@@ -1225,8 +1279,9 @@ export function LogScreen() {
   const onIntakeUnitChange = (unitId: string) => {
     setIntakeUnitId(unitId);
     setSelectedPriorAmountId(null);
+    setCustomServingGramsText('');
     const unit = intakeUnits.find((u) => u.id === unitId) ?? intakeUnits[0]!;
-    if (unit.kind === 'portion') {
+    if (unit.kind === 'portion' && !intakeUnitNeedsServingGrams(unit)) {
       const tpl = findTemplateForIntakeUnit(name, unit, templates);
       setEditingLegacyPortionId(tpl?.id ?? editingLegacyPortionId);
     } else if (!editingMealId) {
@@ -1238,13 +1293,16 @@ export function LogScreen() {
     } catch {
       grams = 0;
     }
-    if (grams > 0) {
+    if (grams > 0 && !intakeUnitNeedsServingGrams(unit)) {
       setAmountInput(displayAmountFromGrams(unit, grams));
       if (unit.kind === 'portion' && !nutritionMacrosLocked) {
         const qtyText = displayAmountFromGrams(unit, grams);
         const portionMacros = macrosForIntakeAmount(unit, qtyText);
         if (portionMacros) applyMacros(portionMacros);
       }
+    } else if (intakeUnitNeedsServingGrams(unit)) {
+      // Keep quantity text; grams unknown until 1단위=g is entered.
+      setNutritionGrams('');
     } else {
       setAmountInput('');
     }
@@ -1258,6 +1316,7 @@ export function LogScreen() {
     setNutritionDraft(null);
     setNutritionMacrosLocked(false);
     setIntakeUnitId(amt.unitId);
+    setCustomServingGramsText('');
     setAmountInput(formatListMealQuantity(amt.unitQuantity));
     setNutritionGrams(formatScaledMacroForForm(amt.grams));
     applyMacros(amt.macros);
@@ -1338,6 +1397,7 @@ export function LogScreen() {
   const intakeUnit: IntakeUnitOption = useMemo(() => {
     return intakeUnits.find((u) => u.id === intakeUnitId) ?? intakeUnits[0]!;
   }, [intakeUnits, intakeUnitId]);
+  const needsCustomServingGrams = intakeUnitNeedsServingGrams(intakeUnit);
   const gramPresetsExtra = useMemo(() => {
     if (priorAmounts.length === 0) return gramPresets;
     return gramPresets.filter(
@@ -1349,6 +1409,7 @@ export function LogScreen() {
   useEffect(() => {
     if (intakeUnits.some((u) => u.id === intakeUnitId)) return;
     setIntakeUnitId('g');
+    setCustomServingGramsText('');
     setSelectedPriorAmountId(null);
     if (!editingMealId) setEditingLegacyPortionId(null);
     let grams = 0;
@@ -1545,7 +1606,7 @@ export function LogScreen() {
       <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
         {LOG_COPY.manualPerServingHint}
       </Text>
-      {intakeUnits.length > 1 ? (
+      {intakeUnits.length > 0 ? (
         <Segmented<string>
           label={LOG_COPY.intakeUnitLabel}
           options={intakeUnits.map((u) => ({ value: u.id, label: u.label }))}
@@ -1565,6 +1626,15 @@ export function LogScreen() {
           onFocus={() => scrollFieldIntoView(gramsFieldRef)}
         />
       </View>
+      {needsCustomServingGrams ? (
+        <LabeledField
+          label={LOG_COPY.servingGramsPerUnitLabel}
+          value={customServingGramsText}
+          onChangeText={onCustomServingGramsChange}
+          keyboardType="numeric"
+          placeholder={LOG_COPY.servingGramsPerUnitPlaceholder}
+        />
+      ) : null}
       {nutritionDraft?.referenceServingGrams != null ? (
         <View style={{ gap: t.spacing.xs }}>
           <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
