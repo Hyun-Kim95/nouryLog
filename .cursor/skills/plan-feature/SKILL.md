@@ -29,7 +29,7 @@ description: 모호한 요청을 구현 가능한 요구사항과 정책으로 �
 6d. PRD에서 **보안 게이트=예**이면 `docs/security/README.md`로 greenfield/brownfield를 선택하고 `policy-and-contract.md`·`security-policy.template.json`을 범위에 반영한다. 엄격 티어는 6축 활성·4B 보안 축 필수를 PRD에 명시한다.
 6e. 보안 게이트 여부와 무관, [`docs/security/vibe-coding-baseline.md`](../../../docs/security/vibe-coding-baseline.md) 5항을 PRD 「비기능·보안(라이트)」 또는 Gate 1 점검 메모에 반영한다. BaaS 사용 시 [`baas-checklist.md`](../../../docs/security/baas-checklist.md), LLM·에이전트 사용 시 [`llm-and-agents.md`](../../../docs/security/llm-and-agents.md)를 범위에 명시한다.
 7. 필요하면 `prd-agent`를 사용해 화면, 정책, 예외사항을 문서화한다.
-8. 토큰·테마·다크모드·공통 패턴이 이슈면 `design-system-agent`로 목업·스펙과의 정합을 맞춘다.
+8. UI 목업이 필요하고 방향이 비어 있으면 `design-brief`로 surface·축·금지를 먼저 고정한 뒤, 토큰·테마·다크모드·공통 패턴은 `design-system-agent`로 목업·스펙과 정합을 맞춘다.
 9. PRD에 **수용 기준(AC)** 섹션을 포함한다. `AC-01` 형식, 행위·계약·상태 중심. [`docs/qa/acceptance-criteria.template.md`](../../../docs/qa/acceptance-criteria.template.md), [`docs/qa/atdd-lite.md`](../../../docs/qa/atdd-lite.md).
 10. `.cursor/rules/60-delivery-gates.mdc`의 Gate 1에 맞는지 스스로 점검한다.
 11. 구현 가능한 단위로 쪼갠다.
