@@ -48,6 +48,24 @@ export function withServingGrams(
   return unit;
 }
 
+/**
+ * g → 개 등 미환산 단위로 바꿀 때: 현재 총 g를 「1단위=g」로 등록하고 수량은 1.
+ * (숫자를 그대로 개수로 재해석하지 않음 — 120g + 개 → 1개·1단위=120g)
+ */
+export function seedUnresolvedPortionFromGrams(totalGrams: number): {
+  unitQuantityText: string;
+  servingGramsText: string;
+  totalGramsText: string;
+} | null {
+  if (!Number.isFinite(totalGrams) || !(totalGrams > 0)) return null;
+  const text = formatListMealQuantity(totalGrams);
+  return {
+    unitQuantityText: '1',
+    servingGramsText: text,
+    totalGramsText: text,
+  };
+}
+
 export type PriorMealAmount = {
   id: string;
   label: string;

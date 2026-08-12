@@ -85,6 +85,7 @@ import {
   macrosForIntakeAmount,
   mealNameMatchesQuery,
   priorMealAmountsForName,
+  seedUnresolvedPortionFromGrams,
   withServingGrams,
   type IntakeUnitOption,
   type PriorMealAmount,
@@ -1277,34 +1278,56 @@ export function LogScreen() {
   };
 
   const onIntakeUnitChange = (unitId: string) => {
+    const prevUnit = intakeUnits.find((u) => u.id === intakeUnitId) ?? intakeUnits[0]!;
+    const unit = intakeUnits.find((u) => u.id === unitId) ?? intakeUnits[0]!;
     setIntakeUnitId(unitId);
     setSelectedPriorAmountId(null);
-    setCustomServingGramsText('');
-    const unit = intakeUnits.find((u) => u.id === unitId) ?? intakeUnits[0]!;
+
     if (unit.kind === 'portion' && !intakeUnitNeedsServingGrams(unit)) {
       const tpl = findTemplateForIntakeUnit(name, unit, templates);
       setEditingLegacyPortionId(tpl?.id ?? editingLegacyPortionId);
     } else if (!editingMealId) {
       setEditingLegacyPortionId(null);
     }
-    let grams = 0;
+
+    let totalGrams = 0;
     try {
-      grams = parseNutritionFoodGramsInput(nutritionGrams);
+      totalGrams = parseNutritionFoodGramsInput(nutritionGrams);
     } catch {
-      grams = 0;
+      totalGrams = 0;
     }
-    if (grams > 0 && !intakeUnitNeedsServingGrams(unit)) {
-      setAmountInput(displayAmountFromGrams(unit, grams));
+    if (!(totalGrams > 0)) {
+      const fromAmount = gramsFromIntakeAmount(resolveEffectiveUnit(prevUnit), amountInput);
+      if (fromAmount != null) totalGrams = fromAmount;
+    }
+
+    if (intakeUnitNeedsServingGrams(unit)) {
+      // 총 g를 유지하고 1단위=그 g · 수량 1로 등록 (120g→개 = 1개/120g, not 120개)
+      const seeded = seedUnresolvedPortionFromGrams(totalGrams);
+      if (seeded) {
+        setAmountInput(seeded.unitQuantityText);
+        setCustomServingGramsText(seeded.servingGramsText);
+        setNutritionGrams(seeded.totalGramsText);
+      } else {
+        setCustomServingGramsText('');
+        setAmountInput('');
+        setNutritionGrams('');
+      }
+      return;
+    }
+
+    setCustomServingGramsText('');
+    if (totalGrams > 0) {
+      setAmountInput(displayAmountFromGrams(unit, totalGrams));
+      setNutritionGrams(formatScaledMacroForForm(totalGrams));
       if (unit.kind === 'portion' && !nutritionMacrosLocked) {
-        const qtyText = displayAmountFromGrams(unit, grams);
+        const qtyText = displayAmountFromGrams(unit, totalGrams);
         const portionMacros = macrosForIntakeAmount(unit, qtyText);
         if (portionMacros) applyMacros(portionMacros);
       }
-    } else if (intakeUnitNeedsServingGrams(unit)) {
-      // Keep quantity text; grams unknown until 1단위=g is entered.
-      setNutritionGrams('');
     } else {
       setAmountInput('');
+      setNutritionGrams('');
     }
   };
 

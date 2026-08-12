@@ -9,6 +9,7 @@ import {
   macrosForIntakeAmount,
   mealNameMatchesQuery,
   priorMealAmountsForName,
+  seedUnresolvedPortionFromGrams,
   withServingGrams,
 } from './priorMealAmounts';
 
@@ -105,6 +106,20 @@ describe('intakeUnitOptionsForName', () => {
     assert.equal(gramsFromIntakeAmount(unit, '2'), null);
     const resolved = withServingGrams(unit, 50);
     assert.equal(gramsFromIntakeAmount(resolved, '2'), 100);
+  });
+
+  // Bugfix: 120g → select 개 must become 1개 / 1단위=120g (not 120개)
+  it('seeds unresolved portion from total grams as 1 unit', () => {
+    const seeded = seedUnresolvedPortionFromGrams(120);
+    assert.ok(seeded);
+    assert.equal(seeded!.unitQuantityText, '1');
+    assert.equal(seeded!.servingGramsText, '120');
+    assert.equal(seeded!.totalGramsText, '120');
+    const unit = intakeUnitOptionsForName('신규', [], []).find((o) => o.label === '개')!;
+    assert.equal(
+      gramsFromIntakeAmount(withServingGrams(unit, Number(seeded!.servingGramsText)), seeded!.unitQuantityText),
+      120,
+    );
   });
 
   it('does not duplicate 개 when template already provides it', () => {

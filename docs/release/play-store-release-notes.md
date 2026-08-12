@@ -78,6 +78,130 @@ bash apps/mobile/scripts/record-play-release-notes.sh --log /tmp/eas-production-
 
 ## 기록 (최신 위)
 
+
+
+### 2026-08-11 — v1.0.1 (versionCode 26)
+
+| 필드 | 값 |
+|------|-----|
+| semver | `1.0.1` |
+| versionCode | `26` |
+| gitHead | `498c120` |
+| includesSince | `| gitHead | |` |
+| artifact | `apps/mobile/dist/nourylog-production.aab (~38.9 MB, 로컬 Docker)` |
+| buildHow | `apps/mobile/scripts/docker-local-production-aab.sh` |
+| track | `미업로드` (Play 업로드 시 HUMAN 갱신) |
+| playStatus | `미업로드` |
+| uploadedAt | `—` |
+| easBuildId | 로컬 빌드 (cloud ID 없음) |
+
+**출시 노트 (Play Console에 넣을 문구)** · 출처: auto-git
+
+```
+• feat(mobile): allow Log intake units while keeping grams SSOT
+• docs(release): auto-record Play Store notes after production AAB
+• feat(mobile,server): recommend reference serving grams for NutritionFood
+• fix(meals): allow portionQuantity 0.1~50 with 0.1 steps
+• fix(mobile,server): past meal suggestions and OCR serving grams
+• fix(mobile,server): show intentional NF grams and serving-based search hints
+• feat(mobile): drop templates from log name suggestions and add local AAB profile
+• fix(mobile): preserve portion saves and prevent edit overwrite bugs
+• fix(mobile): keep portion units on edit and leave grams empty by default
+• feat(mobile): Log g-only Phase 1.1 with legacy portion UX and presets
+• feat(mobile): NutritionFood 검색으로 영양 자동 채움
+• feat(server): NutritionFood DB catalog, search APIs, and import CLI
+• fix(server): ADMIN 요청이 mealSet 미들웨어에서 차단되지 않도록 수정
+• fix(mobile): 과거 기록 불러오기 시 앱 크래시 수정
+• fix(server): playStoreVersion finally 블록 TS 빌드 오류 수정
+```
+
+**포함 작업 (자동 · git log)**
+
+- `7b067d6` — feat(mobile): allow Log intake units while keeping grams SSOT
+- `bd92078` — docs(release): auto-record Play Store notes after production AAB
+- `38c0836` — feat(mobile,server): recommend reference serving grams for NutritionFood
+- `adc8cf9` — fix(meals): allow portionQuantity 0.1~50 with 0.1 steps
+- `646dca8` — fix(mobile,server): past meal suggestions and OCR serving grams
+- `30e7c4b` — fix(mobile,server): show intentional NF grams and serving-based search hints
+- `d21a3fe` — feat(mobile): drop templates from log name suggestions and add local AAB profile
+- `544c68d` — fix(mobile): preserve portion saves and prevent edit overwrite bugs
+- `f5e09d5` — fix(mobile): keep portion units on edit and leave grams empty by default
+- `63388b0` — feat(mobile): Log g-only Phase 1.1 with legacy portion UX and presets
+- `182e022` — feat(mobile): NutritionFood 검색으로 영양 자동 채움
+- `f538ac7` — feat(server): NutritionFood DB catalog, search APIs, and import CLI
+- `ee5997b` — fix(server): ADMIN 요청이 mealSet 미들웨어에서 차단되지 않도록 수정
+- `5f308d1` — fix(mobile): 과거 기록 불러오기 시 앱 크래시 수정
+- `fce2669` — fix(server): playStoreVersion finally 블록 TS 빌드 오류 수정
+
+**비고**
+
+- 이 항목은 `record-play-release-notes.sh`가 빌드 직후 자동 작성함.
+- Play 업로드 후 `track` / `playStatus` / `uploadedAt`만 HUMAN 갱신.
+- 다음 빌드 전 사용자용 문구: `docs/release/pending-play-release-notes.txt`
+
+---
+
+### 2026-08-11 — v1.0.1 (versionCode 25)
+
+| 필드 | 값 |
+|------|-----|
+| semver | `1.0.1` |
+| versionCode | `25` |
+| gitHead | `498c120` |
+| includesSince | `| gitHead | |` |
+| artifact | `apps/mobile/dist/nourylog-production.aab (~38.9 MB, 로컬 Docker)` |
+| buildHow | `apps/mobile/scripts/docker-local-production-aab.sh` |
+| track | `미업로드` (Play 업로드 시 HUMAN 갱신) |
+| playStatus | `미업로드` |
+| uploadedAt | `—` |
+| easBuildId | 로컬 빌드 (cloud ID 없음) |
+
+**출시 노트 (Play Console에 넣을 문구)** · 출처: auto-git
+
+```
+• feat(mobile): allow Log intake units while keeping grams SSOT
+• docs(release): auto-record Play Store notes after production AAB
+• feat(mobile,server): recommend reference serving grams for NutritionFood
+• fix(meals): allow portionQuantity 0.1~50 with 0.1 steps
+• fix(mobile,server): past meal suggestions and OCR serving grams
+• fix(mobile,server): show intentional NF grams and serving-based search hints
+• feat(mobile): drop templates from log name suggestions and add local AAB profile
+• fix(mobile): preserve portion saves and prevent edit overwrite bugs
+• fix(mobile): keep portion units on edit and leave grams empty by default
+• feat(mobile): Log g-only Phase 1.1 with legacy portion UX and presets
+• feat(mobile): NutritionFood 검색으로 영양 자동 채움
+• feat(server): NutritionFood DB catalog, search APIs, and import CLI
+• fix(server): ADMIN 요청이 mealSet 미들웨어에서 차단되지 않도록 수정
+• fix(mobile): 과거 기록 불러오기 시 앱 크래시 수정
+• fix(server): playStoreVersion finally 블록 TS 빌드 오류 수정
+```
+
+**포함 작업 (자동 · git log)**
+
+- `7b067d6` — feat(mobile): allow Log intake units while keeping grams SSOT
+- `bd92078` — docs(release): auto-record Play Store notes after production AAB
+- `38c0836` — feat(mobile,server): recommend reference serving grams for NutritionFood
+- `adc8cf9` — fix(meals): allow portionQuantity 0.1~50 with 0.1 steps
+- `646dca8` — fix(mobile,server): past meal suggestions and OCR serving grams
+- `30e7c4b` — fix(mobile,server): show intentional NF grams and serving-based search hints
+- `d21a3fe` — feat(mobile): drop templates from log name suggestions and add local AAB profile
+- `544c68d` — fix(mobile): preserve portion saves and prevent edit overwrite bugs
+- `f5e09d5` — fix(mobile): keep portion units on edit and leave grams empty by default
+- `63388b0` — feat(mobile): Log g-only Phase 1.1 with legacy portion UX and presets
+- `182e022` — feat(mobile): NutritionFood 검색으로 영양 자동 채움
+- `f538ac7` — feat(server): NutritionFood DB catalog, search APIs, and import CLI
+- `ee5997b` — fix(server): ADMIN 요청이 mealSet 미들웨어에서 차단되지 않도록 수정
+- `5f308d1` — fix(mobile): 과거 기록 불러오기 시 앱 크래시 수정
+- `fce2669` — fix(server): playStoreVersion finally 블록 TS 빌드 오류 수정
+
+**비고**
+
+- 이 항목은 `record-play-release-notes.sh`가 빌드 직후 자동 작성함.
+- Play 업로드 후 `track` / `playStatus` / `uploadedAt`만 HUMAN 갱신.
+- 다음 빌드 전 사용자용 문구: `docs/release/pending-play-release-notes.txt`
+
+---
+
 ### 2026-08-02 — v1.0.1 (versionCode 24)
 
 | 필드 | 값 |
