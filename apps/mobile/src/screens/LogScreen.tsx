@@ -73,7 +73,6 @@ import { formatTplAmount as formatPortionAmount } from '../lib/mealEntryForm';
 import {
   adjustMealGramsOnServer,
   adjustMealPortionCountOnServer,
-  effectiveMealGrams,
 } from '../lib/adjustMealGrams';
 import { matchingGramPresets } from '../lib/gramPresets';
 import {
@@ -90,7 +89,11 @@ import {
   type IntakeUnitOption,
   type PriorMealAmount,
 } from '../lib/priorMealAmounts';
-import { resolvedEditableGrams } from '../lib/unsetManualGrams';
+import {
+  mealIntakePrefill,
+  mealQuantityCaption,
+  resolveMealForPrefill,
+} from '../lib/mealIntakePrefill';
 import {
   MEAL_PORTION_QTY_MAX,
   MEAL_PORTION_QTY_MIN,
@@ -100,6 +103,7 @@ import {
   isLegacyPortionMeal,
   listMealQuantityDisplay,
   normalizeMealPortionQuantity,
+  resolveListQuantityAdjust,
 } from '../lib/listMealQuantityDisplay';
 import { parseManualNutrition } from '../lib/manualNutrition';
 import { extractServingGramsFromOcrText } from '../lib/ocrServingGrams';
@@ -304,6 +308,7 @@ export function LogScreen() {
   const [intakeUnitId, setIntakeUnitId] = useState('g');
   const [customServingGramsText, setCustomServingGramsText] = useState('');
   const [selectedPriorAmountId, setSelectedPriorAmountId] = useState<string | null>(null);
+  const [prefillSourceMeal, setPrefillSourceMeal] = useState<MealRow | null>(null);
   const [nutritionMacrosLocked, setNutritionMacrosLocked] = useState(false);
   const gramsFieldRef = useRef<View>(null);
 
@@ -314,6 +319,7 @@ export function LogScreen() {
     setIntakeUnitId('g');
     setCustomServingGramsText('');
     setSelectedPriorAmountId(null);
+    setPrefillSourceMeal(null);
     setNutritionMacrosLocked(false);
   }, []);
 
@@ -367,6 +373,7 @@ export function LogScreen() {
   const handleNameChange = useCallback((text: string) => {
     setName(text);
     setNameFocused(true);
+    setPrefillSourceMeal(null);
   }, []);
 
   const switchToManualEntry = useCallback(() => {
@@ -635,6 +642,23 @@ export function LogScreen() {
         }
       } else {
         const nutrition = parseManualNutrition({ calories, protein, carbohydrate, fat });
+        let portionSnapshot: { quantity: number; label: string } | null = null;
+        if (unitForSave.kind === 'portion') {
+          const portionQtyRaw = Number(String(amountInput).replace(',', '.'));
+          const portionQty = Number.isFinite(portionQtyRaw)
+            ? normalizeMealPortionQuantity(portionQtyRaw)
+            : null;
+          const label = unitForSave.label.trim();
+          if (
+            portionQty == null ||
+            portionQty < MEAL_PORTION_QTY_MIN ||
+            portionQty > MEAL_PORTION_QTY_MAX ||
+            !label
+          ) {
+            throw new Error(LOG_COPY.portionQtyInvalid);
+          }
+          portionSnapshot = { quantity: portionQty, label };
+        }
         let body: Record<string, unknown>;
         try {
           body = buildNutritionFoodMealBody({
@@ -643,6 +667,7 @@ export function LogScreen() {
             grams,
             ...nutrition,
             editing: Boolean(targetMealId),
+            portionSnapshot,
           });
         } catch (e) {
           if (e instanceof Error && e.message === 'NAME_TOO_LONG') {
@@ -650,6 +675,9 @@ export function LogScreen() {
           }
           if (e instanceof Error && e.message === 'INVALID_GRAMS') {
             throw new Error(LOG_COPY.nutritionDbGramsInvalid);
+          }
+          if (e instanceof Error && (e.message === 'INVALID_PORTION' || e.message === 'INVALID_PORTION_LABEL')) {
+            throw new Error(LOG_COPY.portionQtyInvalid);
           }
           throw e;
         }
@@ -924,29 +952,21 @@ export function LogScreen() {
     }
   };
 
+  const applyIntakePrefill = (m: MealRow) => {
+    const prefill = mealIntakePrefill(m, tplById);
+    setNutritionGrams(prefill.nutritionGrams);
+    setAmountInput(prefill.amountInput);
+    setIntakeUnitId(prefill.intakeUnitId);
+    setPrefillSourceMeal(m);
+  };
+
   const applyManualFromMeal = (m: MealRow) => {
     leaveEditForNewFood();
     setSelectedTpl(null);
     setLastOcrMeta(null);
     clearNutritionDraft();
     setName(m.name);
-    const g = resolvedEditableGrams(m);
-    if (g != null) {
-      setNutritionGrams(formatScaledMacroForForm(g));
-      const disp = listMealQuantityDisplay(m, tplById);
-      if (disp?.stepMode === 'portion') {
-        const unitId = `p:${disp.unitLabel}:${disp.servingGrams}`;
-        setIntakeUnitId(unitId);
-        setAmountInput(formatListMealQuantity(disp.quantity));
-      } else {
-        setIntakeUnitId('g');
-        setAmountInput(formatScaledMacroForForm(g));
-      }
-    } else {
-      setNutritionGrams('');
-      setAmountInput('');
-      setIntakeUnitId('g');
-    }
+    applyIntakePrefill(m);
     setSelectedPriorAmountId(null);
     setManualPortion('1');
     setCalories(formatScaledMacroForForm(m.calories));
@@ -964,32 +984,28 @@ export function LogScreen() {
     try {
       const token = await ensureAccessToken();
       if (!token) throw new Error('로그인 필요');
-      const tplId = item.foodTemplateId?.trim() || null;
-      const tpl = tplId ? tplById.get(tplId) : undefined;
-      // Never convert legacy 개/접시 meals to g via grams ±10 (clears foodTemplateId).
-      if (isLegacyPortionMeal(item)) {
-        if (!tpl || !(tpl.servingGrams > 0)) {
+      const resolved = resolveListQuantityAdjust(item, nextQty, tplById);
+      if (!resolved.ok) {
+        if (resolved.reason === 'template-missing') {
           toast.show({ kind: 'error', message: LOG_COPY.portionTemplateLoadFailed });
           await loadTemplates();
           return;
         }
-        const disp = listMealQuantityDisplay(item, tplById);
-        let nextPortion = nextQty;
-        if (disp?.stepMode !== 'portion') {
-          const converted = gramsToPortionQuantity(nextQty, tpl.servingGrams);
-          if (converted == null) {
-            toast.show({ kind: 'error', message: LOG_COPY.portionQtyInvalid });
-            return;
-          }
-          nextPortion = converted;
-        }
-        await adjustMealPortionCountOnServer(token, item, nextPortion);
-      } else {
-        if (!(effectiveMealGrams(item.grams) > 0)) {
+        if (resolved.reason === 'grams-missing') {
           toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
           return;
         }
-        await adjustMealGramsOnServer(token, item, nextQty);
+        toast.show({
+          kind: 'error',
+          message:
+            resolved.reason === 'portion-invalid' ? LOG_COPY.portionQtyInvalid : LOG_COPY.gramsInvalid,
+        });
+        return;
+      }
+      if (resolved.mode === 'portion-template') {
+        await adjustMealPortionCountOnServer(token, item, resolved.portionQty);
+      } else {
+        await adjustMealGramsOnServer(token, item, resolved.grams, resolved.portionSnapshot);
       }
       await load();
     } catch (e) {
@@ -1056,7 +1072,7 @@ export function LogScreen() {
   };
 
   const applyRecentMeal = (m: MealRow) => {
-    applyManualFromMeal(m);
+    applyManualFromMeal(resolveMealForPrefill(m, [...amountHistoryMeals, ...recentMeals, ...items]));
   };
 
   const startEditMeal = (item: MealRow) => {
@@ -1070,22 +1086,7 @@ export function LogScreen() {
     clearNutritionDraft();
     setSelectedTpl(null);
     setName(item.name);
-    const g = resolvedEditableGrams(item);
-    if (g != null) {
-      setNutritionGrams(formatScaledMacroForForm(g));
-      const disp = listMealQuantityDisplay(item, tplById);
-      if (disp?.stepMode === 'portion') {
-        setIntakeUnitId(`p:${disp.unitLabel}:${disp.servingGrams}`);
-        setAmountInput(formatListMealQuantity(disp.quantity));
-      } else {
-        setIntakeUnitId('g');
-        setAmountInput(formatScaledMacroForForm(g));
-      }
-    } else {
-      setNutritionGrams('');
-      setAmountInput('');
-      setIntakeUnitId('g');
-    }
+    applyIntakePrefill(item);
     setSelectedPriorAmountId(null);
     setManualPortion('1');
     setCalories(formatScaledMacroForForm(item.calories));
@@ -1414,8 +1415,13 @@ export function LogScreen() {
     [name, amountHistoryMeals, tplById],
   );
   const intakeUnits = useMemo(
-    () => intakeUnitOptionsForName(name, amountHistoryMeals, templates),
-    [name, amountHistoryMeals, templates],
+    () =>
+      intakeUnitOptionsForName(
+        name,
+        prefillSourceMeal ? [prefillSourceMeal, ...amountHistoryMeals] : amountHistoryMeals,
+        templates,
+      ),
+    [name, amountHistoryMeals, templates, prefillSourceMeal],
   );
   const intakeUnit: IntakeUnitOption = useMemo(() => {
     return intakeUnits.find((u) => u.id === intakeUnitId) ?? intakeUnits[0]!;
@@ -1533,7 +1539,12 @@ export function LogScreen() {
                 {LOG_COPY.nameSuggestEmpty}
               </Text>
             ) : (
-              displayNameSuggestions.map((s, idx) => (
+              displayNameSuggestions.map((s, idx) => {
+                const qty = mealQuantityCaption(
+                  resolveMealForPrefill(s.meal, [...amountHistoryMeals, ...recentMeals, ...items]),
+                  tplById,
+                );
+                return (
                 <Pressable
                   key={s.meal.mealId}
                   onPress={() => {
@@ -1550,6 +1561,7 @@ export function LogScreen() {
                     {s.meal.name}
                   </Text>
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                    {qty ? `${qty} · ` : ''}
                     {formatMacroLine({
                       protein: s.meal.protein,
                       carbohydrate: s.meal.carbohydrate,
@@ -1559,7 +1571,8 @@ export function LogScreen() {
                     {Math.round(s.meal.calories)} kcal
                   </Text>
                 </Pressable>
-              ))
+                );
+              })
             )}
           </View>
         ) : null}
@@ -1968,7 +1981,9 @@ export function LogScreen() {
               keyExtractor={(it) => it.mealId}
               style={{ maxHeight: 72 }}
               contentContainerStyle={{ gap: t.spacing.sm }}
-              renderItem={({ item }) => (
+              renderItem={({ item }) => {
+                const qty = mealQuantityCaption(item, tplById);
+                return (
                 <Pressable
                   onPress={() => applyRecentMeal(item)}
                   style={{
@@ -1985,13 +2000,15 @@ export function LogScreen() {
                     {item.name}
                   </Text>
                   <Text style={{ color: t.colors.fgMuted, fontSize: t.fontSize.caption }}>
+                    {qty ? `${qty} · ` : ''}
                     {Math.round(item.calories)} kcal
                   </Text>
                   <Text numberOfLines={1} style={{ color: t.colors.fgSubtle, fontSize: t.fontSize.caption }}>
                     {formatMacroLine(item)}
                   </Text>
                 </Pressable>
-              )}
+                );
+              }}
             />
           </Card>
         ) : null}

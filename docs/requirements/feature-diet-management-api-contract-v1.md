@@ -96,7 +96,7 @@ tags: [api, contract, backend, frontend]
 
 #### 식사 기록 모드 (v1.4)
 
-**수동 기록** (`foodTemplateId` 미전송 또는 `null`): 기존과 같이 `name`, `grams`(미입력 시 기본 100), `calories`, `carbohydrate`, `protein`, `fat`를 요청 본문에 포함하면 서버는 그대로 저장한다. `foodTemplateId` / `mealInputMode` / `portionQuantity`는 저장하지 않는다(null).
+**수동 기록** (`foodTemplateId` 미전송 또는 `null`): `name`, `grams`(미입력 시 기본 100), `calories`, `carbohydrate`, `protein`, `fat`를 저장한다. 기본은 `TOTAL_GRAMS`(스냅샷 null). `mealInputMode=PORTION_COUNT`이면 `portionQuantity`+`portionLabel` 스냅샷을 함께 저장한다(목록 표시용, v1.21). 영양 집계 SSOT는 `grams`.
 
 **템플릿 기록** (`foodTemplateId` 문자열 전송): 활성 템플릿만 허용. `mealInputMode`는 `PORTION_COUNT` 또는 `TOTAL_GRAMS` 필수.
 - `PORTION_COUNT`: `portionQuantity` 필수(소수 허용, 예: 1.5). 서버가 `grams = portionQuantity × template.servingGrams`로 환산한 뒤, 템플릿에 저장된 기준 분량(`servingGrams`)당 영양 합계에 비례해 `calories`/`protein`/`fat`/`carbohydrate`를 **서버가 계산**한다. 클라이언트가 동시에 보낸 영양 필드는 **무시**한다.
@@ -110,7 +110,7 @@ tags: [api, contract, backend, frontend]
 
 **수정 `PUT /meals/{mealId}`**: 위와 동일하게 `foodTemplateId`+`mealInputMode`+수량 필드가 오면 재계산. `foodTemplateId`에 `null`을 명시하면 템플릿 연동을 해제하고 이후 필드는 수동 기록 규칙으로 갱신한다. 그 외 부분 갱신은 기존 필드 단위 규칙을 따른다.
 
-응답 `GET /meals` 항목: 기존 필드에 더해 `foodTemplateId`(nullable), `mealInputMode`(nullable enum), `portionQuantity`(nullable number), `mealSlot`(nullable: `BREAKFAST`|`LUNCH`|`DINNER`|`SNACK`) 포함.
+응답 `GET /meals` 항목: 기존 필드에 더해 `foodTemplateId`(nullable), `mealInputMode`(nullable enum), `portionQuantity`(nullable number), `portionLabel`(nullable string, v1.21), `mealSlot`(nullable: `BREAKFAST`|`LUNCH`|`DINNER`|`SNACK`) 포함.
 
 **`POST /meals` 공통:** 요청에 `mealSlot`(선택, enum) 포함 가능. 레거시 row는 null.
 

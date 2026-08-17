@@ -55,7 +55,7 @@ tags: [requirements, prd, grams-only, food-template, migration]
 |---|---|---|
 | D-1 | Phase 1 API | 서버는 `foodTemplateId` **계속 수용**. 신규 모바일만 미전송 |
 | D-2 | 순수 수기 Log | **g + 총량 매크로**. 1인분 폼·`scaleManualNutritionForSave` 신규 경로 제거 |
-| D-3 | 목록 −/+ | 기본 **g ±10**. Phase 1.1: 레거시 `PORTION_COUNT`+템플릿은 **표시·±0.1 단위**(저장 grams 유지) |
+| D-3 | 목록 −/+ | 기본 **g ±10**. `PORTION_COUNT`+템플릿 **또는** 같은 이름 템플릿 배수 → **표시·±1 단위** |
 | D-10 | 프리셋 (P1.1) | 음식명 매칭 시 개/병/장 → **고정 g** 칩. 저장은 수기 g. Railway 상위 빈도 1차만 |
 | D-4 | MealSet (P2) | manual 스냅샷(name+g+매크로). 편집 시 NF 채움 허용 |
 | D-5 | 기존 MealSet 템플릿 | apply 시 스냅샷 펼침 + 편집에서 manual 유도. 강제 삭제 없음 |
@@ -95,14 +95,14 @@ Log → 템플릿 칩 없음
   → 음식명: suggestions(**과거 기록만**) + 영양 DB(별도)
   → g + 총량 매크로 → 저장(grams 필수)
   → OCR: 매크로 채움 + `servingGrams` 있으면 g 채움 / 없으면 빈 칸+확인 토스트(저장 전 g 필수)
-목록 −/+: 기본 g ±10 "150g"; PORTION_COUNT 레거시 "2개" ±0.1
+목록 −/+: 기본 g ±10 "150g"; 단위를 알면 "2개" ±1 (모달 0.1)
 폼: 섭취량(g) 기본 빈 · placeholder 100 · 이름 매칭 프리셋
 ```
 
 ### Phase 1.1 — 레거시 목록 + 1차 프리셋
 
 **포함**
-1. 목록: `PORTION_COUNT`+템플릿+`portionQuantity` → **`N{단위}`** 표시, −/+ **±0.1 단위** (`newGrams = qty × servingGrams`, 템플릿 PUT 또는 동등 스케일)
+1. 목록: `PORTION_COUNT`+템플릿 **또는** 같은 이름 템플릿 배수 → **`N{단위}`** 표시, −/+ **±1 단위** (`newGrams = qty × servingGrams`, 템플릿 PUT 또는 grams 스케일)
 2. 그 외 목록: `Ng` + ±10g (Phase 1), `|| 100` 가짜 표시 제거
 3. 폼: 섭취량(g) 아래 **이름 매칭 프리셋** (계란/소주/맥주/김/바나나/라면류)
 4. DB 일괄 보정·Meal API portionUnit 필드 **Out**
@@ -152,17 +152,17 @@ Phase 1·1.1: 67 면제 — [`mobile-log-grams-only-phase1-ux-spec.md`](../desig
 - When 오늘/과거 목록
 - Then 표시는 `2개` (100g로만 보이지 않음)
 
-### AC-10 (P1.1) 목록 PORTION_COUNT ±0.1
+### AC-10 (P1.1) 목록 PORTION ±1
 
-- Given 계란 템플릿 meal `portionQuantity=1`
-- When 목록 − 탭
-- Then `portionQuantity=0.9`, grams·매크로 갱신·템플릿 연동 유지
-- Given 동일 행에서 + 탭
-- Then `portionQuantity=1.0`(또는 표시 `1`), grams·매크로 복원
-- And 분량 범위는 **0.1~50**, 소수 첫째 자리
-- Given `portionQuantity=2`
-- When +
-- Then `portionQuantity=2.1`, grams·매크로 갱신·템플릿 연동 유지
+- Given 계란 템플릿 meal `portionQuantity=2`
+- When 목록 + 탭
+- Then `portionQuantity=3`, grams·매크로 갱신·템플릿 연동 유지
+- Given 동일 행에서 − 탭
+- Then `portionQuantity=2`
+- And 분량 범위는 **0.1~50**(모달 직접 입력). 목록 −/+ 기본 스텝은 **±1**
+- Given `portionQuantity=1`
+- When 목록 −
+- Then 범위 미만이면 감소 불가(모달로 0.1~0.9 입력 가능)
 
 ### AC-11 (P1.1) 프리셋 칩
 - Given 음식명에 `소주` 포함
@@ -209,5 +209,6 @@ nutritionFoodId, 카탈로그 확대, 김치·치킨 등 2차 프리셋, Phase 2
 | 0.1+디자인 | 2026-07-21 | Phase 1 디자인 승인·구현 |
 | 0.2 | 2026-07-22 | Phase 1.1: 레거시 목록 표시·±1 + 1차 프리셋(D-10)·AC-09~11 |
 | 0.2.1 | 2026-07-28 | PORTION_COUNT −/+ **±0.1**, 범위 **0.1~50**(소수 첫째 자리) |
+| 0.2.2 | 2026-08-17 | 목록 −/+ **±1 단위**. 같은 이름 템플릿 배수는 N개 표시(grams 스케일). 모달 0.1 유지 |
 | 0.2a | 2026-07-22 | 신규/OCR g 기본 빈 칸(AC-08 개정). 저장 시 필수 |
 | 0.2b | 2026-07-26 | OCR `servingGrams` 자동 채움. 미검출 시 빈 칸+「제공량을 확인해 주세요」(AC-08·API v1.19) |

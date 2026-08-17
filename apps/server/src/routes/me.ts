@@ -92,6 +92,7 @@ meRouter.use(async (req, res, next) => {
 
 const PORTION_QTY_MIN = 0.1;
 const PORTION_QTY_MAX = 50;
+const PORTION_LABEL_MAX = 20;
 
 /** One decimal place (0.1 step), matching mobile list stepper. */
 function normalizePortionQuantity(q: number): number {
@@ -164,7 +165,7 @@ function parseOptionalManualPortionQuantity(
   return q;
 }
 
-/** Manual / NutritionFood g saves may send TOTAL_GRAMS; PORTION_COUNT requires a template. */
+/** Manual / NutritionFood: TOTAL_GRAMS, or PORTION_COUNT with label+qty (no template). */
 function parseOptionalManualMealInputMode(
   b: Record<string, unknown>,
   res: Response,
@@ -173,15 +174,58 @@ function parseOptionalManualMealInputMode(
     return null;
   }
   const mode = parseMealInputMode(b.mealInputMode);
-  if (mode === MealInputMode.TOTAL_GRAMS) return mode;
-  if (mode === MealInputMode.PORTION_COUNT) {
-    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '수기 기록에는 mealInputMode=PORTION_COUNT를 사용할 수 없습니다.', {
-      field: 'mealInputMode',
-    });
-    return 'invalid';
-  }
+  if (mode === MealInputMode.TOTAL_GRAMS || mode === MealInputMode.PORTION_COUNT) return mode;
   sendError(res, 422, ErrorCodes.VALIDATION_FAILED, 'mealInputMode가 올바르지 않습니다.', { field: 'mealInputMode' });
   return 'invalid';
+}
+
+function parseOptionalPortionLabel(
+  b: Record<string, unknown>,
+  res: Response,
+): string | null | 'invalid' {
+  if (b.portionLabel === undefined || b.portionLabel === null || b.portionLabel === '') {
+    return null;
+  }
+  const s = String(b.portionLabel).trim();
+  if (!s || s.length > PORTION_LABEL_MAX) {
+    sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '표시 단위가 올바르지 않습니다.', { field: 'portionLabel' });
+    return 'invalid';
+  }
+  return s;
+}
+
+type ManualPortionFields = {
+  mealInputMode: MealInputMode | null;
+  portionQuantity: number | null;
+  portionLabel: string | null;
+};
+
+function resolveManualPortionFields(
+  b: Record<string, unknown>,
+  res: Response,
+): ManualPortionFields | 'invalid' {
+  const qty = parseOptionalManualPortionQuantity(b, res);
+  if (qty === 'invalid') return 'invalid';
+  const mode = parseOptionalManualMealInputMode(b, res);
+  if (mode === 'invalid') return 'invalid';
+  const label = parseOptionalPortionLabel(b, res);
+  if (label === 'invalid') return 'invalid';
+
+  if (mode === MealInputMode.PORTION_COUNT) {
+    if (qty == null) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '분량이 필요합니다.', { field: 'portionQuantity' });
+      return 'invalid';
+    }
+    if (!label) {
+      sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '표시 단위가 필요합니다.', { field: 'portionLabel' });
+      return 'invalid';
+    }
+    return { mealInputMode: MealInputMode.PORTION_COUNT, portionQuantity: qty, portionLabel: label };
+  }
+  if (mode === MealInputMode.TOTAL_GRAMS) {
+    return { mealInputMode: MealInputMode.TOTAL_GRAMS, portionQuantity: null, portionLabel: null };
+  }
+  return { mealInputMode: null, portionQuantity: qty, portionLabel: label };
 }
 
 function isTemplateNutritionComplete(t: {
@@ -1204,6 +1248,7 @@ meRouter.post('/meals', async (req, res) => {
         foodTemplateId: templateId,
         mealInputMode: mode,
         portionQuantity,
+        portionLabel: null,
         mealSlot,
         snackPlacement: snackForCreate,
       });
@@ -1222,11 +1267,8 @@ meRouter.post('/meals', async (req, res) => {
   const fat = Number(b.fat ?? 0);
   if (!assertNonNegativeNutrition({ calories, carbohydrate, protein, fat }, res)) return;
 
-  const manualPortion = parseOptionalManualPortionQuantity(b, res);
-  if (manualPortion === 'invalid') return;
-  const manualMode = parseOptionalManualMealInputMode(b, res);
-  if (manualMode === 'invalid') return;
-  const isTotalGrams = manualMode === MealInputMode.TOTAL_GRAMS;
+  const manualFields = resolveManualPortionFields(b, res);
+  if (manualFields === 'invalid') return;
 
   const { mealId, created } = await createMealIdempotent(userId, clientRequestId, {
     userId,
@@ -1240,8 +1282,9 @@ meRouter.post('/meals', async (req, res) => {
     note: b.note ? String(b.note) : null,
     imageUrl: b.imageUrl ? String(b.imageUrl) : null,
     foodTemplateId: null,
-    mealInputMode: isTotalGrams ? MealInputMode.TOTAL_GRAMS : null,
-    portionQuantity: isTotalGrams ? null : manualPortion,
+    mealInputMode: manualFields.mealInputMode,
+    portionQuantity: manualFields.portionQuantity,
+    portionLabel: manualFields.portionLabel,
     mealSlot,
     snackPlacement: snackForCreate,
   });
@@ -1312,6 +1355,7 @@ meRouter.get('/meals', async (req, res) => {
         foodTemplateId: true,
         mealInputMode: true,
         portionQuantity: true,
+        portionLabel: true,
         mealSlot: true,
         snackPlacement: true,
       },
@@ -1335,6 +1379,7 @@ meRouter.get('/meals', async (req, res) => {
       foodTemplateId: m.foodTemplateId,
       mealInputMode: m.mealInputMode,
       portionQuantity: m.portionQuantity,
+      portionLabel: m.portionLabel,
       mealSlot: m.mealSlot,
       snackPlacement: m.snackPlacement,
     })),
@@ -1450,17 +1495,15 @@ meRouter.put('/meals/:mealId', async (req, res) => {
       sendError(res, 422, ErrorCodes.VALIDATION_FAILED, '음식명이 필요합니다.', { field: 'name' });
       return;
     }
-    const manualPortionClear = parseOptionalManualPortionQuantity(b, res);
-    if (manualPortionClear === 'invalid') return;
-    const manualModeClear = parseOptionalManualMealInputMode(b, res);
-    if (manualModeClear === 'invalid') return;
-    const isTotalGramsClear = manualModeClear === MealInputMode.TOTAL_GRAMS;
+    const manualFieldsClear = resolveManualPortionFields(b, res);
+    if (manualFieldsClear === 'invalid') return;
     await prisma.meal.update({
       where: { id: mealId },
       data: {
         foodTemplateId: null,
-        mealInputMode: isTotalGramsClear ? MealInputMode.TOTAL_GRAMS : null,
-        portionQuantity: isTotalGramsClear ? null : manualPortionClear,
+        mealInputMode: manualFieldsClear.mealInputMode,
+        portionQuantity: manualFieldsClear.portionQuantity,
+        portionLabel: manualFieldsClear.portionLabel,
         name: nextName,
         ...(b.consumedAt !== undefined ? { consumedAt: new Date(String(b.consumedAt)) } : {}),
         ...(b.grams !== undefined ? { grams: Number(b.grams) } : {}),
@@ -1557,6 +1600,7 @@ meRouter.put('/meals/:mealId', async (req, res) => {
         foodTemplateId: templateId,
         mealInputMode: mode,
         portionQuantity,
+        portionLabel: null,
         ...slotData,
         ...snackPatchResolved,
       },
@@ -1576,11 +1620,12 @@ meRouter.put('/meals/:mealId', async (req, res) => {
     note: string;
     imageUrl: string;
   }>;
-  const manualPortionPatch = parseOptionalManualPortionQuantity(b, res);
-  if (manualPortionPatch === 'invalid') return;
-  const manualModePatch = parseOptionalManualMealInputMode(b, res);
-  if (manualModePatch === 'invalid') return;
-  const isTotalGramsPatch = manualModePatch === MealInputMode.TOTAL_GRAMS;
+  const manualFieldsPatch = resolveManualPortionFields(b, res);
+  if (manualFieldsPatch === 'invalid') return;
+  const hasPortionKeys =
+    Object.prototype.hasOwnProperty.call(b, 'mealInputMode') ||
+    Object.prototype.hasOwnProperty.call(b, 'portionQuantity') ||
+    Object.prototype.hasOwnProperty.call(b, 'portionLabel');
 
   await prisma.meal.update({
     where: { id: mealId },
@@ -1592,14 +1637,13 @@ meRouter.put('/meals/:mealId', async (req, res) => {
       ...(legacy.carbohydrate !== undefined ? { carbohydrate: Number(legacy.carbohydrate) } : {}),
       ...(legacy.protein !== undefined ? { protein: Number(legacy.protein) } : {}),
       ...(legacy.fat !== undefined ? { fat: Number(legacy.fat) } : {}),
-      ...(isTotalGramsPatch
-        ? { mealInputMode: MealInputMode.TOTAL_GRAMS, portionQuantity: null }
-        : {
-            ...(Object.prototype.hasOwnProperty.call(b, 'mealInputMode') ? { mealInputMode: null } : {}),
-            ...(manualPortionPatch !== null || Object.prototype.hasOwnProperty.call(b, 'portionQuantity')
-              ? { portionQuantity: manualPortionPatch }
-              : {}),
-          }),
+      ...(hasPortionKeys
+        ? {
+            mealInputMode: manualFieldsPatch.mealInputMode,
+            portionQuantity: manualFieldsPatch.portionQuantity,
+            portionLabel: manualFieldsPatch.portionLabel,
+          }
+        : {}),
       ...(legacy.note !== undefined ? { note: legacy.note ? String(legacy.note) : null } : {}),
       ...(legacy.imageUrl !== undefined ? { imageUrl: legacy.imageUrl ? String(legacy.imageUrl) : null } : {}),
       ...slotData,

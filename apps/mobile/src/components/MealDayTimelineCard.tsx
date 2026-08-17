@@ -4,16 +4,15 @@ import { apiFetch } from '../api';
 import { listMeals, type FoodTemplateItem, type MealRow } from '../api/meals';
 import { isAuthDenied } from '../api';
 import { ensureAccessToken } from '../authSession';
-import { adjustMealGramsOnServer, adjustMealPortionCountOnServer, effectiveMealGrams } from '../lib/adjustMealGrams';
+import { adjustMealGramsOnServer, adjustMealPortionCountOnServer } from '../lib/adjustMealGrams';
 import {
   MEAL_PORTION_QTY_MAX,
   MEAL_PORTION_QTY_MIN,
   buildFoodTemplateMap,
   formatListMealQuantity,
-  gramsToPortionQuantity,
-  isLegacyPortionMeal,
   listMealQuantityDisplay,
   normalizeMealPortionQuantity,
+  resolveListQuantityAdjust,
 } from '../lib/listMealQuantityDisplay';
 import {
   NUTRITION_FOOD_GRAMS_MAX,
@@ -114,31 +113,28 @@ export function MealDayTimelineCard({ date, reloadToken = 0, onEdit, onDelete }:
     try {
       const token = await ensureAccessToken();
       if (!token) throw new Error('로그인 필요');
-      const tplId = item.foodTemplateId?.trim() || null;
-      const tpl = tplId ? tplById.get(tplId) : undefined;
-      if (isLegacyPortionMeal(item)) {
-        if (!tpl || !(tpl.servingGrams > 0)) {
+      const resolved = resolveListQuantityAdjust(item, nextQty, tplById);
+      if (!resolved.ok) {
+        if (resolved.reason === 'template-missing') {
           toast.show({ kind: 'error', message: LOG_COPY.portionTemplateLoadFailed });
           await loadTemplates();
           return;
         }
-        const disp = listMealQuantityDisplay(item, tplById);
-        let nextPortion = nextQty;
-        if (disp?.stepMode !== 'portion') {
-          const converted = gramsToPortionQuantity(nextQty, tpl.servingGrams);
-          if (converted == null) {
-            toast.show({ kind: 'error', message: LOG_COPY.portionQtyInvalid });
-            return;
-          }
-          nextPortion = converted;
-        }
-        await adjustMealPortionCountOnServer(token, item, nextPortion);
-      } else {
-        if (!(effectiveMealGrams(item.grams) > 0)) {
+        if (resolved.reason === 'grams-missing') {
           toast.show({ kind: 'error', message: LOG_COPY.gramsMissingAdjust });
           return;
         }
-        await adjustMealGramsOnServer(token, item, nextQty);
+        toast.show({
+          kind: 'error',
+          message:
+            resolved.reason === 'portion-invalid' ? LOG_COPY.portionQtyInvalid : LOG_COPY.gramsInvalid,
+        });
+        return;
+      }
+      if (resolved.mode === 'portion-template') {
+        await adjustMealPortionCountOnServer(token, item, resolved.portionQty);
+      } else {
+        await adjustMealGramsOnServer(token, item, resolved.grams, resolved.portionSnapshot);
       }
       await load();
     } catch (e) {

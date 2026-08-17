@@ -28,6 +28,7 @@ function meal(id: string, name: string, consumedAt: string): MealSuggestionMealR
   return {
     mealId: id,
     name,
+    grams: 120,
     calories: 200,
     protein: 20,
     carbohydrate: 30,
@@ -35,6 +36,7 @@ function meal(id: string, name: string, consumedAt: string): MealSuggestionMealR
     foodTemplateId: null,
     mealInputMode: null,
     portionQuantity: 1,
+    portionLabel: null,
     consumedAt,
   };
 }
@@ -106,6 +108,7 @@ describe('mergeMealEntrySuggestions', () => {
     assert.equal(items[0].kind, 'past_meal');
     if (items[0].kind === 'past_meal') {
       assert.equal(items[0].meal.mealId, 'm1');
+      assert.equal(items[0].meal.grams, 120);
     }
   });
 });

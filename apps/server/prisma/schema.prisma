@@ -197,6 +197,8 @@ model Meal {
   mealInputMode   MealInputMode?
   /// `PORTION_COUNT`일 때만 값이 있음. `TOTAL_GRAMS` 모드에서는 null.
   portionQuantity Float?
+  /// 수기 PORTION 표시 단위(개/접시 등). 템플릿 경로에서는 템플릿 라벨을 씀.
+  portionLabel    String?
   /// 아침/점심/저녁/추가(간식). 레거시 row는 null.
   mealSlot        MealSlot?
   /// `mealSlot === SNACK`일 때만 사용. 끼니 사이 위치.

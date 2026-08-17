@@ -109,6 +109,8 @@ export function formatScaledMacroForForm(value: number): string {
   return String(rounded);
 }
 
+export const MEAL_PORTION_LABEL_MAX = 20;
+
 export function buildNutritionFoodMealBody(params: {
   mealBodyBase: Record<string, unknown>;
   name: string;
@@ -118,6 +120,8 @@ export function buildNutritionFoodMealBody(params: {
   fat: number;
   carbohydrate: number;
   editing: boolean; // kept for call-site symmetry (create vs edit)
+  /** No-template portion save: list shows N{label} and ±1 unit. grams stays SSOT. */
+  portionSnapshot?: { quantity: number; label: string } | null;
 }): Record<string, unknown> {
   void params.editing;
   const name = params.name.trim();
@@ -140,6 +144,29 @@ export function buildNutritionFoodMealBody(params: {
       throw new Error(`INVALID_${key.toUpperCase()}`);
     }
   }
+  const snap = params.portionSnapshot;
+  if (snap) {
+    const label = snap.label.trim();
+    if (!label || label.length > MEAL_PORTION_LABEL_MAX) {
+      throw new Error('INVALID_PORTION_LABEL');
+    }
+    if (!Number.isFinite(snap.quantity) || snap.quantity <= 0) {
+      throw new Error('INVALID_PORTION');
+    }
+    return {
+      ...params.mealBodyBase,
+      name,
+      grams: params.grams,
+      calories: params.calories,
+      protein: params.protein,
+      fat: params.fat,
+      carbohydrate: params.carbohydrate,
+      foodTemplateId: null,
+      mealInputMode: 'PORTION_COUNT',
+      portionQuantity: snap.quantity,
+      portionLabel: label,
+    };
+  }
   // TOTAL_GRAMS marks intentional intake; do not send portionQuantity=1 (looked like legacy unset).
   return {
     ...params.mealBodyBase,
@@ -152,5 +179,6 @@ export function buildNutritionFoodMealBody(params: {
     foodTemplateId: null,
     mealInputMode: 'TOTAL_GRAMS',
     portionQuantity: null,
+    portionLabel: null,
   };
 }

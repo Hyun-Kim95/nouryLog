@@ -88,8 +88,28 @@ describe('AC-07 buildNutritionFoodMealBody', () => {
     assert.equal(body.grams, 150);
     assert.equal(body.mealInputMode, 'TOTAL_GRAMS');
     assert.equal(body.portionQuantity, null);
+    assert.equal(body.portionLabel, null);
     assert.equal(body.foodTemplateId, null);
     assert.equal(body.calories, 247.5);
+  });
+
+  it('stores portion snapshot for no-template 개/접시 save', () => {
+    const body = buildNutritionFoodMealBody({
+      mealBodyBase: { mealSlot: 'LUNCH' },
+      name: '수제쿠키',
+      grams: 80,
+      calories: 400,
+      protein: 5,
+      fat: 20,
+      carbohydrate: 50,
+      editing: false,
+      portionSnapshot: { quantity: 2, label: '개' },
+    });
+    assert.equal(body.grams, 80);
+    assert.equal(body.mealInputMode, 'PORTION_COUNT');
+    assert.equal(body.portionQuantity, 2);
+    assert.equal(body.portionLabel, '개');
+    assert.equal(body.foodTemplateId, null);
   });
 
   it('rejects grams out of range', () => {

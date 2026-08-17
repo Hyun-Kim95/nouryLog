@@ -9,8 +9,63 @@ import { isLikelyUnsetManualGrams } from './unsetManualGrams';
 
 export const MEAL_PORTION_QTY_MIN = 0.1;
 export const MEAL_PORTION_QTY_MAX = 50;
-/** One decimal place; list −/+ and direct entry. */
-export const MEAL_PORTION_STEP = 0.1;
+/** List −/+ steps one unit; modal still accepts 0.1. */
+export const MEAL_PORTION_STEP = 1;
+
+type MealQtyFields = Pick<
+  MealRow,
+  'grams' | 'foodTemplateId' | 'mealInputMode' | 'portionQuantity' | 'portionLabel'
+> & { name?: string };
+
+function foodNamesEqual(a: string, b: string): boolean {
+  const na = a.trim();
+  const nb = b.trim();
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  return na.replace(/\s+/g, '') === nb.replace(/\s+/g, '');
+}
+
+/** Infer N{unit} when grams is a serving multiple of a same-name portion template. */
+function inferPortionFromTemplates(
+  meal: MealQtyFields,
+  templates: Iterable<FoodTemplateItem>,
+  grams: number,
+): ListMealQuantityDisplay | null {
+  const q = meal.name?.trim() ?? '';
+  if (!q) return null;
+
+  let best: ListMealQuantityDisplay | null = null;
+  let bestAbsErr = Infinity;
+  let bestIsInteger = false;
+
+  for (const tpl of templates) {
+    if (!foodNamesEqual(tpl.name, q)) continue;
+    if (!(tpl.servingGrams > 0) || tpl.portionUnit === 'GRAM') continue;
+    const rawQty = grams / tpl.servingGrams;
+    const qty = normalizeMealPortionQuantity(rawQty);
+    if (qty < MEAL_PORTION_QTY_MIN || qty > MEAL_PORTION_QTY_MAX) continue;
+    const reconstructed = Math.round(qty * tpl.servingGrams * 10) / 10;
+    const absErr = Math.abs(reconstructed - grams);
+    if (absErr > 0.05) continue;
+    const isInteger = Math.abs(qty - Math.round(qty)) < 0.001;
+    if (
+      !best ||
+      (isInteger && !bestIsInteger) ||
+      (isInteger === bestIsInteger && absErr < bestAbsErr)
+    ) {
+      bestIsInteger = isInteger;
+      bestAbsErr = absErr;
+      best = {
+        stepMode: 'portion',
+        quantity: qty,
+        unitLabel: unitHint(tpl),
+        servingGrams: tpl.servingGrams,
+        foodTemplateId: null,
+      };
+    }
+  }
+  return best;
+}
 
 export type ListMealStepMode = 'grams' | 'portion';
 
@@ -29,9 +84,9 @@ export function buildFoodTemplateMap(
   return new Map(templates.map((t) => [t.id, t]));
 }
 
-/** AC-09: PORTION_COUNT + template → show N{unit}; else grams. No fake || 100. */
+/** AC-09: PORTION_COUNT + template → N{unit}; else snapshot label; else same-name template multiple; else grams. */
 export function listMealQuantityDisplay(
-  meal: Pick<MealRow, 'grams' | 'foodTemplateId' | 'mealInputMode' | 'portionQuantity'>,
+  meal: MealQtyFields,
   tplById: Map<string, FoodTemplateItem>,
 ): ListMealQuantityDisplay | null {
   const tplId = meal.foodTemplateId?.trim() || null;
@@ -62,6 +117,24 @@ export function listMealQuantityDisplay(
     };
   }
 
+  const snapshotLabel = meal.portionLabel?.trim() || '';
+  if (!tplId && hasPortionQty && snapshotLabel) {
+    const grams = effectiveMealGrams(meal.grams);
+    const qty = meal.portionQuantity!;
+    if (grams > 0) {
+      const servingGrams = Math.round((grams / qty) * 10) / 10;
+      if (servingGrams > 0) {
+        return {
+          stepMode: 'portion',
+          quantity: qty,
+          unitLabel: snapshotLabel,
+          servingGrams,
+          foodTemplateId: null,
+        };
+      }
+    }
+  }
+
   // Missing/invalid grams only — intentional 100g (NF/manual) stays visible.
   if (isLikelyUnsetManualGrams(meal)) {
     return null;
@@ -69,6 +142,9 @@ export function listMealQuantityDisplay(
 
   const grams = effectiveMealGrams(meal.grams);
   if (!(grams > 0)) return null;
+
+  const inferred = inferPortionFromTemplates(meal, tplById.values(), grams);
+  if (inferred) return inferred;
 
   return {
     stepMode: 'grams',
@@ -126,11 +202,68 @@ export function isLegacyPortionMeal(
  * List −/+ is allowed only when quantity can be shown and safely adjusted.
  * PORTION_COUNT without a loaded template is visible but not ±-adjustable.
  */
+export type ListQuantityAdjust =
+  | { ok: true; mode: 'portion-template'; portionQty: number }
+  | {
+      ok: true;
+      mode: 'grams';
+      grams: number;
+      /** Keep/update no-template PORTION snapshot so list stays N{unit}. */
+      portionSnapshot?: { quantity: number; label: string };
+    }
+  | { ok: false; reason: 'template-missing' | 'grams-missing' | 'portion-invalid' | 'grams-invalid' };
+
+export function resolveListQuantityAdjust(
+  item: MealQtyFields,
+  nextQty: number,
+  tplById: Map<string, FoodTemplateItem>,
+): ListQuantityAdjust {
+  if (isLegacyPortionMeal(item)) {
+    const tplId = item.foodTemplateId?.trim() || null;
+    const tpl = tplId ? tplById.get(tplId) : undefined;
+    if (!tpl || !(tpl.servingGrams > 0)) {
+      return { ok: false, reason: 'template-missing' };
+    }
+    const disp = listMealQuantityDisplay(item, tplById);
+    let nextPortion = nextQty;
+    if (disp?.stepMode !== 'portion') {
+      const converted = gramsToPortionQuantity(nextQty, tpl.servingGrams);
+      if (converted == null) return { ok: false, reason: 'portion-invalid' };
+      nextPortion = converted;
+    }
+    if (nextPortion < MEAL_PORTION_QTY_MIN || nextPortion > MEAL_PORTION_QTY_MAX) {
+      return { ok: false, reason: 'portion-invalid' };
+    }
+    return { ok: true, mode: 'portion-template', portionQty: nextPortion };
+  }
+
+  if (!(effectiveMealGrams(item.grams) > 0)) {
+    return { ok: false, reason: 'grams-missing' };
+  }
+
+  const disp = listMealQuantityDisplay(item, tplById);
+  if (disp?.stepMode === 'portion' && disp.servingGrams != null && disp.servingGrams > 0) {
+    const grams = portionQuantityToGrams(nextQty, disp.servingGrams);
+    if (grams == null) return { ok: false, reason: 'portion-invalid' };
+    const snapshotLabel = disp.unitLabel.trim();
+    return {
+      ok: true,
+      mode: 'grams',
+      grams,
+      ...(snapshotLabel
+        ? { portionSnapshot: { quantity: nextQty, label: snapshotLabel } }
+        : {}),
+    };
+  }
+
+  if (nextQty < NUTRITION_FOOD_GRAMS_MIN || nextQty > NUTRITION_FOOD_GRAMS_MAX) {
+    return { ok: false, reason: 'grams-invalid' };
+  }
+  return { ok: true, mode: 'grams', grams: nextQty };
+}
+
 export function canAdjustMealQuantityInList(
-  meal: Pick<
-    MealRow,
-    'grams' | 'foodTemplateId' | 'mealInputMode' | 'portionQuantity'
-  >,
+  meal: MealQtyFields,
   templates: FoodTemplateItem[] | Map<string, FoodTemplateItem>,
 ): boolean {
   const tplById = templates instanceof Map ? templates : buildFoodTemplateMap(templates);

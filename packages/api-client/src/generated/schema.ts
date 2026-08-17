@@ -1368,6 +1368,7 @@ export interface components {
         MealEntrySuggestionMeal: {
             mealId: string;
             name: string;
+            grams?: number | null;
             calories: number;
             protein: number;
             carbohydrate: number;
@@ -1375,6 +1376,7 @@ export interface components {
             foodTemplateId?: string | null;
             mealInputMode?: components["schemas"]["MealInputMode"];
             portionQuantity?: number | null;
+            portionLabel?: string | null;
             /** Format: date-time */
             consumedAt?: string | null;
         };
@@ -1401,6 +1403,7 @@ export interface components {
             foodTemplateId?: string | null;
             mealInputMode?: components["schemas"]["MealInputMode"];
             portionQuantity?: number;
+            portionLabel?: string | null;
             totalGrams?: number;
         };
         Meal: {
@@ -1418,6 +1421,7 @@ export interface components {
             foodTemplateId?: string | null;
             mealInputMode?: components["schemas"]["MealInputMode"];
             portionQuantity?: number | null;
+            portionLabel?: string | null;
         };
         OcrResult: {
             calories?: number;

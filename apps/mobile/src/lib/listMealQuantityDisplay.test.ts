@@ -9,6 +9,8 @@ import {
   isLegacyPortionMeal,
   buildFoodTemplateMap,
   canAdjustMealQuantityInList,
+  resolveListQuantityAdjust,
+  MEAL_PORTION_STEP,
 } from './listMealQuantityDisplay';
 import { matchingGramPresets } from './gramPresets';
 
@@ -73,6 +75,38 @@ describe('AC-09 listMealQuantityDisplay', () => {
     assert.equal(disp.stepMode, 'grams');
     assert.equal(disp.quantity, 150);
     assert.equal(disp.unitLabel, 'g');
+  });
+
+  it('infers 2개 from same-name template when grams is a multiple', () => {
+    const disp = listMealQuantityDisplay(
+      meal({
+        mealId: 'm-infer',
+        name: '계란',
+        grams: 100,
+        foodTemplateId: null,
+      }),
+      tplById,
+    );
+    assert.ok(disp);
+    assert.equal(disp.stepMode, 'portion');
+    assert.equal(disp.quantity, 2);
+    assert.equal(disp.unitLabel, '개');
+    assert.equal(disp.foodTemplateId, null);
+  });
+
+  it('keeps grams when not a serving multiple', () => {
+    const disp = listMealQuantityDisplay(
+      meal({
+        mealId: 'm-off',
+        name: '계란',
+        grams: 51,
+        foodTemplateId: null,
+      }),
+      tplById,
+    );
+    assert.ok(disp);
+    assert.equal(disp.stepMode, 'grams');
+    assert.equal(disp.quantity, 51);
   });
 
   it('returns null instead of fake 100 when grams missing', () => {
@@ -142,12 +176,64 @@ describe('AC-09 listMealQuantityDisplay', () => {
 });
 
 describe('AC-10 portion step to grams', () => {
-  it('steps portion ±0.1 (one decimal)', () => {
+  it('keeps 0.1 for modal/direct entry', () => {
     assert.equal(nextMealPortionQuantity(1, -0.1), 0.9);
     assert.equal(nextMealPortionQuantity(0.5, -0.1), 0.4);
     assert.equal(nextMealPortionQuantity(0.3, -0.1), 0.2);
     assert.equal(nextMealPortionQuantity(2, 0.1), 2.1);
     assert.equal(nextMealPortionQuantity(0.1, -0.1), null);
+  });
+
+  it('list −/+ steps ±1 unit', () => {
+    assert.equal(MEAL_PORTION_STEP, 1);
+    assert.equal(nextMealPortionQuantity(2, MEAL_PORTION_STEP), 3);
+    assert.equal(nextMealPortionQuantity(2, -MEAL_PORTION_STEP), 1);
+    assert.equal(nextMealPortionQuantity(1, -MEAL_PORTION_STEP), null);
+  });
+
+  it('inferred portion +1 converts to grams (no template FK)', () => {
+    const tplById = buildFoodTemplateMap([eggTpl]);
+    const item = meal({
+      mealId: 'm-infer',
+      name: '계란',
+      grams: 100,
+      foodTemplateId: null,
+    });
+    const resolved = resolveListQuantityAdjust(item, 3, tplById);
+    assert.equal(resolved.ok, true);
+    if (resolved.ok) {
+      assert.equal(resolved.mode, 'grams');
+      if (resolved.mode === 'grams') {
+        assert.equal(resolved.grams, 150);
+        assert.deepEqual(resolved.portionSnapshot, { quantity: 3, label: '개' });
+      }
+    }
+  });
+
+  it('manual snapshot without template shows N개 and ±1', () => {
+    const item = meal({
+      mealId: 'm-snap',
+      name: '수제쿠키',
+      grams: 80,
+      foodTemplateId: null,
+      mealInputMode: 'PORTION_COUNT',
+      portionQuantity: 2,
+      portionLabel: '개',
+    });
+    const disp = listMealQuantityDisplay(item, new Map());
+    assert.ok(disp);
+    assert.equal(disp.stepMode, 'portion');
+    assert.equal(disp.quantity, 2);
+    assert.equal(disp.unitLabel, '개');
+    assert.equal(disp.servingGrams, 40);
+    assert.equal(canAdjustMealQuantityInList(item, new Map()), true);
+
+    const resolved = resolveListQuantityAdjust(item, 3, new Map());
+    assert.equal(resolved.ok, true);
+    if (resolved.ok && resolved.mode === 'grams') {
+      assert.equal(resolved.grams, 120);
+      assert.deepEqual(resolved.portionSnapshot, { quantity: 3, label: '개' });
+    }
   });
 
   it('maps 3 × 50g → 150g', () => {

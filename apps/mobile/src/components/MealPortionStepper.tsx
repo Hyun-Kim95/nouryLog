@@ -5,8 +5,6 @@ import {
   nextMealGrams,
 } from '../lib/adjustMealGramsCore';
 import {
-  MEAL_PORTION_QTY_MAX,
-  MEAL_PORTION_QTY_MIN,
   MEAL_PORTION_STEP,
   formatListMealQuantity,
   nextMealPortionQuantity,
@@ -14,10 +12,6 @@ import {
 } from '../lib/listMealQuantityDisplay';
 
 export { canAdjustMealQuantityInList as canAdjustPortionInList } from '../lib/listMealQuantityDisplay';
-import {
-  NUTRITION_FOOD_GRAMS_MAX,
-  NUTRITION_FOOD_GRAMS_MIN,
-} from '../lib/nutritionFoodScale';
 
 type Props = {
   /** Current quantity (grams or portion count depending on stepMode). */
@@ -30,7 +24,7 @@ type Props = {
   onPressCurrent?: () => void;
 };
 
-/** −/+ for list: grams ±10 or PORTION_COUNT ±0.1. */
+/** −/+ for list: grams ±10 or portion ±1. */
 export function MealPortionStepper({
   quantity,
   unitLabel = 'g',
@@ -43,16 +37,16 @@ export function MealPortionStepper({
   const t = useTheme();
   const display = formatListMealQuantity(quantity);
   const atMin =
-    stepMode === 'portion'
-      ? quantity <= MEAL_PORTION_QTY_MIN
-      : quantity <= NUTRITION_FOOD_GRAMS_MIN;
+    (stepMode === 'portion'
+      ? nextMealPortionQuantity(quantity, -MEAL_PORTION_STEP)
+      : nextMealGrams(quantity, -MEAL_GRAMS_STEP)) == null;
   const atMax =
-    stepMode === 'portion'
-      ? quantity >= MEAL_PORTION_QTY_MAX
-      : quantity >= NUTRITION_FOOD_GRAMS_MAX;
+    (stepMode === 'portion'
+      ? nextMealPortionQuantity(quantity, MEAL_PORTION_STEP)
+      : nextMealGrams(quantity, MEAL_GRAMS_STEP)) == null;
 
-  const decLabel = stepMode === 'portion' ? '0.1단위 감소' : '10그램 감소';
-  const incLabel = stepMode === 'portion' ? '0.1단위 증가' : '10그램 증가';
+  const decLabel = stepMode === 'portion' ? '1단위 감소' : '10그램 감소';
+  const incLabel = stepMode === 'portion' ? '1단위 증가' : '10그램 증가';
 
   const btnStyle = {
     width: 36,

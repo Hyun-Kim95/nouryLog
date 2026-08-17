@@ -20,6 +20,7 @@ export type FoodTemplatePublicRow = {
 export type MealSuggestionMealRow = {
   mealId: string;
   name: string;
+  grams: number | null;
   calories: number;
   protein: number;
   carbohydrate: number;
@@ -27,6 +28,7 @@ export type MealSuggestionMealRow = {
   foodTemplateId: string | null;
   mealInputMode: MealInputMode | null;
   portionQuantity: number | null;
+  portionLabel: string | null;
   consumedAt: string;
 };
 
@@ -135,6 +137,7 @@ export async function buildMealEntrySuggestions(params: {
   const mealSelect = {
     id: true,
     name: true,
+    grams: true,
     calories: true,
     protein: true,
     carbohydrate: true,
@@ -142,6 +145,7 @@ export async function buildMealEntrySuggestions(params: {
     foodTemplateId: true,
     mealInputMode: true,
     portionQuantity: true,
+    portionLabel: true,
     consumedAt: true,
   } as const;
 
@@ -173,6 +177,7 @@ export async function buildMealEntrySuggestions(params: {
     mealRows.map((m) => ({
       mealId: m.id,
       name: m.name,
+      grams: m.grams,
       calories: m.calories,
       protein: m.protein,
       carbohydrate: m.carbohydrate,
@@ -180,6 +185,7 @@ export async function buildMealEntrySuggestions(params: {
       foodTemplateId: m.foodTemplateId,
       mealInputMode: m.mealInputMode,
       portionQuantity: m.portionQuantity,
+      portionLabel: m.portionLabel,
       consumedAt: m.consumedAt.toISOString(),
     })),
   );

@@ -25,6 +25,7 @@ export async function adjustMealGramsOnServer(
   token: string,
   item: MealRow,
   nextGrams: number,
+  portionSnapshot?: { quantity: number; label: string } | null,
 ): Promise<void> {
   const oldGrams = effectiveMealGrams(item.grams);
   if (!(oldGrams > 0)) {
@@ -41,11 +42,23 @@ export async function adjustMealGramsOnServer(
     oldGrams,
     nextGrams,
   );
+  const portionFields = portionSnapshot
+    ? {
+        mealInputMode: 'PORTION_COUNT',
+        portionQuantity: portionSnapshot.quantity,
+        portionLabel: portionSnapshot.label,
+      }
+    : {
+        mealInputMode: 'TOTAL_GRAMS',
+        portionQuantity: null,
+        portionLabel: null,
+      };
   await updateMeal(token, item.mealId, {
     ...mealSlotPatch(item),
     name: item.name,
     grams: nextGrams,
     foodTemplateId: null,
+    ...portionFields,
     ...nutrition,
   });
 }

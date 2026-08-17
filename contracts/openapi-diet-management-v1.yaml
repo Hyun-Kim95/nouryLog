@@ -85,6 +85,7 @@ components:
       properties:
         mealId: { type: string }
         name: { type: string }
+        grams: { type: number, nullable: true }
         calories: { type: number }
         protein: { type: number }
         carbohydrate: { type: number }
@@ -92,6 +93,7 @@ components:
         foodTemplateId: { type: string, nullable: true }
         mealInputMode: { $ref: '#/components/schemas/MealInputMode', nullable: true }
         portionQuantity: { type: number, nullable: true }
+        portionLabel: { type: string, nullable: true }
         consumedAt: { type: string, format: date-time, nullable: true }
 
     MealEntrySuggestionItem:
@@ -131,6 +133,7 @@ components:
         foodTemplateId: { type: string, nullable: true }
         mealInputMode: { $ref: '#/components/schemas/MealInputMode' }
         portionQuantity: { type: number, minimum: 0 }
+        portionLabel: { type: string, nullable: true, maxLength: 20 }
         totalGrams: { type: number, minimum: 0 }
 
     Meal:
@@ -149,6 +152,7 @@ components:
         foodTemplateId: { type: string, nullable: true }
         mealInputMode: { $ref: '#/components/schemas/MealInputMode', nullable: true }
         portionQuantity: { type: number, nullable: true }
+        portionLabel: { type: string, nullable: true }
 
     OcrResult:
       type: object

@@ -28,6 +28,8 @@ export type MealRow = {
   foodTemplateId?: string | null;
   mealInputMode?: string | null;
   portionQuantity?: number | null;
+  /** Manual PORTION display unit (개/접시…). Template meals use the template label. */
+  portionLabel?: string | null;
   mealSlot?: MealSlot | null;
   snackPlacement?: SnackPlacement | null;
 };
